@@ -1,0 +1,23 @@
+# Build results
+bin/
+obj/
+out/
+[Tt]est[Rr]esult*/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.user
+*.userosv
+*.suo
+*.userprefs
+*.ide
+*.cache
+*.log
+
+# OS generated
+Thumbs.db
+[Ee]hthumbs.db
+Desktop.ini
+.DS_Store

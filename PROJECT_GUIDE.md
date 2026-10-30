@@ -15,8 +15,8 @@ Cyclone Nest2D là ứng dụng desktop Windows dùng WPF để đọc hình h�
 | `src/CycloneNest2D.Core/` | Miền hình học, đọc DXF, thuật toán nesting, validator và xuất DXF. Không phụ thuộc WPF. |
 | `src/CycloneNest2D.UI.Core/` | ViewModel/MVVM, quy tắc ứng dụng, quản lý Part, chạy nesting nền, preview scene, cấu hình, lưu/mở dự án, điều phối xuất. Nhắm `net8.0`, có thể kiểm thử ngoài Windows. |
 | `src/CycloneNest2D.Desktop/` | Ứng dụng WPF Windows: XAML, cửa sổ, canvas/vẽ, tương tác chuột/bàn phím, hộp thoại, PDF. Nên giữ lớp này chủ yếu là UI và adapter. |
-| `tests/CycloneNest2D.Tests/` | Console test harness không cần framework/NuGet bổ sung, kiểm tra lõi DXF/hình học/nesting/xuất. |
-| `tests/CycloneNest2D.UI.Tests/` | Console test harness cho UI Core và một số kiểm tra tĩnh XAML/luồng UI. Không phải kiểm thử tương tác WPF thực. |
+| `tests/CycloneNest2D.Tests/` | xUnit tests theo domain cho hình học, DXF, nesting, validator và xuất. |
+| `tests/CycloneNest2D.UI.Tests/` | xUnit tests cho UI Core, persistence, thao tác placement và kiểm tra tĩnh XAML; không phải kiểm thử tương tác WPF thực. |
 | `tests/CycloneNest2D.Performance/` | Benchmark console riêng cho throughput/chất lượng nesting; chạy workload tổng hợp hoặc DXF thật, xuất báo cáo JSON/CSV. |
 | `CycloneNest2D.sln` | Solution Visual Studio. |
 
@@ -111,6 +111,8 @@ Lưu ý: dữ liệu dự án hiện lưu danh sách preset nhưng không có t�
 
 Core xác thực kích thước tấm và bước xoay (5–180°) ngay cả khi được gọi ngoài UI. Một lần chạy bị giới hạn tối đa 250.000 instance; lưới raster tối đa 8192 ô mỗi chiều và 16.777.216 ô tổng. Đầu vào vượt giới hạn bị từ chối với thông báo thay vì tạo danh sách/cấp phát lưới không kiểm soát. Các vòng lặp raster kiểm tra cancellation định kỳ; hủy được thể hiện riêng với hết thời gian và các chi tiết chưa xử lý vẫn được báo rõ.
 
+`RasterNester.GapTol` là dung sai 0,1 mm do rời rạc hóa cung tròn. Với contour thật, bước xác minh chính xác dùng `max(0, SheetDefinition.Spacing - GapTol)`: khoảng cách biên có thể thấp hơn spacing cấu hình tối đa 0,1 mm, nhưng không chấp nhận chồng lấn. Validator dùng cùng ngưỡng cho placement có contour thật; hai placement chữ nhật kiểm tra spacing chính xác theo hộp bao. Đây là dung sai xác minh, không phải thay đổi lề hoặc giá trị spacing lưu trong thiết lập.
+
 ### 4.5 Kiểm tra kết quả và hiển thị
 
 Sau mỗi run trong UI, `NestingService.RunAsync` chạy `NestEngine.Run` trên thread nền và thực hiện `Validator.Check`. Kết quả được đưa vào ViewModel, sau đó ViewModel cập nhật các `SheetItem`, sheet đang chọn, summary và preview `Scene`. Khi dữ liệu đầu vào thay đổi, kết quả đánh dấu `IsStale`; người dùng cần chạy lại trước khi coi đó là kết quả đồng bộ.
@@ -151,16 +153,15 @@ Cần .NET 8 SDK. Trên Windows có thể mở `CycloneNest2D.sln`, hoặc chạ
 dotnet run --project src/CycloneNest2D.Desktop -c Release
 ```
 
-Build solution và chạy console harness khi task cho phép:
+Build solution và chạy test discovery khi task cho phép:
 
 ```powershell
 dotnet build CycloneNest2D.sln -c Release
-dotnet run --project tests/CycloneNest2D.Tests -c Release
-dotnet run --project tests/CycloneNest2D.UI.Tests -c Release
+dotnet test CycloneNest2D.sln -c Release
 dotnet run --project tests/CycloneNest2D.Performance -c Release -- --quick
 ```
 
-Desktop chỉ chạy trên Windows. Có thể cross-target build từ Linux/macOS nếu SDK được cấu hình Windows targeting; build cross-target không thay thế kiểm thử UI trên Windows.
+Có thể lọc theo domain bằng trait, ví dụ `dotnet test tests/CycloneNest2D.Tests/CycloneNest2D.Tests.csproj -c Release --filter "Domain=DxfReader"`. Hai test project dùng `Microsoft.NET.Test.Sdk`, xUnit, `xunit.runner.visualstudio` và `coverlet.collector`; Performance vẫn là console. GitHub Actions chạy Core/UI Core trên Ubuntu và Windows, build Desktop trên Windows, và upload báo cáo JSON/CSV của Performance `--quick`. Desktop chỉ chạy trên Windows. Có thể cross-target build từ Linux/macOS nếu SDK được cấu hình Windows targeting; build cross-target không thay thế kiểm thử UI trên Windows.
 
 ### Đánh giá hiệu năng nesting
 
@@ -195,7 +196,7 @@ dotnet run --project tests\CycloneNest2D.Performance -c Release -- --full --dxf 
 
 ### Các điểm cần cải thiện lâu dài
 
-1. **Chuyển test harness sang test framework chuẩn.** Hai project test hiện là console executable; `dotnet test` không tự phát hiện assertion như xUnit/NUnit. Dùng xUnit/NUnit + `Microsoft.NET.Test.Sdk` để IDE/CI có test discovery, report và lọc test. Có thể giữ console runner tạm thời trong khi chuyển dần.
+1. **Tiếp tục mở rộng test theo domain.** Hai project test đã dùng xUnit với discovery, lọc theo domain và coverage collector. Khi thêm test, đặt chúng trong domain/use-case phù hợp; Performance vẫn chạy riêng để không đặt ngưỡng thời gian tuyệt đối trong unit test.
 2. **Thêm CI đa nền tảng.** Build/test Core và UI Core trên Windows/Linux; build Desktop trên Windows. Lưu artifact/log và kiểm tra format/lint để phát hiện lỗi sớm.
 3. **Đưa cảnh báo compiler và phân tích tĩnh thành cổng chất lượng.** Bật warnings-as-errors có chọn lọc, `dotnet format --verify-no-changes`, analyzer; giải quyết cảnh báo theo nhóm thay vì bật cứng toàn bộ ngay nếu code hiện có chưa sạch.
 4. **Quản lý version dự án `.nest2d`.** DTO có `Version` nhưng loader chưa thể hiện migration theo version. Cần từ chối version tương lai không hỗ trợ, validate schema, migration có test và lưu atomic (ghi file tạm rồi rename) để giảm nguy cơ hỏng file khi crash.
@@ -204,7 +205,7 @@ dotnet run --project tests\CycloneNest2D.Performance -c Release -- --full --dxf 
 8. **Thiết lập timeout và cancellation có test biên.** Thời gian được tính trong lõi và lại được phân bổ cho các trial theo nhóm/khổ. Tiếp tục test lượng dữ liệu lớn, cancellation khi đang tạo variant, nhiều vật liệu và trường hợp 0/âm/NaN/infinity; bảo đảm mọi vòng lặp nặng có điểm kiểm tra cancellation.
 9. **Kiểm thử DXF interoperability.** Thêm bộ fixture do CAD thực xuất, kiểm tra phiên bản DXF, OCS/extrusion, bulge, SPLINE, blocks/arrays, encoding, layer và round-trip; xác nhận thủ công trên ZWCAD/Inventor/AutoCAD phù hợp phiên bản đích.
 10. **Hiệu năng/bộ nhớ raster.** Đặt giới hạn kích thước lưới/đầu vào, đo benchmark theo sheet/chi tiết/độ phân giải; xử lý file DXF lớn hoặc số lượng cực lớn có tiến độ và giới hạn tài nguyên. Không để input không tin cậy tạo cấp phát bất thường.
-11. **Nợ kiến trúc đang hiện hữu — không mở rộng các lớp trung tâm.** `MainViewModel` đang chứa lifecycle dự án, preflight/nesting đa nhóm, placement thủ công, export và state/preview; `MainWindow.xaml.cs` đồng thời xử lý nhiều trang, nhập liệu, menu, dialog và lifecycle. Hai console harness cũng gom nhiều miền vào một `Program.cs`. Đây là điểm tập trung rủi ro khi thêm tính năng. Tách theo lát cắt, ưu tiên:
+11. **Nợ kiến trúc đang hiện hữu — không mở rộng các lớp trung tâm.** `MainViewModel` đang chứa lifecycle dự án, preflight/nesting đa nhóm, placement thủ công, export và state/preview; `MainWindow.xaml.cs` đồng thời xử lý nhiều trang, nhập liệu, menu, dialog và lifecycle. Test đã có xUnit discovery theo domain, nhưng các case legacy vẫn dùng chung builder lớn; tiếp tục tách test theo domain khi sửa từng use-case. Đây là điểm tập trung rủi ro khi thêm tính năng. Tách theo lát cắt, ưu tiên:
    1. `NestingCoordinator` cho preflight, nhóm vật liệu/khổ, tiến độ và ghép kết quả.
    2. `ProjectSessionService` cho index/workspace, chuyển nhóm, migration và lưu nguyên tử.
    3. `ManualPlacementService` cho place/move/delete và projection số lượng còn lại.
@@ -219,8 +220,7 @@ dotnet run --project tests\CycloneNest2D.Performance -c Release -- --full --dxf 
 
 - Đã kiểm kê mã nguồn, solution, README, project files, thuật toán Core, luồng ViewModel/service/persistence và một phần nội dung tests.
 - ZIP ban đầu chứa artefact Visual Studio và build: khoảng 5.6 MiB tổng; trong đó `bin` khoảng 3.31 MiB, `obj` 1.06 MiB, `.vs` 0.68 MiB. Chúng không phải source và đã được loại khỏi bản làm việc/tài liệu giao.
-- Trong phiên cập nhật thao tác thủ công, đã chạy `dotnet run --project tests/CycloneNest2D.Tests/CycloneNest2D.Tests.csproj`: 35 đạt, 0 lỗi; và `dotnet run --project tests/CycloneNest2D.UI.Tests/CycloneNest2D.UI.Tests.csproj`: 36 đạt, 0 lỗi (bao gồm regression số lượng còn lại, thêm sheet, di chuyển/xóa selection và xóa toàn bộ nest). Lượt gọi đầu dùng `--no-restore` thất bại vì không có assets; sau đó chạy lại có NuGet restore và thành công.
-- UI test harness có kiểm tra tĩnh XAML/binding/handler và cho biết không thể biên dịch WPF trên Linux. Vì vậy phần code-behind WPF và tương tác thực tế chưa được xác minh bằng build/chạy Windows.
+- Test Core và UI Core được chạy qua xUnit discovery; các regression test hiện có (kể cả kiểm tra tĩnh XAML/binding/handler) được giữ lại. Kiểm tra tĩnh XAML không thay thế build Desktop hoặc xác minh tương tác WPF thực tế trên Windows.
 - Chưa xác nhận giao diện tương tác trên Windows thật và chưa mở DXF xuất trong CAD mục tiêu.
 
 ## 8. Quy tắc cho AI/nhà phát triển tiếp theo

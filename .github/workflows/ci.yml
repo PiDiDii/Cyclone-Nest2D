@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core-and-ui-tests:
+    name: Core and UI Core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Test Core
+        run: dotnet test tests/CycloneNest2D.Tests/CycloneNest2D.Tests.csproj -c Release
+      - name: Test UI Core
+        run: dotnet test tests/CycloneNest2D.UI.Tests/CycloneNest2D.UI.Tests.csproj -c Release
+
+  desktop-build:
+    name: Desktop build (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build Desktop
+        run: dotnet build src/CycloneNest2D.Desktop/CycloneNest2D.Desktop.csproj -c Release
+
+  performance-quick:
+    name: Quick performance report (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Run quick benchmark
+        run: dotnet run --project tests/CycloneNest2D.Performance/CycloneNest2D.Performance.csproj -c Release -- --quick --output artifacts/performance/quick
+      - name: Upload benchmark reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: nesting-performance-quick
+          path: artifacts/performance/quick.*
+          if-no-files-found: error
+          retention-days: 14

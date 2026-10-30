@@ -597,6 +597,22 @@ public sealed class MainViewModel : ObservableObject
         Status = "Đã thêm hình chữ nhật 200 x 100: sửa Rộng/Cao/Số lượng ngay trong bảng.";
     }
 
+    public PartItem AddTemplate(StandardPartShape shape, double width, double height, int sides = 6)
+    {
+        string prefix = shape switch
+        {
+            StandardPartShape.Circle => "Hinh_tron",
+            StandardPartShape.Triangle => "Tam_giac",
+            StandardPartShape.Polygon => $"Da_giac_{sides}_canh",
+            _ => "Chu_nhat"
+        };
+        var item = PartItem.NewTemplate(UniqueName(prefix, null), shape, width, height, sides);
+        Parts.Add(item);
+        SelectedPart = item;
+        Status = $"Đã thêm mẫu {item.KindText.ToLowerInvariant()} {item.Width:0.##} × {item.Height:0.##} mm.";
+        return item;
+    }
+
     public void RemoveSelected()
     {
         if (SelectedPart == null) return;

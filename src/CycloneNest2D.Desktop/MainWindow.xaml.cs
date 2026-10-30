@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Threading;
 using CycloneNest2D.UI;
@@ -16,13 +17,12 @@ public partial class MainWindow : Window
     private bool _updatingZoomPreset;
     private bool _syncingSheetPresetRows;
     private bool _sheetPresetRowsSyncQueued;
-    private bool _partColumnsFitQueued;
-    private bool _nestingPartColumnsFitQueued;
-    private readonly HashSet<PartItem> _observedNestingParts = new();
     private System.Windows.Point _nestingPartDragStart;
     private PartItem? _nestingPartDragCandidate;
     private bool _isDarkTheme;
+    private bool _isInitialized;
     private ResourceDictionary? _darkThemeDict;
+    private PartGridAlignmentSettings _partGridAlignmentSettings = new();
 
     public MainWindow(NestSettings settings)
     {
@@ -30,6 +30,10 @@ public partial class MainWindow : Window
         LoadThemePreference();
         _vm = new MainViewModel(new WpfDialogService(this), settings);
         DataContext = _vm;
+        LoadPartGridAlignmentSettings();
+        ApplyPartGridAlignmentSettings();
+        PartsGrid.AddHandler(FrameworkElement.ContextMenuOpeningEvent,
+            new ContextMenuEventHandler(PartColumnContextMenu_Opening), true);
         SheetPresetsGrid.ItemsSource = _sheetPresetRows;
         _vm.Presets.CollectionChanged += (_, _) => ScheduleSheetPresetRowsSync();
         SyncSheetPresetRows();
@@ -37,11 +41,8 @@ public partial class MainWindow : Window
         AboutVersion.Text = $"Phiên bản {version?.Major}.{version?.Minor}.{version?.Build} · Cập nhật 30/10/2026";
         _vm.Parts.CollectionChanged += (_, _) =>
         {
-            SchedulePartColumnAutoFit();
-            SyncNestingPartChangeSubscriptions();
-            ScheduleNestingPartColumnAutoFit();
+            UpdatePartSelectionSummary();
         };
-        SyncNestingPartChangeSubscriptions();
         SheetCanvas.ZoomChanged += SheetCanvas_ZoomChanged;
         SheetCanvas.DragOver += SheetCanvas_DragOver;
         SheetCanvas.SelectionChanged += SheetCanvas_SelectionChanged;
@@ -51,6 +52,7 @@ public partial class MainWindow : Window
         MainTabs.SelectionChanged += (s, e) => { if (ReferenceEquals(e.OriginalSource, MainTabs)) SyncRail(); };
         SyncRail();
         UpdateWindowStateVisuals();
+        _isInitialized = true;
     }
 
     private void SyncRail()
@@ -236,6 +238,13 @@ public partial class MainWindow : Window
         return dialog.ShowDialog() == true ? input.Text.Trim() : null;
     }
 
+    private void OpenStandardShapeLibrary_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new StandardShapeLibraryWindow(this);
+        if (dialog.ShowDialog() == true)
+            _vm.AddTemplate(dialog.Shape, dialog.ShapeWidth, dialog.ShapeHeight, dialog.Sides);
+    }
+
     private void OpenPartPreview_Click(object sender, RoutedEventArgs e)
     {
         var part = _vm.SelectedPart;
@@ -409,69 +418,134 @@ public partial class MainWindow : Window
 
     private void PartsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdatePartSelectionSummary();
 
-    private void PartsGrid_Loaded(object sender, RoutedEventArgs e) => SchedulePartColumnAutoFit();
-
-    private void PartsGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    private void LoadPartGridAlignmentSettings()
     {
-        SchedulePartColumnAutoFit();
-        ScheduleNestingPartColumnAutoFit();
-    }
-
-    private void ScheduleNestingPartColumnAutoFit(object? sender = null, RoutedEventArgs? e = null)
-    {
-        if (_nestingPartColumnsFitQueued) return;
-        _nestingPartColumnsFitQueued = true;
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        try
         {
-            _nestingPartColumnsFitQueued = false;
-            if (NestingPartGroupsControl?.IsLoaded == true) AutoFitNestingPartColumns();
-        }));
-    }
-
-    private void AutoFitNestingPartColumns()
-    {
-        if (NestingPartGroupsControl == null || NestingPartsScrollViewer == null) return;
-        NestingPartGroupsControl.UpdateLayout();
-        foreach (var grid in FindVisualChildren<Grid>(NestingPartGroupsControl))
-        {
-            if (grid.ColumnDefinitions.Count != 4) continue;
-            grid.ColumnDefinitions[0].Width = GridLength.Auto;
-            grid.ColumnDefinitions[1].Width = new GridLength(34);
-            grid.ColumnDefinitions[2].Width = GridLength.Auto;
-            grid.ColumnDefinitions[3].Width = GridLength.Auto;
+            _partGridAlignmentSettings = PartGridAlignmentSettings.Load(PartGridAlignmentSettings.DefaultFilePath);
         }
-        NestingPartGroupsControl.UpdateLayout();
-        NestingPartsScrollViewer.ScrollToHorizontalOffset(0);
-    }
-
-    private void SyncNestingPartChangeSubscriptions()
-    {
-        var current = _vm.Parts.ToHashSet();
-        foreach (var oldPart in _observedNestingParts.Except(current).ToList())
+        catch (Exception ex)
         {
-            oldPart.Changed -= NestingPart_Changed;
-            _observedNestingParts.Remove(oldPart);
-        }
-        foreach (var part in current.Except(_observedNestingParts).ToList())
-        {
-            part.Changed += NestingPart_Changed;
-            _observedNestingParts.Add(part);
+            MessageBox.Show(this, $"Không thể đọc tùy chọn căn chỉnh cột:\n\n{ex.Message}\n\nSẽ dùng căn giữa mặc định.",
+                "Lỗi thiết lập giao diện", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _partGridAlignmentSettings = new PartGridAlignmentSettings();
         }
     }
 
-    private void NestingPart_Changed(PartItem _)
+    private void ApplyPartGridAlignmentSettings()
     {
-        SchedulePartColumnAutoFit();
-        ScheduleNestingPartColumnAutoFit();
+        foreach (var column in PartsGrid.Columns)
+        {
+            string name = column.Header?.ToString() ?? "";
+            var alignment = _partGridAlignmentSettings.Get(name);
+            var horizontal = PartGridAlignmentSettings.ToHorizontalAlignment(alignment.Content);
+
+            var cellStyle = new Style(typeof(DataGridCell), (Style)FindResource("ModernTableCell"));
+            cellStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, horizontal));
+            cellStyle.Setters.Add(new Setter(Control.VerticalContentAlignmentProperty, VerticalAlignment.Center));
+            column.CellStyle = cellStyle;
+
+            var headerStyle = new Style(typeof(DataGridColumnHeader), (Style)FindResource("PartTableHeader"));
+            headerStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,
+                PartGridAlignmentSettings.ToHorizontalAlignment(alignment.Header)));
+            column.HeaderStyle = headerStyle;
+
+            if (column is not DataGridTextColumn textColumn) continue;
+
+            var elementStyle = new Style(typeof(TextBlock), (Style)FindResource("CenteredText"));
+            elementStyle.Setters.Add(new Setter(TextBlock.TextAlignmentProperty,
+                PartGridAlignmentSettings.ToTextAlignment(alignment.Content)));
+            textColumn.ElementStyle = elementStyle;
+
+            var editStyle = new Style(typeof(TextBox), (Style)FindResource("CenteredEditor"));
+            editStyle.Setters.Add(new Setter(TextBox.TextAlignmentProperty,
+                PartGridAlignmentSettings.ToTextAlignment(alignment.Content)));
+            editStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, horizontal));
+            textColumn.EditingElementStyle = editStyle;
+        }
     }
 
-    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
+    private void PartColumnContextMenu_Opening(object sender, ContextMenuEventArgs e)
     {
-        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        DependencyObject? source = e.OriginalSource as DependencyObject;
+        while (source != null && source is not DataGridColumnHeader)
+            source = source is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(source)
+                : LogicalTreeHelper.GetParent(source);
+        if (source is not DataGridColumnHeader header) return;
+
+        string columnName = header.Column.Header?.ToString() ?? "";
+        var alignment = _partGridAlignmentSettings.Get(columnName);
+        var menu = CreatePartColumnAlignmentMenu(alignment);
+        header.ContextMenu = menu;
+        menu.PlacementTarget = header;
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    private ContextMenu CreatePartColumnAlignmentMenu(PartGridColumnAlignment alignment)
+    {
+        var menu = new ContextMenu();
+        AddAlignmentGroup(menu, "Căn tiêu đề", "Header", alignment.Header);
+        AddAlignmentGroup(menu, "Căn nội dung", "Content", alignment.Content);
+        return menu;
+    }
+
+    private void AddAlignmentGroup(ContextMenu menu, string label, string target, PartGridTextAlignment selected)
+    {
+        var group = new MenuItem { Header = label };
+        foreach (var value in Enum.GetValues<PartGridTextAlignment>())
         {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if (child is T match) yield return match;
-            foreach (var nested in FindVisualChildren<T>(child)) yield return nested;
+            string title = value switch
+            {
+                PartGridTextAlignment.Left => "Căn trái",
+                PartGridTextAlignment.Center => "Căn giữa",
+                _ => "Căn phải"
+            };
+            group.Items.Add(new MenuItem
+            {
+                Header = title,
+                Tag = $"{target}:{value}",
+                IsCheckable = true,
+                IsChecked = value == selected
+            });
+        }
+        foreach (var option in group.Items.OfType<MenuItem>())
+            option.Click += PartColumnAlignment_Click;
+        menu.Items.Add(group);
+    }
+
+    private void PartColumnAlignment_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string tag }) return;
+        var parts = tag.Split(':', 2);
+        if (parts.Length != 2 || !Enum.TryParse(parts[1], out PartGridTextAlignment value)) return;
+        ContextMenu? menu = null;
+        DependencyObject? current = sender as DependencyObject;
+        while (current != null)
+        {
+            if (current is ContextMenu found) { menu = found; break; }
+            current = current is MenuItem menuItem
+                ? menuItem.Parent ?? ItemsControl.ItemsControlFromItemContainer(menuItem)
+                : LogicalTreeHelper.GetParent(current);
+        }
+        if (menu?.PlacementTarget is not DataGridColumnHeader header) return;
+
+        string columnName = header.Column.Header?.ToString() ?? "";
+        var alignment = _partGridAlignmentSettings.Get(columnName);
+        if (parts[0] == "Header") alignment.Header = value;
+        else alignment.Content = value;
+        _partGridAlignmentSettings.Set(columnName, alignment);
+        ApplyPartGridAlignmentSettings();
+        menu.IsOpen = false;
+        try
+        {
+            _partGridAlignmentSettings.Save(PartGridAlignmentSettings.DefaultFilePath);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Không thể lưu tùy chọn căn chỉnh cột:\n\n{ex.Message}",
+                "Lỗi lưu thiết lập giao diện", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -483,18 +557,6 @@ public partial class MainWindow : Window
         PartSelectionSummary.Text = selected > 0
             ? $"Đã chọn {selected} / {total} dòng"
             : $"{total} dòng chi tiết";
-    }
-
-    private void SchedulePartColumnAutoFit()
-    {
-        UpdatePartSelectionSummary();
-        if (_partColumnsFitQueued) return;
-        _partColumnsFitQueued = true;
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
-        {
-            _partColumnsFitQueued = false;
-            if (PartsGrid?.IsLoaded == true) AutoFitPartColumns();
-        }));
     }
 
     private void PointerTool_Click(object sender, RoutedEventArgs e)
@@ -616,25 +678,6 @@ public partial class MainWindow : Window
     private void SheetCanvas_SelectionChanged(object? sender, EventArgs e)
         => _vm.SetSelectedPlacements(SheetCanvas.SelectedIndices, SheetCanvas.SelectedIndex);
 
-    private void AutoFitPartColumns()
-    {
-        double[] minimum = { 42, 170, 200, 82, 82, 62, 125 };
-        double[] maximum = { 58, 360, 260, 118, 118, 80, 240 };
-        if (PartsGrid.Columns.Count != minimum.Length) return;
-        for (int i = 0; i < PartsGrid.Columns.Count; i++)
-        {
-            PartsGrid.Columns[i].MinWidth = minimum[i];
-            PartsGrid.Columns[i].MaxWidth = maximum[i];
-            PartsGrid.Columns[i].Width = DataGridLength.Auto;
-        }
-        PartsGrid.UpdateLayout();
-        for (int i = 0; i < PartsGrid.Columns.Count; i++)
-        {
-            double measured = PartsGrid.Columns[i].ActualWidth;
-            PartsGrid.Columns[i].Width = new DataGridLength(Math.Clamp(measured, minimum[i], maximum[i]));
-        }
-    }
-
     private void PartPreviewFitZoom_Click(object sender, RoutedEventArgs e) => PartPreview.ZoomToFit();
 
     private void SelectAllParts_Click(object sender, RoutedEventArgs e) => PartsGrid.SelectAll();
@@ -718,9 +761,19 @@ public partial class MainWindow : Window
         });
 
         TextBox? nameBox = null;
+        TextBox? widthBox = null;
+        TextBox? heightBox = null;
         if (single)
         {
             nameBox = AddInput(panel, "Tên chi tiết", selected[0].Name);
+            if (selected[0].Kind is PartKind.Rect or PartKind.Template)
+            {
+                bool diameterOnly = selected[0].TemplateShape is StandardPartShape.Circle or StandardPartShape.Polygon;
+                widthBox = AddInput(panel, diameterOnly ? "Đường kính / kích thước (mm)" : "Rộng (mm)",
+                    (diameterOnly ? selected[0].TemplateSize : selected[0].Width).ToString(CultureInfo.CurrentCulture));
+                if (!diameterOnly)
+                    heightBox = AddInput(panel, "Cao (mm)", selected[0].Height.ToString(CultureInfo.CurrentCulture));
+            }
         }
 
         var commonPreset = selected.Select(p => p.AssignedPreset ?? _vm.Presets.FirstOrDefault(s =>
@@ -771,9 +824,29 @@ public partial class MainWindow : Window
                 MessageBox.Show(dialog, "Tên chi tiết không được để trống.", "Tên chưa hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
+            double width = 0, height = 0;
+            if (widthBox != null &&
+                (!double.TryParse(widthBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out width) ||
+                 !double.IsFinite(width) || width <= 0))
+            {
+                MessageBox.Show(dialog, "Kích thước phải là số dương hữu hạn.", "Kích thước chưa hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (heightBox != null &&
+                (!double.TryParse(heightBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out height) ||
+                 !double.IsFinite(height) || height <= 0))
+            {
+                MessageBox.Show(dialog, "Chiều cao phải là số dương hữu hạn.", "Kích thước chưa hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (heightBox == null) height = width;
+            if (widthBox != null && selected[0].TemplateShape is StandardPartShape.Circle or StandardPartShape.Polygon)
+                height = width;
 
             if (single && nameBox != null)
                 selected[0].Name = _vm.UniqueName(nameBox.Text.Trim(), selected[0]);
+            if (widthBox != null)
+                selected[0].ResizeTemplate(width, height);
             if (applyPreset.IsChecked == true)
                 _vm.AssignPresetToParts(selected, presetToApply!);
             if (applyQuantity.IsChecked == true)
@@ -1023,6 +1096,7 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        if (!_isInitialized) return;
         if (_vm.IsProjectDirty &&
             !ConfirmationDialog.Confirm(this, "Thoát Cyclone Nest2D", "Dự án có thay đổi chưa được lưu. Bạn có muốn thoát và bỏ các thay đổi này không?", "Thoát"))
         {

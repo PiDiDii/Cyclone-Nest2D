@@ -30,11 +30,11 @@
     <Window.Resources>
         <DataTemplate x:Key="LayerTemplate"><CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}" Margin="3,2"><TextBlock><Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold"/><Run Text="  "/><Run Text="{Binding Note, Mode=OneWay}" Foreground="Gray"/></TextBlock></CheckBox></DataTemplate>
     <Style x:Key="PartTableHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource ModernTableHeader}">
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="14.5"/>
         <Setter Property="FontWeight" Value="Bold"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
-        <Setter Property="Padding" Value="12,12"/>
+        <Setter Property="Padding" Value="8,10"/>
     </Style>
     <Style x:Key="CloseGlyph" TargetType="Path">
  <Setter Property="Stroke" Value="{DynamicResource IconStrokeBrush}"/>
@@ -274,18 +274,18 @@
                             <TextBlock Text="Chi tiết" Style="{StaticResource SectionTitle}" FontSize="24"/>
                             <TextBlock Text="Quản lý danh sách sản xuất và thông tin vật liệu theo từng chi tiết." Foreground="{DynamicResource TextSecondaryBrush}"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,18,0">
+                        <WrapPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,18,0">
+                            <Button Content="Thêm thư mục" Command="{Binding AddFolderCommand}"/>
+                            <Button Content="Thư viện mẫu" Click="OpenStandardShapeLibrary_Click" IsEnabled="{Binding IsIdle}"/>
+                            <Button Content="Thêm DXF" Command="{Binding AddDxfCommand}" Style="{StaticResource PrimaryButton}" Margin="0" ToolTip="Ctrl+D"/>
+                        </WrapPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,0">
                             <StackPanel Margin="0,0,18,0"><TextBlock Text="MÃ CHI TIẾT" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal"><TextBlock Text="{Binding Parts.Count}" FontSize="17" FontWeight="Bold"/><TextBlock Text=" dòng" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="5,0,0,2"/></StackPanel></StackPanel>
                             <Border Width="1" Height="30" Background="{DynamicResource AppBorderBrush}" Margin="0,0,18,0"/>
                             <StackPanel Margin="0,0,18,0"><TextBlock Text="TỔNG SỐ LƯỢNG" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal"><TextBlock Text="{Binding RequiredCount}" FontSize="17" FontWeight="Bold"/><TextBlock Text=" chi tiết" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="5,0,0,2"/></StackPanel></StackPanel>
                             <Border Width="1" Height="30" Background="{DynamicResource AppBorderBrush}" Margin="0,0,18,0"/>
                             <StackPanel MaxWidth="170"><TextBlock Text="NHÓM ĐANG LÀM VIỆC" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding SelectedProjectGroup.Name, TargetNullValue='Chưa chọn nhóm'}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/></StackPanel>
                         </StackPanel>
-                        <WrapPanel Grid.Column="2" VerticalAlignment="Center">
-                            <Button Content="Thêm thư mục" Command="{Binding AddFolderCommand}"/>
-                            <Button Content="Thêm hình chữ nhật" Command="{Binding AddRectCommand}"/>
-                            <Button Content="Thêm DXF" Command="{Binding AddDxfCommand}" Style="{StaticResource PrimaryButton}" Margin="0" ToolTip="Ctrl+D"/>
-                        </WrapPanel>
                     </Grid>
                     <Grid Grid.Row="1">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="3.5*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -303,7 +303,13 @@
                                         <Button Content="Bỏ chọn" Click="ClearPartSelection_Click" Margin="0"/>
                                     </StackPanel>
                                 </Grid>
-                                <DataGrid x:Name="PartsGrid" Grid.Row="1" ItemsSource="{Binding Parts}" SelectedItem="{Binding SelectedPart, Mode=TwoWay}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" CanUserSortColumns="False" CanUserReorderColumns="False" SelectionMode="Extended" SelectionUnit="FullRow" HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource PartListBorderBrush}" AllowDrop="True" IsEnabled="{Binding IsIdle}" PreviewMouseRightButtonDown="PartsGrid_PreviewMouseRightButtonDown" PreviewKeyDown="PartsGrid_PreviewKeyDown" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderHoverBrush}" BorderThickness="1.5" RowBackground="{DynamicResource CardBgBrush}" AlternatingRowBackground="{DynamicResource CardBgAltBrush}" RowStyle="{StaticResource ModernTableRow}" ColumnHeaderStyle="{StaticResource PartTableHeader}" CellStyle="{StaticResource ModernTableCell}" RowHeight="42" SelectionChanged="PartsGrid_SelectionChanged" Loaded="PartsGrid_Loaded" CellEditEnding="PartsGrid_CellEditEnding">
+                                <DataGrid x:Name="PartsGrid" Grid.Row="1" ItemsSource="{Binding Parts}" SelectedItem="{Binding SelectedPart, Mode=TwoWay}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" CanUserSortColumns="False" CanUserReorderColumns="False" SelectionMode="Extended" SelectionUnit="FullRow" HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource PartListBorderBrush}" AllowDrop="True" IsEnabled="{Binding IsIdle}" PreviewMouseRightButtonDown="PartsGrid_PreviewMouseRightButtonDown" PreviewKeyDown="PartsGrid_PreviewKeyDown" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1.5" RowBackground="{DynamicResource CardBgBrush}" AlternatingRowBackground="{DynamicResource CardBgAltBrush}" RowStyle="{StaticResource ModernTableRow}" ColumnHeaderStyle="{StaticResource PartTableHeader}" FontSize="12.5" RowHeight="42" SelectionChanged="PartsGrid_SelectionChanged">
+                                    <DataGrid.CellStyle>
+                                        <Style TargetType="DataGridCell" BasedOn="{StaticResource ModernTableCell}">
+                                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGrid.CellStyle>
                                     <DataGrid.ContextMenu>
                                         <ContextMenu Opened="PartsContextMenu_Opened">
                                             <MenuItem Header="Chọn tất cả" Click="SelectAllParts_Click"/>
@@ -317,18 +323,28 @@
                                     </DataGrid.ContextMenu>
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="STT" Binding="{Binding Sequence, Mode=OneWay}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="48"/>
-                                        <DataGridTextColumn Header="Tên chi tiết" Binding="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" ElementStyle="{StaticResource TableText}" EditingElementStyle="{StaticResource TableEditor}" Width="*"/>
-                                        <DataGridTemplateColumn Header="Vật liệu · Độ dày" Width="220">
+                                        <DataGridTextColumn Header="Tên chi tiết" Binding="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="240"/>
+                                        <DataGridTemplateColumn Header="Vật liệu · Độ dày" Width="160">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
-                                                    <ComboBox ItemsSource="{Binding DataContext.Presets, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" SelectedItem="{Binding AssignedPreset, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" DisplayMemberPath="AssignmentLabel" Padding="6,3" ToolTip="Chọn vật liệu, độ dày và khổ tấm"/>
+                                                    <ComboBox ItemsSource="{Binding DataContext.Presets, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" SelectedItem="{Binding AssignedPreset, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" DisplayMemberPath="AssignmentLabel" Padding="6,3" HorizontalContentAlignment="{Binding HorizontalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type DataGridCell}}}" VerticalContentAlignment="Center" ToolTip="Chọn vật liệu, độ dày và khổ tấm">
+                                                        <ComboBox.ItemContainerStyle>
+                                                            <Style TargetType="ComboBoxItem">
+                                                                <Setter Property="HorizontalContentAlignment" Value="{Binding HorizontalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"/>
+                                                                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                                            </Style>
+                                                        </ComboBox.ItemContainerStyle>
+                                                    </ComboBox>
                                                 </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
+                                            <DataGridTemplateColumn.CellStyle>
+                                                <Style TargetType="DataGridCell" BasedOn="{StaticResource CenteredCell}"/>
+                                            </DataGridTemplateColumn.CellStyle>
                                         </DataGridTemplateColumn>
                                         <DataGridTextColumn Header="Rộng (mm)" Binding="{Binding Width, Mode=OneWay, StringFormat='{}{0:0.##}'}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="88"/>
                                         <DataGridTextColumn Header="Cao (mm)" Binding="{Binding Height, Mode=OneWay, StringFormat='{}{0:0.##}'}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="88"/>
-                                        <DataGridTextColumn Header="Số lượng" Binding="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="76"/>
-                                        <DataGridTextColumn Header="Thông tin / ghi chú" Binding="{Binding Info, Mode=OneWay}" ElementStyle="{StaticResource TableText}" IsReadOnly="True" Width="170"/>
+                                        <DataGridTextColumn Header="Số lượng" Binding="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="72"/>
+                                        <DataGridTextColumn Header="Thông tin / ghi chú" Binding="{Binding Info, Mode=OneWay}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="*"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
                                 <Grid Grid.Row="2" Margin="4,9,4,0">
@@ -366,6 +382,7 @@
                                     <StackPanel Grid.Row="1" Margin="2,0,2,8">
                                         <TextBlock Text="{Binding SelectedPart.Name, TargetNullValue='Chưa chọn chi tiết'}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="{Binding SelectedPart.Info, TargetNullValue='Chọn một dòng để xem thông tin'}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding SelectedPart.TextInfo}" Foreground="{DynamicResource WarningBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/>
                                         <TextBlock Text="{Binding SelectedPart.Error}" Foreground="{DynamicResource DangerBrush}" FontSize="11.5" TextWrapping="Wrap"/>
                                     </StackPanel>
                                     <Border Grid.Row="2" Background="{DynamicResource CardBgAltBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
@@ -385,12 +402,12 @@
                             <DataGrid x:Name="SheetPresetsGrid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" CanUserReorderColumns="False" CanUserResizeColumns="False" CanUserSortColumns="False" SelectionMode="Extended" SelectionUnit="FullRow" HeadersVisibility="Column" GridLinesVisibility="Horizontal" IsEnabled="{Binding IsIdle}" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource PartListBorderBrush}" BorderThickness="1" RowBackground="{DynamicResource CardBgBrush}" AlternatingRowBackground="{DynamicResource CardBgAltBrush}" RowStyle="{StaticResource PartRowStyle}" ColumnHeaderStyle="{StaticResource CenteredHeader}" CellStyle="{StaticResource CenteredCell}" RowHeight="34" SelectionChanged="SheetPresetsGrid_SelectionChanged" PreviewMouseRightButtonDown="SheetPresetsGrid_PreviewMouseRightButtonDown" RowEditEnding="SheetPresetsGrid_RowEditEnding" HorizontalScrollBarVisibility="Auto">
                                 <DataGrid.ContextMenu><ContextMenu Opened="SheetPresetsContextMenu_Opened"><MenuItem Header="Chọn tất cả" Click="SelectAllSheetPresets_Click"/><MenuItem Header="Hủy chọn" Click="ClearSheetPresetSelection_Click"/><Separator/><MenuItem Header="Thêm khổ tấm" Click="AddSheetPresetRow_Click"/><MenuItem Header="Xóa tấm đã chọn" Click="DeleteSelectedSheetPresets_Click" Tag="requires-selection"/></ContextMenu></DataGrid.ContextMenu>
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="STT" Binding="{Binding Sequence, Mode=OneWay}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="42"/>
-                                    <DataGridTextColumn Header="Tên vật liệu" Binding="{Binding Material, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="138"/>
-                                    <DataGridTextColumn Header="Dài (mm)" Binding="{Binding Width, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat='{}{0:0.##}'}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="112"/>
-                                    <DataGridTextColumn Header="Rộng (mm)" Binding="{Binding Height, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat='{}{0:0.##}'}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="116"/>
-                                    <DataGridTextColumn Header="Độ dày (mm)" Binding="{Binding Thickness, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat='{}{0:0.##}'}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="124"/>
-                                    <DataGridTextColumn Header="Ghi chú" Binding="{Binding Note, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="230"/>
+                                    <DataGridTextColumn Header="STT" Binding="{Binding Sequence, Mode=OneWay}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="42"/>
+                                    <DataGridTextColumn Header="Tên vật liệu" Binding="{Binding Material, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="138"/>
+                                    <DataGridTextColumn Header="Dài (mm)" Binding="{Binding Width, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat='{}{0:0.##}'}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="112"/>
+                                    <DataGridTextColumn Header="Rộng (mm)" Binding="{Binding Height, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat='{}{0:0.##}'}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="116"/>
+                                    <DataGridTextColumn Header="Độ dày (mm)" Binding="{Binding Thickness, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat='{}{0:0.##}'}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="124"/>
+                                    <DataGridTextColumn Header="Ghi chú" Binding="{Binding Note, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="230"/>
                                 </DataGrid.Columns>
                             </DataGrid>
                         </DockPanel></Border>
@@ -445,8 +462,7 @@
  <TextBlock Text="Kéo một chi tiết vào tấm để đặt thủ công. Dùng mũi tên để đẩy tới vật cản; Shift + mũi tên nhích 1 mm." Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5" TextWrapping="Wrap" Margin="0,5,0,0"/>
  </StackPanel>
  <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" x:Name="NestingPartsScrollViewer" CanContentScroll="False" Padding="10,0,10,10">
- <ItemsControl ItemsSource="{Binding PartGroups}" x:Name="NestingPartGroupsControl"
-                                              Loaded="ScheduleNestingPartColumnAutoFit">
+ <ItemsControl ItemsSource="{Binding PartGroups}" x:Name="NestingPartGroupsControl">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Border Background="{DynamicResource CardBgAltBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,10" Padding="0,0,0,6">

@@ -3,7 +3,9 @@ namespace CycloneNest2D.Core;
 /// <summary>
 /// Kiểm tra độc lập kết quả nesting: trong tấm, không chồng, đủ khe hở.
 /// Chi tiết có hình thật được kiểm tra bằng hình học chính xác (khoảng cách giữa các đường biên và quan hệ chứa nhau),
-/// chi tiết chữ nhật kiểm tra bằng hộp bao. Khe hở cho phép sai số <see cref="RasterNester.GapTol"/> (do rời rạc hóa cung tròn).
+/// chi tiết chữ nhật kiểm tra bằng hộp bao. Với contour thật, ngưỡng khe hở là
+/// max(0, spacing - <see cref="RasterNester.GapTol"/>); hai chi tiết chữ nhật không dùng dung sai này.
+/// Dung sai không bỏ qua va chạm/chồng lấn.
 /// </summary>
 public static class Validator
 {

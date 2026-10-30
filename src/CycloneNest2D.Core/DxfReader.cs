@@ -147,8 +147,8 @@ public static class DxfReader
         var (name, qty, noRot) = ParseFileName(Path.GetFileNameWithoutExtension(path), options.DefaultQuantity);
         var texts = raw.Texts.Where(text =>
         {
-            var x = text.X;
-            var y = text.Y;
+            var x = text.AnchorX;
+            var y = text.AnchorY;
             return x >= sizeBox.MinX - boxTol && x <= sizeBox.MaxX + boxTol &&
                    y >= sizeBox.MinY - boxTol && y <= sizeBox.MaxY + boxTol;
         }).Select(text =>
@@ -172,7 +172,8 @@ public static class DxfReader
             };
         }).ToList();
         var geometry = new DxfShape(name, segs, scale, layerCounts, warnings, raw.Approximated, raw.LayerColors, texts);
-        var innerTexts = texts.Where(text => ShapeOps.ContainsInnerContour(geometry, text.X, text.Y)).ToList();
+        var loops = ShapeOps.Build(geometry);
+        var innerTexts = texts.Where(text => ShapeOps.ContainsInnerContour(loops, text.AnchorX, text.AnchorY)).ToList();
         if (innerTexts.Count > 0)
         {
             int textCount = innerTexts.Count(text => text.Type == "TEXT");
@@ -353,7 +354,9 @@ public static class DxfReader
                 throw new InvalidDataException($"File DXF lỗi cấu trúc ở dòng {i + 1}: '{lines[i].Trim()}'.");
             }
 
-            string val = lines[i + 1].Trim();
+            string val = code is 1 or 3 && cur?.Type is "TEXT" or "MTEXT"
+                ? lines[i + 1].TrimEnd('\r')
+                : lines[i + 1].Trim();
             if (code == 0)
             {
                 cur = new RawEntity { Type = val };

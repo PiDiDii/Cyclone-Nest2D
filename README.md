@@ -11,8 +11,9 @@ Cyclone Nest2D là ứng dụng desktop Windows dùng WPF để đọc file DXF 
 src/CycloneNest2D.Core       Hình học, DXF, nesting, validator, xuất DXF (net8.0)
 src/CycloneNest2D.UI.Core    ViewModel, nghiệp vụ UI, lưu dự án và điều phối (net8.0)
 src/CycloneNest2D.Desktop    Giao diện WPF và báo cáo PDF (net8.0-windows)
-tests/CycloneNest2D.Tests    Console harness kiểm tra Core
-tests/CycloneNest2D.UI.Tests Console harness kiểm tra UI Core
+tests/CycloneNest2D.Tests    XUnit tests cho Core
+tests/CycloneNest2D.UI.Tests XUnit tests cho UI Core và kiểm tra tĩnh XAML
+tests/CycloneNest2D.Performance Console benchmark nesting (JSON/CSV)
 ```
 
 ## Chạy ứng dụng (Windows)
@@ -35,11 +36,10 @@ Kéo file/thư mục DXF vào cửa sổ (hoặc chọn **Thêm DXF** trong tran
 
 ```powershell
 dotnet build CycloneNest2D.sln -c Release
-dotnet run --project tests/CycloneNest2D.Tests -c Release
-dotnet run --project tests/CycloneNest2D.UI.Tests -c Release
+dotnet test CycloneNest2D.sln -c Release
 ```
 
-Chưa chạy test? Hãy tuân theo chỉ dẫn trong yêu cầu công việc; các harness hiện là chương trình console. Desktop chỉ chạy trên Windows. Có thể cross-target build trên hệ điều hành khác nếu SDK được cấu hình Windows targeting, nhưng cần kiểm tra giao diện tương tác trên Windows thật.
+Chạy riêng từng bộ test bằng `dotnet test tests\CycloneNest2D.Tests\CycloneNest2D.Tests.csproj -c Release` hoặc `dotnet test tests\CycloneNest2D.UI.Tests\CycloneNest2D.UI.Tests.csproj -c Release`. Performance vẫn là console riêng: `dotnet run --project tests\CycloneNest2D.Performance -c Release -- --quick --output artifacts\performance\quick`. GitHub Actions kiểm tra Core/UI Core trên Ubuntu và Windows, build Desktop trên Windows, đồng thời lưu báo cáo Performance nhanh làm artifact. Desktop chỉ chạy trên Windows. Có thể cross-target build trên hệ điều hành khác nếu SDK được cấu hình Windows targeting, nhưng cần kiểm tra giao diện tương tác trên Windows thật.
 
 ## Chuẩn bị DXF
 
@@ -57,7 +57,7 @@ Chưa chạy test? Hãy tuân theo chỉ dẫn trong yêu cầu công việc; c�
 
 ## Nesting và xuất
 
-Thuật toán nesting sử dụng contour thật, hỗ trợ lỗ và hình lõm; không fallback sang hộp bao khi contour lỗi. Có hai hướng ưu tiên lấp, xoay theo bước cấu hình, khoảng cách giữa chi tiết, lề tấm, giới hạn thời gian và mục tiêu hiệu suất. Mọi ứng viên raster đều được xác minh lại bằng hình học; kết quả được Validator kiểm tra độc lập. Để bảo vệ bộ nhớ và độ phản hồi, mỗi lần nesting nhận tối đa 250.000 chi tiết; kích thước raster và khoảng cách không phù hợp giới hạn tài nguyên sẽ bị từ chối kèm thông báo.
+Thuật toán nesting sử dụng contour thật, hỗ trợ lỗ và hình lõm; không fallback sang hộp bao khi contour lỗi. Có hai hướng ưu tiên lấp, xoay theo bước cấu hình, khoảng cách giữa chi tiết, lề tấm, giới hạn thời gian và mục tiêu hiệu suất. Mọi ứng viên raster đều được xác minh lại bằng hình học; kết quả được Validator kiểm tra độc lập. Với contour thật, `RasterNester.GapTol` là 0,1 mm: kiểm tra khoảng cách dùng `max(0, spacing - 0,1 mm)` để bù sai số rời rạc hóa cung; va chạm/chồng lấn vẫn bị từ chối. Cặp chi tiết chữ nhật được Validator kiểm tra theo khoảng cách chính xác, không dùng dung sai này. Để bảo vệ bộ nhớ và độ phản hồi, mỗi lần nesting nhận tối đa 250.000 chi tiết; kích thước raster và khoảng cách không phù hợp giới hạn tài nguyên sẽ bị từ chối kèm thông báo.
 
 DXF xuất theo mm, có thể bao gồm đường cắt, biên tấm và nhãn tùy chọn. Đường cắt và ghi chú TEXT/MTEXT của chi tiết DXF giữ layer nguồn; chi tiết hình chữ nhật tạo trong ứng dụng xuất trên layer `PARTS`. Có thể bật tùy chọn gộp chi tiết vào một layer khi xuất. Chỉnh tay chỉ xác minh va chạm/lề, không tự nesting lại các chi tiết còn lại. Cần mở file xuất trên các phần mềm CAD đích để kiểm tra interoperability trước khi dùng sản xuất.
 
@@ -67,6 +67,5 @@ Một file `.nest2d` là chỉ mục của dự án; các nhóm vật liệu/đ�
 
 ## Giới hạn đã biết
 
-- Raster có dung sai hình học liên quan xấp xỉ cung; xem `PROJECT_GUIDE.md` để biết chi tiết và rủi ro.
+- Dung sai khe hở 0,1 mm cho contour thật có thể khiến khoảng cách nhỏ hơn spacing cấu hình tối đa 0,1 mm; xem `PROJECT_GUIDE.md`.
 - Chưa xác nhận trải nghiệm WPF trên mọi cấu hình Windows và chưa xác minh DXF bằng ứng dụng CAD mục tiêu.
-- Bộ kiểm thử hiện là console harness, chưa tích hợp test discovery/CI chuẩn.

@@ -13,7 +13,10 @@ namespace CycloneNest2D.Core;
 /// </summary>
 internal static class RasterNester
 {
-    /// <summary>Dung sai khoảng cách do rời rạc hóa cung tròn (mm). Validator dùng cùng giá trị.</summary>
+    /// <summary>
+    /// Dung sai tối đa (mm) trừ khỏi khe hở yêu cầu khi xác minh contour thật để bù sai số rời rạc hóa cung.
+    /// Ngưỡng kiểm tra là max(0, spacing - GapTol); contour chồng lấn vẫn bị từ chối. Validator dùng cùng giá trị.
+    /// </summary>
     public const double GapTol = 0.1;
 
     private const int MaxRejects = 400;

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace CycloneNest2D.Core;
 
 /// <summary>Đoạn hình học cơ sở của một chi tiết (đơn vị mm). Polyline/ellipse/spline đều được đổi về LINE/ARC.</summary>
@@ -26,7 +28,16 @@ public sealed record DxfTextEntity(
     double? AlignmentX = null,
     double? AlignmentY = null,
     int HorizontalAlignment = 0,
-    int VerticalAlignment = 0);
+    int VerticalAlignment = 0)
+{
+    [JsonIgnore]
+    public double AnchorX => Type == "TEXT" && (HorizontalAlignment != 0 || VerticalAlignment != 0) &&
+                             AlignmentX.HasValue ? AlignmentX.Value : X;
+
+    [JsonIgnore]
+    public double AnchorY => Type == "TEXT" && (HorizontalAlignment != 0 || VerticalAlignment != 0) &&
+                             AlignmentY.HasValue ? AlignmentY.Value : Y;
+}
 
 internal static class Geo
 {

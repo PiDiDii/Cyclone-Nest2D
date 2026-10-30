@@ -40,7 +40,8 @@ tests/CycloneNest2D.Tests → CycloneNest2D.Core
 6. Thay đổi phép xoay, gốc tọa độ, transform block/OCS, arc/bulge, loop orientation, chứa lỗ hoặc distance test PHẢI có test hồi quy hình học.
 7. Mọi placement do thuật toán trả về và thao tác đặt/kéo/xoay/lật tay phải được xác minh độc lập bằng `Validator`/API hợp lệ tương ứng.
 8. Dung sai hình học phải được giữ nhất quán giữa raster, exact check và validator. Nếu thay đổi, cập nhật docs, thông báo người dùng nếu ảnh hưởng chất lượng cắt, và thêm test sát biên.
-9. Không báo một nest là “đã xếp đủ” nếu còn `Unplaced`, bị hủy hoặc hết thời gian. Trạng thái một phần phải hiển thị rõ.
+9. `RasterNester.GapTol` hiện là 0,1 mm để bù sai số rời rạc hóa cung. Với contour thật, ngưỡng xác minh khoảng cách là `max(0, spacing - GapTol)`; không chấp nhận chồng lấn và không áp dụng dung sai này cho cặp chữ nhật thuần. Không được thay đổi giá trị/ngữ nghĩa nếu không có benchmark, regression test sát biên và cập nhật tài liệu.
+10. Không báo một nest là “đã xếp đủ” nếu còn `Unplaced`, bị hủy hoặc hết thời gian. Trạng thái một phần phải hiển thị rõ.
 
 ## 4. Quy tắc nhập DXF và dữ liệu
 
@@ -90,7 +91,9 @@ tests/CycloneNest2D.Tests → CycloneNest2D.Core
 - Khi sửa `RasterNester`/`NestEngine`, chạy benchmark Release `tests/CycloneNest2D.Performance` với workload tổng hợp và DXF đại diện; so sánh cùng máy, cấu hình, ngân sách và nhiều lần lặp. Báo riêng thời gian engine/validator, chất lượng, allocations và lỗi validator; không đặt ngưỡng thời gian tuyệt đối trong unit test. Dùng profiler trước khi kết luận nguyên nhân hot path.
 - Kiểm thử export bằng round-trip parser là hữu ích nhưng **không chứng minh** tương thích với AutoCAD/ZWCAD/Inventor. Ghi rõ cấp độ kiểm chứng.
 - Khi task yêu cầu không chạy test, **KHÔNG ĐƯỢC chạy test**. Có thể kiểm tra tĩnh như `grep`, tham chiếu project, parse XML/solution, diff và cấu trúc file; phải nói rõ test chưa chạy.
-- Khi được phép chạy, hiện tại test projects là console harness; chạy bằng `dotnet run --project tests/CycloneNest2D.Tests` và `dotnet run --project tests/CycloneNest2D.UI.Tests`. `dotnet test` chưa phải cổng đảm bảo test pass cho harness này.
+- Hai project `CycloneNest2D.Tests` và `CycloneNest2D.UI.Tests` dùng xUnit, `Microsoft.NET.Test.Sdk`, `xunit.runner.visualstudio` và `coverlet.collector`. Chạy bằng `dotnet test CycloneNest2D.sln -c Release`; có thể lọc theo domain/test name hoặc chạy riêng từng project. Khi migrate/thêm test, phải giữ toàn bộ regression cases và xác nhận test discovery.
+- `CycloneNest2D.Performance` vẫn là console benchmark; không đưa workload đo thời gian vào unit test hoặc biến project này thành test project.
+- GitHub Actions kiểm tra Core/UI Core trên Ubuntu và Windows, build Desktop trên Windows, chạy Performance `--quick` và lưu báo cáo JSON/CSV làm artifact. Nếu sửa workflow, kiểm tra đường dẫn/đầu ra artifact và báo rõ nếu chưa có kết quả chạy từ GitHub.
 - Build Desktop cần Windows target/WPF; xác minh tương tác thực tế trên Windows khi thay đổi XAML, resource, input hoặc layout có ảnh hưởng trực quan.
 - Nếu môi trường thiếu SDK/runtime, không giả lập kết quả. Báo cụ thể lệnh không chạy và lý do.
 

@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Media;
 using CycloneNest2D.Core;
@@ -138,6 +140,80 @@ public sealed class PartPreviewView : FrameworkElement
             }
         }
         if (ActualWidth >= 140 && ActualHeight >= 80) DrawDimension(dc, part, ox, oy, drawW, drawH);
+        foreach (var text in shape.Texts)
+            DrawTextEntity(dc, text, Map, scale);
+    }
+
+    private void DrawTextEntity(DrawingContext dc, DxfTextEntity entity, Func<double, double, Point> map, double scale)
+    {
+        string content = FormatText(entity.Content);
+        if (string.IsNullOrWhiteSpace(content)) return;
+
+        double fontSize = Math.Clamp(Math.Abs(entity.Height * scale), 5, 48);
+        var formatted = new FormattedText(content, System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight, new Typeface("Segoe UI"), fontSize,
+            ThemePalette.Brush("TextPrimaryBrush", Color.FromRgb(37, 52, 69)),
+            VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        if (entity.Type == "MTEXT" && entity.Width > 0)
+            formatted.MaxTextWidth = Math.Max(fontSize, entity.Width * scale);
+
+        Point anchor = map(entity.AnchorX, entity.AnchorY);
+        double x = anchor.X;
+        double y = anchor.Y - formatted.Baseline;
+        if (entity.Type == "MTEXT")
+        {
+            int attachment = Math.Clamp(entity.Attachment, 1, 9) - 1;
+            int column = attachment % 3;
+            int row = attachment / 3;
+            x -= column switch { 1 => formatted.Width / 2, 2 => formatted.Width, _ => 0 };
+            y = anchor.Y - (row switch
+            {
+                0 => formatted.Height,
+                1 => formatted.Height / 2,
+                _ => 0
+            });
+        }
+        else
+        {
+            x -= entity.HorizontalAlignment switch
+            {
+                1 or 3 or 4 => formatted.Width / 2,
+                2 => formatted.Width,
+                _ => 0
+            };
+            y = entity.VerticalAlignment switch
+            {
+                1 => anchor.Y - formatted.Height,
+                2 => anchor.Y - formatted.Height / 2,
+                3 => anchor.Y,
+                _ => anchor.Y - formatted.Baseline
+            };
+        }
+
+        dc.PushTransform(new RotateTransform(-entity.Rotation, anchor.X, anchor.Y));
+        dc.DrawText(formatted, new Point(x, y));
+        dc.Pop();
+    }
+
+    private static string FormatText(string content)
+    {
+        string text = Regex.Replace(content, @"\\U\+([0-9A-Fa-f]{4,8})", match =>
+        {
+            if (!int.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.HexNumber,
+                    System.Globalization.CultureInfo.InvariantCulture, out int codePoint) ||
+                !Rune.IsValid(codePoint))
+                return "";
+            return char.ConvertFromUtf32(codePoint);
+        });
+        text = text.Replace("\\P", "\n", StringComparison.Ordinal)
+            .Replace("\\~", " ", StringComparison.Ordinal)
+            .Replace("\\{", "{", StringComparison.Ordinal)
+            .Replace("\\}", "}", StringComparison.Ordinal)
+            .Replace("\\\\", "\\", StringComparison.Ordinal);
+        text = Regex.Replace(text, @"\\S([^;]*);", "$1");
+        text = Regex.Replace(text, @"\\[fFhHwWtTqQcCaA][^;]*;", "");
+        text = Regex.Replace(text, @"\\[LlOoKk]", "");
+        return text.Replace("{", "", StringComparison.Ordinal).Replace("}", "", StringComparison.Ordinal);
     }
 
     private void DrawDimension(DrawingContext dc, PartItem part, double x, double y, double w, double h)

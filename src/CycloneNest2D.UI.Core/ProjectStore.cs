@@ -9,7 +9,7 @@ public static class ProjectStore
     public const string Extension = ".nest2d";
     public const string ProjectKind = "CycloneNest2D.Project";
     public const string GroupKind = "CycloneNest2D.Group";
-    public const int CurrentFormatVersion = 2;
+    public const int CurrentFormatVersion = 3;
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
     public sealed class PartDto
@@ -25,6 +25,9 @@ public static class ProjectStore
         public double Height { get; set; }
         public string? Path { get; set; }
         public List<string>? Layers { get; set; }
+        public string? TemplateShape { get; set; }
+        public int TemplateSides { get; set; }
+        public double TemplateSize { get; set; }
     }
 
     public sealed class GroupReferenceDto
@@ -124,8 +127,22 @@ public static class ProjectStore
                 Quantity = part.Quantity, CanRotate = part.CanRotate, Flip = part.Flip,
                 Thickness = part.Thickness
             };
-            if (part.Kind == PartKind.Rect) { item.Width = part.Width; item.Height = part.Height; }
-            else { item.Path = Path.GetRelativePath(dir, part.SourcePath); item.Layers = part.CheckedLayerNames.ToList(); }
+            if (part.Kind is PartKind.Rect or PartKind.Template)
+            {
+                item.Width = part.Width;
+                item.Height = part.Height;
+                if (part.Kind == PartKind.Template)
+                {
+                    item.TemplateShape = part.TemplateShape?.ToString();
+                    item.TemplateSides = part.TemplateSides;
+                    item.TemplateSize = part.TemplateSize;
+                }
+            }
+            else
+            {
+                item.Path = Path.GetRelativePath(dir, part.SourcePath);
+                item.Layers = part.CheckedLayerNames.ToList();
+            }
             dto.Parts.Add(item);
         }
 
@@ -183,6 +200,18 @@ public static class ProjectStore
                 rect.Flip = part.Flip;
                 rect.RestoreMaterialThickness(part.Material, part.Thickness);
                 items.Add(rect);
+                continue;
+            }
+            if (part.Kind == nameof(PartKind.Template))
+            {
+                if (!Enum.TryParse<StandardPartShape>(part.TemplateShape, out var shape) || !Enum.IsDefined(shape))
+                    throw new InvalidDataException($"Loại hình mẫu '{part.TemplateShape}' không hợp lệ.");
+                double size = part.TemplateSize > 0 ? part.TemplateSize : part.Width;
+                double height = shape is StandardPartShape.Circle or StandardPartShape.Polygon ? size : part.Height;
+                var template = PartItem.NewTemplate(part.Name, shape, size, height, part.TemplateSides, part.Quantity, part.CanRotate);
+                template.Flip = part.Flip;
+                template.RestoreMaterialThickness(part.Material, part.Thickness);
+                items.Add(template);
                 continue;
             }
 

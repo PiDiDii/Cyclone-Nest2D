@@ -9,8 +9,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>CycloneNest2D</AssemblyName>
     <Product>Cyclone Nest2D</Product>
-    <Version>1.0.5</Version>
-    <AssemblyInformationalVersion>1.0.5 - Cập nhật 30/10/2026</AssemblyInformationalVersion>
+    <Version>1.0.10</Version>
+    <AssemblyInformationalVersion>1.0.10 - Cập nhật 30/10/2026</AssemblyInformationalVersion>
     <Authors>Phạm Đức Duy</Authors>
     <RootNamespace>CycloneNest2D.Desktop</RootNamespace>
   </PropertyGroup>

@@ -507,8 +507,10 @@ public static class ShapeOps
         other.ContainsMaterial(x - ox, y - oy);
 
     public static bool ContainsInnerContour(DxfShape shape, double x, double y)
+        => ContainsInnerContour(Build(shape), x, y);
+
+    public static bool ContainsInnerContour(LoopSet loops, double x, double y)
     {
-        var loops = Build(shape);
         if (loops.Loops.Count < 2) return false;
         var areas = loops.Loops.Select(loop =>
         {

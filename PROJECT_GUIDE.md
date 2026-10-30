@@ -1,10 +1,10 @@
-# Nesting2D — hướng dẫn kiến trúc và luồng hoạt động
+# Cyclone Nest2D — hướng dẫn kiến trúc và luồng hoạt động
 
 > Tài liệu dành cho lập trình viên mới và AI coding agent tiếp nhận dự án. Hãy đọc tài liệu này cùng `README.md`; README ưu tiên hướng dẫn người dùng, tài liệu này giải thích cấu trúc và luồng nội bộ.
 
 ## 1. Mục tiêu và phạm vi
 
-Nesting2D là ứng dụng desktop Windows dùng WPF để đọc hình học chi tiết từ DXF ASCII, chuẩn hóa về mm, tìm cách bố trí các chi tiết trên các khổ tấm, cho phép điều chỉnh thủ công, kiểm tra độc lập kết quả và xuất DXF/PDF/báo cáo. Thuật toán lõi và UI Core nhắm `.NET 8`; Desktop nhắm `net8.0-windows` và phụ thuộc WPF.
+Cyclone Nest2D là ứng dụng desktop Windows dùng WPF để đọc hình học chi tiết từ DXF ASCII, chuẩn hóa về mm, tìm cách bố trí các chi tiết trên các khổ tấm, cho phép điều chỉnh thủ công, kiểm tra độc lập kết quả và xuất DXF/PDF/báo cáo. Thuật toán lõi và UI Core nhắm `.NET 8`; Desktop nhắm `net8.0-windows` và phụ thuộc WPF.
 
 Điểm quan trọng về miền nghiệp vụ: với chi tiết DXF, hệ thống phải dùng contour thật. Nếu contour ngoài không thể xác minh thì phải báo lỗi và từ chối nesting; không được lặng lẽ thay bằng hình chữ nhật hộp bao. Hộp bao được dùng cho kích thước, vùng lọc, giới hạn tìm kiếm và hiển thị, không thay thế phép xác minh hình học.
 
@@ -12,12 +12,12 @@ Nesting2D là ứng dụng desktop Windows dùng WPF để đọc hình học ch
 
 | Đường dẫn | Trách nhiệm |
 |---|---|
-| `src/Nesting2D.Core/` | Miền hình học, đọc DXF, thuật toán nesting, validator và xuất DXF. Không phụ thuộc WPF. |
-| `src/Nesting2D.UI.Core/` | ViewModel/MVVM, quy tắc ứng dụng, quản lý Part, chạy nesting nền, preview scene, cấu hình, lưu/mở dự án, điều phối xuất. Nhắm `net8.0`, có thể kiểm thử ngoài Windows. |
-| `src/Nesting2D.Desktop/` | Ứng dụng WPF Windows: XAML, cửa sổ, canvas/vẽ, tương tác chuột/bàn phím, hộp thoại, PDF. Nên giữ lớp này chủ yếu là UI và adapter. |
-| `tests/Nesting2D.Tests/` | Console test harness không cần framework/NuGet bổ sung, kiểm tra lõi DXF/hình học/nesting/xuất. |
-| `tests/Nesting2D.UI.Tests/` | Console test harness cho UI Core và một số kiểm tra tĩnh XAML/luồng UI. Không phải kiểm thử tương tác WPF thực. |
-| `Nesting2D.sln` | Solution Visual Studio. |
+| `src/CycloneNest2D.Core/` | Miền hình học, đọc DXF, thuật toán nesting, validator và xuất DXF. Không phụ thuộc WPF. |
+| `src/CycloneNest2D.UI.Core/` | ViewModel/MVVM, quy tắc ứng dụng, quản lý Part, chạy nesting nền, preview scene, cấu hình, lưu/mở dự án, điều phối xuất. Nhắm `net8.0`, có thể kiểm thử ngoài Windows. |
+| `src/CycloneNest2D.Desktop/` | Ứng dụng WPF Windows: XAML, cửa sổ, canvas/vẽ, tương tác chuột/bàn phím, hộp thoại, PDF. Nên giữ lớp này chủ yếu là UI và adapter. |
+| `tests/CycloneNest2D.Tests/` | Console test harness không cần framework/NuGet bổ sung, kiểm tra lõi DXF/hình học/nesting/xuất. |
+| `tests/CycloneNest2D.UI.Tests/` | Console test harness cho UI Core và một số kiểm tra tĩnh XAML/luồng UI. Không phải kiểm thử tương tác WPF thực. |
+| `CycloneNest2D.sln` | Solution Visual Studio. |
 
 ### Các tệp Core quan trọng
 
@@ -52,9 +52,9 @@ Nesting2D là ứng dụng desktop Windows dùng WPF để đọc hình học ch
 ## 3. Luồng khởi động và phụ thuộc
 
 ```text
-Nesting2D.Desktop (WPF) ──> Nesting2D.UI.Core ──> Nesting2D.Core
-Nesting2D.Tests ─────────────────────────────> Nesting2D.Core
-Nesting2D.UI.Tests ──────────────────────────> Nesting2D.UI.Core ──> Nesting2D.Core
+CycloneNest2D.Desktop (WPF) ──> CycloneNest2D.UI.Core ──> CycloneNest2D.Core
+CycloneNest2D.Tests ─────────────────────────────> CycloneNest2D.Core
+CycloneNest2D.UI.Tests ──────────────────────────> CycloneNest2D.UI.Core ──> CycloneNest2D.Core
 ```
 
 Desktop tạo `MainViewModel` cùng dịch vụ hộp thoại WPF (`WpfDialogService`) và gắn binding/view. UI Core tránh phụ thuộc WPF để logic có thể chạy và test trên hệ điều hành khác.
@@ -108,6 +108,8 @@ Lưu ý: dữ liệu dự án hiện lưu danh sách preset nhưng không có t�
 
 `NestResult` mang sheet, placement, utilization, ghi chú, chiến lược và danh sách chưa đặt. Utilization dùng diện tích vật liệu thật (không tính lỗ), theo mô tả trong README. Khi có lỗ/contour lõm, hộp bao không thể dùng để kết luận va chạm.
 
+Core xác thực kích thước tấm và bước xoay (5–180°) ngay cả khi được gọi ngoài UI. Một lần chạy bị giới hạn tối đa 250.000 instance; lưới raster tối đa 8192 ô mỗi chiều và 16.777.216 ô tổng. Đầu vào vượt giới hạn bị từ chối với thông báo thay vì tạo danh sách/cấp phát lưới không kiểm soát. Các vòng lặp raster kiểm tra cancellation định kỳ; hủy được thể hiện riêng với hết thời gian và các chi tiết chưa xử lý vẫn được báo rõ.
+
 ### 4.5 Kiểm tra kết quả và hiển thị
 
 Sau mỗi run trong UI, `NestingService.RunAsync` chạy `NestEngine.Run` trên thread nền và thực hiện `Validator.Check`. Kết quả được đưa vào ViewModel, sau đó ViewModel cập nhật các `SheetItem`, sheet đang chọn, summary và preview `Scene`. Khi dữ liệu đầu vào thay đổi, kết quả đánh dấu `IsStale`; người dùng cần chạy lại trước khi coi đó là kết quả đồng bộ.
@@ -142,18 +144,18 @@ Bất biến: đơn vị hình học vào Core là mm; placement phải nằm tr
 
 ## 6. Cách chạy và kiểm tra
 
-Cần .NET 8 SDK. Trên Windows có thể mở `Nesting2D.sln`, hoặc chạy ứng dụng desktop:
+Cần .NET 8 SDK. Trên Windows có thể mở `CycloneNest2D.sln`, hoặc chạy ứng dụng desktop:
 
 ```powershell
-dotnet run --project src/Nesting2D.Desktop -c Release
+dotnet run --project src/CycloneNest2D.Desktop -c Release
 ```
 
 Build solution và chạy console harness khi task cho phép:
 
 ```powershell
-dotnet build Nesting2D.sln -c Release
-dotnet run --project tests/Nesting2D.Tests -c Release
-dotnet run --project tests/Nesting2D.UI.Tests -c Release
+dotnet build CycloneNest2D.sln -c Release
+dotnet run --project tests/CycloneNest2D.Tests -c Release
+dotnet run --project tests/CycloneNest2D.UI.Tests -c Release
 ```
 
 Desktop chỉ chạy trên Windows. Có thể cross-target build từ Linux/macOS nếu SDK được cấu hình Windows targeting; build cross-target không thay thế kiểm thử UI trên Windows.
@@ -187,7 +189,7 @@ Desktop chỉ chạy trên Windows. Có thể cross-target build từ Linux/macO
 
 - Đã kiểm kê mã nguồn, solution, README, project files, thuật toán Core, luồng ViewModel/service/persistence và một phần nội dung tests.
 - ZIP ban đầu chứa artefact Visual Studio và build: khoảng 5.6 MiB tổng; trong đó `bin` khoảng 3.31 MiB, `obj` 1.06 MiB, `.vs` 0.68 MiB. Chúng không phải source và đã được loại khỏi bản làm việc/tài liệu giao.
-- Trong phiên cập nhật thao tác thủ công, đã chạy `dotnet run --project tests/Nesting2D.Tests/Nesting2D.Tests.csproj`: 35 đạt, 0 lỗi; và `dotnet run --project tests/Nesting2D.UI.Tests/Nesting2D.UI.Tests.csproj`: 36 đạt, 0 lỗi (bao gồm regression số lượng còn lại, thêm sheet, di chuyển/xóa selection và xóa toàn bộ nest). Lượt gọi đầu dùng `--no-restore` thất bại vì không có assets; sau đó chạy lại có NuGet restore và thành công.
+- Trong phiên cập nhật thao tác thủ công, đã chạy `dotnet run --project tests/CycloneNest2D.Tests/CycloneNest2D.Tests.csproj`: 35 đạt, 0 lỗi; và `dotnet run --project tests/CycloneNest2D.UI.Tests/CycloneNest2D.UI.Tests.csproj`: 36 đạt, 0 lỗi (bao gồm regression số lượng còn lại, thêm sheet, di chuyển/xóa selection và xóa toàn bộ nest). Lượt gọi đầu dùng `--no-restore` thất bại vì không có assets; sau đó chạy lại có NuGet restore và thành công.
 - UI test harness có kiểm tra tĩnh XAML/binding/handler và cho biết không thể biên dịch WPF trên Linux. Vì vậy phần code-behind WPF và tương tác thực tế chưa được xác minh bằng build/chạy Windows.
 - Chưa xác nhận giao diện tương tác trên Windows thật và chưa mở DXF xuất trong CAD mục tiêu.
 

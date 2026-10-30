@@ -1,0 +1,78 @@
+<Window x:Class="CycloneNest2D.Desktop.ConfirmationDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Xác nhận"
+        Width="480"
+        SizeToContent="Height"
+        MinHeight="220"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False">
+    <Border Background="{DynamicResource CardBgBrush}"
+            BorderBrush="{DynamicResource AppBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="14"
+            Padding="22">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="5" Opacity="0.24" Color="#10243F"/>
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                <Border Width="38" Height="38" CornerRadius="12"
+                        Background="{DynamicResource WarningBadgeBgBrush}"
+                        BorderBrush="{DynamicResource WarningBadgeBorderBrush}"
+                        BorderThickness="1">
+                    <Path Data="M12,4 L21,20 H3 Z M12,10 V14 M12,17 V17.5"
+                          Width="18" Height="18" Stretch="Uniform"
+                          Stroke="{DynamicResource WarningBadgeTextBrush}"
+                          StrokeThickness="1.8"
+                          StrokeLineJoin="Round"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel VerticalAlignment="Center" Margin="12,0,0,0">
+                    <TextBlock Text="CYCLONE NEST2D"
+                               FontSize="10"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource PrimaryBrush}"/>
+                    <TextBlock x:Name="DialogTitle"
+                               Text="Xác nhận"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                </StackPanel>
+            </StackPanel>
+            <TextBlock x:Name="DialogMessage"
+                       Grid.Row="1"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
+                       FontSize="13.5"
+                       LineHeight="20"
+                       Margin="50,0,4,22"/>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Hủy"
+                        IsCancel="True"
+                        MinWidth="84"
+                        Margin="0,0,8,0"
+                        Padding="14,8"/>
+                <Button x:Name="ConfirmButton"
+                        Content="Xác nhận"
+                        IsDefault="True"
+                        MinWidth="100"
+                        Padding="14,8"
+                        Background="{DynamicResource PrimaryBrush}"
+                        BorderBrush="{DynamicResource PrimaryBrush}"
+                        Foreground="{DynamicResource OnPrimaryBrush}"
+                        Click="ConfirmButton_Click"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

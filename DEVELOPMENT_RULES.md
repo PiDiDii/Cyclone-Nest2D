@@ -1,4 +1,4 @@
-# Quy tắc phát triển chuẩn — Nesting2D
+# Quy tắc phát triển chuẩn — Cyclone Nest2D
 
 **Mục đích:** Đây là tài liệu quy tắc làm việc có tính chuẩn tắc cho nhà phát triển và AI agent. Đọc tài liệu này trước khi lập kế hoạch hoặc sửa mã. Khi mô tả kiến trúc chi tiết, tham chiếu thêm [`PROJECT_GUIDE.md`](PROJECT_GUIDE.md); khi mô tả cách dùng, tham chiếu [`README.md`](README.md).
 
@@ -6,8 +6,8 @@ Các từ **PHẢI**, **KHÔNG ĐƯỢC**, **NÊN** và **CÓ THỂ** mang nghĩ
 
 ## 1. Phạm vi sản phẩm
 
-1. Nesting2D là **ứng dụng desktop WPF cho Windows**. Không tạo lại CLI, project dòng lệnh, parser đối số, luồng nhập CSV cho CLI, ví dụ lệnh CLI hoặc tài liệu hướng dẫn CLI.
-2. Không thêm lại thư mục/project `src/Nesting2D.Cli`, tham chiếu CLI vào `Nesting2D.sln`, hoặc sample/data chỉ tồn tại để phục vụ CLI, trừ khi chủ dự án yêu cầu rõ ràng thay đổi quyết định này.
+1. Cyclone Nest2D là **ứng dụng desktop WPF cho Windows**. Không tạo lại CLI, project dòng lệnh, parser đối số, luồng nhập CSV cho CLI, ví dụ lệnh CLI hoặc tài liệu hướng dẫn CLI.
+2. Không thêm lại thư mục/project `src/CycloneNest2D.Cli`, tham chiếu CLI vào `CycloneNest2D.sln`, hoặc sample/data chỉ tồn tại để phục vụ CLI, trừ khi chủ dự án yêu cầu rõ ràng thay đổi quyết định này.
 3. Giao diện desktop và các luồng DXF, `.nest2d`, nesting, chỉnh tay, DXF/PDF là các trải nghiệm sản phẩm được duy trì.
 4. Không suy diễn rằng “bỏ CLI” đồng nghĩa bỏ Core, DXF reader, export hoặc UI Core. Các thành phần này vẫn cần cho Desktop.
 
@@ -16,14 +16,14 @@ Các từ **PHẢI**, **KHÔNG ĐƯỢC**, **NÊN** và **CÓ THỂ** mang nghĩ
 Phụ thuộc hợp lệ:
 
 ```text
-Nesting2D.Desktop → Nesting2D.UI.Core → Nesting2D.Core
-tests/Nesting2D.UI.Tests → Nesting2D.UI.Core → Nesting2D.Core
-tests/Nesting2D.Tests → Nesting2D.Core
+CycloneNest2D.Desktop → CycloneNest2D.UI.Core → CycloneNest2D.Core
+tests/CycloneNest2D.UI.Tests → CycloneNest2D.UI.Core → CycloneNest2D.Core
+tests/CycloneNest2D.Tests → CycloneNest2D.Core
 ```
 
-- `Nesting2D.Core` là lõi miền độc lập UI: geometry, DXF, nesting, validation, export.
-- `Nesting2D.UI.Core` nắm use-case, ViewModel, settings, persistence và preview logic; không tham chiếu WPF/Desktop.
-- `Nesting2D.Desktop` nắm XAML, render, input, dialog, lifecycle và adapter hệ điều hành; không đặt thuật toán miền lớn trong code-behind nếu có thể đặt ở Core/UI Core.
+- `CycloneNest2D.Core` là lõi miền độc lập UI: geometry, DXF, nesting, validation, export.
+- `CycloneNest2D.UI.Core` nắm use-case, ViewModel, settings, persistence và preview logic; không tham chiếu WPF/Desktop.
+- `CycloneNest2D.Desktop` nắm XAML, render, input, dialog, lifecycle và adapter hệ điều hành; không đặt thuật toán miền lớn trong code-behind nếu có thể đặt ở Core/UI Core.
 - Không tạo phụ thuộc vòng. Không để Core tham chiếu UI Core hoặc Desktop.
 - Khi thay đổi ranh giới, cập nhật sơ đồ trong tài liệu kiến trúc và kiểm tra toàn bộ project references.
 
@@ -84,7 +84,7 @@ tests/Nesting2D.Tests → Nesting2D.Core
 - Các test hình học cần kiểm tra tọa độ/kích thước/khoảng cách cụ thể; test UI Core cần kiểm tra cả state trước/sau và cancellation/error path khi phù hợp.
 - Kiểm thử export bằng round-trip parser là hữu ích nhưng **không chứng minh** tương thích với AutoCAD/ZWCAD/Inventor. Ghi rõ cấp độ kiểm chứng.
 - Khi task yêu cầu không chạy test, **KHÔNG ĐƯỢC chạy test**. Có thể kiểm tra tĩnh như `grep`, tham chiếu project, parse XML/solution, diff và cấu trúc file; phải nói rõ test chưa chạy.
-- Khi được phép chạy, hiện tại test projects là console harness; chạy bằng `dotnet run --project tests/Nesting2D.Tests` và `dotnet run --project tests/Nesting2D.UI.Tests`. `dotnet test` chưa phải cổng đảm bảo test pass cho harness này.
+- Khi được phép chạy, hiện tại test projects là console harness; chạy bằng `dotnet run --project tests/CycloneNest2D.Tests` và `dotnet run --project tests/CycloneNest2D.UI.Tests`. `dotnet test` chưa phải cổng đảm bảo test pass cho harness này.
 - Build Desktop cần Windows target/WPF; xác minh tương tác thực tế trên Windows khi thay đổi XAML, resource, input hoặc layout có ảnh hưởng trực quan.
 - Nếu môi trường thiếu SDK/runtime, không giả lập kết quả. Báo cụ thể lệnh không chạy và lý do.
 

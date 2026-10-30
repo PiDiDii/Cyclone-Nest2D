@@ -31,6 +31,13 @@ public sealed class PartPreviewView : FrameworkElement
         InvalidateVisual();
     }
 
+    public void ZoomBy(double factor)
+    {
+        if (!double.IsFinite(factor) || factor <= 0) return;
+        _zoom = Math.Clamp(_zoom * factor, 0.12, 24);
+        InvalidateVisual();
+    }
+
     protected override void OnMouseWheel(System.Windows.Input.MouseWheelEventArgs e)
     {
         base.OnMouseWheel(e);

@@ -172,7 +172,7 @@ public sealed class PartItem : ObservableObject
         _width = p.Width;
         _height = p.Height;
         Error = null;
-        Info = $"{p.Width:0.##} x {p.Height:0.##} mm · {p.UnitSource}";
+        Info = $"{p.Width:0.##} x {p.Height:0.##} mm";
         OnPropertyChanged(nameof(Width));
         OnPropertyChanged(nameof(Height));
         OnPropertyChanged(nameof(Warnings));

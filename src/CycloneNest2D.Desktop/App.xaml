@@ -61,6 +61,9 @@
             <Geometry x:Key="IcSun">M12,8 A4,4 0 1 1 12,16 A4,4 0 1 1 12,8 Z M12,2 V4 M12,20 V22 M2,12 H4 M20,12 H22 M4.9,4.9 L6.3,6.3 M17.7,17.7 L19.1,19.1 M4.9,19.1 L6.3,17.7 M17.7,6.3 L19.1,4.9</Geometry>
             <Geometry x:Key="IcMoon">M20,14.5 A8.5,8.5 0 1 1 9.5,4 A6.5,6.5 0 0 0 20,14.5 Z</Geometry>
             <Geometry x:Key="IcSave">M5,4 H16 L20,8 V20 H5 Z M8,4 V9 H15 V4 M8,20 V14 H16 V20</Geometry>
+            <Geometry x:Key="IcNewProject">M6,3 H14 L19,8 V13 M14,3 V8 H19 M12,14 V22 M8,18 H16</Geometry>
+            <Geometry x:Key="IcOpenProject">M3,7 H9 L11,9 H21 V20 H3 Z M3,10 H21</Geometry>
+            <Geometry x:Key="IcEye">M2.5,12 C5,7.5 8,5.5 12,5.5 C16,5.5 19,7.5 21.5,12 C19,16.5 16,18.5 12,18.5 C8,18.5 5,16.5 2.5,12 Z M9,12 A3,3 0 1 0 15,12 A3,3 0 1 0 9,12</Geometry>
             <Geometry x:Key="IcHelp">M12,3 A9,9 0 1 1 12,21 A9,9 0 1 1 12,3 Z M9.5,9.5 A2.5,2.5 0 1 1 12,12 V13.5 M12,17 V17.2</Geometry>
             <Geometry x:Key="IcStop">M6,6 H18 V18 H6 Z</Geometry>
             <Geometry x:Key="IcTrash">M4,7 H20 M9,7 V4 H15 V7 M6,7 L7,20 H17 L18,7 M10,11 V16 M14,11 V16</Geometry>

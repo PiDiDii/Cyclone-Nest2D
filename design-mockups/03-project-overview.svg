@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" fill="#17283d">
+  <defs><style>
+    text{font-family:"Segoe UI",Arial,sans-serif}.muted{fill:#708096}.tiny{font-size:11px}.small{font-size:12px}.body{font-size:14px}.title{font-size:24px;font-weight:700}.label{font-size:11px;font-weight:700;letter-spacing:.45px}.line{stroke:#e5ebf0;stroke-width:1}.card{fill:#fff;stroke:#e1e7ee;stroke-width:1}
+  </style></defs>
+  <rect width="1440" height="900" fill="#f3f6f9"/>
+  <rect width="1440" height="64" fill="#fff"/><path d="M0 63.5h1440" class="line"/>
+  <rect x="22" y="15" width="34" height="34" rx="10" fill="#0c8b87"/><path d="M30 25h18v14H30zM34 21v5m10-5v5M34 39v5m10-5v5" fill="none" stroke="#fff" stroke-width="2"/>
+  <text x="68" y="31" font-size="16" font-weight="800" letter-spacing=".8">CYCLONE</text><text x="68" y="45" font-size="10" fill="#708096" letter-spacing="1.7">NESTING STUDIO</text>
+  <path d="M208 16v32" class="line"/><text x="230" y="29" class="small muted">DỰ ÁN</text><text x="230" y="46" class="body" font-weight="650">Nhà xưởng A  /  Cụm vỏ máy</text>
+  <rect x="1147" y="15" width="104" height="34" rx="8" fill="#fff" stroke="#d7e0e8"/><text x="1199" y="37" text-anchor="middle" class="small" font-weight="600">Mở dự án</text>
+  <rect x="1262" y="15" width="150" height="34" rx="8" fill="#087f7b"/><text x="1337" y="37" text-anchor="middle" font-size="13" fill="#fff" font-weight="700">Lưu dự án</text>
+
+  <rect y="64" width="78" height="836" fill="#fff"/><path d="M77.5 64v836" class="line"/>
+  <g font-size="10" text-anchor="middle">
+    <path d="M29 111h20v17H29zM34 106v7m10-7v7" fill="none" stroke="#8190a2" stroke-width="1.6"/><text x="39" y="143" fill="#708096">Nesting</text>
+    <path d="M29 176h20v18H29zm4 5h12m-12 5h12m-12 5h7" fill="none" stroke="#8190a2" stroke-width="1.5"/><text x="39" y="207" fill="#708096">Chi tiết</text>
+    <path d="M29 238h20v19H29zm4 4h12m-12 4h12m-12 4h8" fill="none" stroke="#8190a2" stroke-width="1.5"/><text x="39" y="270" fill="#708096">Vật liệu</text>
+    <rect x="10" y="286" width="58" height="58" rx="11" fill="#e5f4f3"/><path d="M29 302h20v16H29zm4-5v6m12-6v6M33 323v5m12-5v5" fill="none" stroke="#087f7b" stroke-width="1.5"/><text x="39" y="339" fill="#087f7b" font-weight="700">Dự án</text>
+    <path d="M30 824h18m-9-9v18" stroke="#8190a2" stroke-width="1.5"/><text x="39" y="849" fill="#708096">Thiết lập</text>
+  </g>
+  <text x="106" y="105" class="title">Tổng quan dự án</text>
+  <text x="106" y="129" class="small muted">Theo dõi tiến độ và chuyển nhanh giữa các nhóm vật liệu</text>
+
+  <!-- Project hero -->
+  <rect x="106" y="153" width="1306" height="165" rx="14" fill="#17344a"/>
+  <circle cx="1310" cy="182" r="94" fill="#1e4656" opacity=".8"/><circle cx="1310" cy="182" r="61" fill="#205566" opacity=".55"/>
+  <rect x="132" y="178" width="39" height="39" rx="11" fill="#2b7778"/>
+  <path d="M141 189h21v16h-21zm5-5v6m11-6v6" fill="none" stroke="#dff5f1" stroke-width="1.6"/>
+  <text x="186" y="188" font-size="22" fill="#fff" font-weight="700">Cụm vỏ máy · Nhà xưởng A</text>
+  <text x="132" y="238" font-size="13" fill="#c6d6df">Mã dự án  <tspan fill="#fff" font-weight="600">NX-A-2026</tspan></text>
+  <text x="310" y="238" font-size="13" fill="#c6d6df">Cập nhật lần cuối  <tspan fill="#fff" font-weight="600">Hôm nay, 09:42</tspan></text>
+  <rect x="132" y="259" width="118" height="34" rx="8" fill="#28536a"/><circle cx="149" cy="276" r="4" fill="#54d39a"/><text x="162" y="280" font-size="12" fill="#e7f2f4" font-weight="600">Đang sản xuất</text>
+  <rect x="1076" y="259" width="145" height="34" rx="8" fill="none" stroke="#7d9ba9"/><text x="1148" y="280" text-anchor="middle" font-size="12" fill="#fff" font-weight="600">Đổi tên dự án</text>
+  <rect x="1232" y="259" width="153" height="34" rx="8" fill="#f7fbfc"/><text x="1308" y="280" text-anchor="middle" font-size="12" fill="#17344a" font-weight="700">+  Thêm nhóm</text>
+
+  <!-- Summary and project phase -->
+  <rect x="106" y="337" width="300" height="108" rx="12" class="card"/>
+  <text x="128" y="365" class="tiny muted">NHÓM VẬT LIỆU</text><text x="128" y="407" font-size="28" font-weight="700">4</text><text x="162" y="407" class="body muted">nhóm đang quản lý</text>
+  <rect x="420" y="337" width="300" height="108" rx="12" class="card"/>
+  <text x="442" y="365" class="tiny muted">CHI TIẾT</text><text x="442" y="407" font-size="28" font-weight="700">186</text><text x="493" y="407" class="body muted">chi tiết cần gia công</text>
+  <rect x="734" y="337" width="300" height="108" rx="12" class="card"/>
+  <text x="756" y="365" class="tiny muted">TẤM ĐÃ TÍNH</text><text x="756" y="407" font-size="28" font-weight="700">12</text><text x="801" y="407" class="body muted">tấm nesting</text>
+  <rect x="1048" y="337" width="364" height="108" rx="12" class="card"/>
+  <text x="1070" y="365" class="tiny muted">HIỆU SUẤT TOÀN DỰ ÁN</text><text x="1070" y="407" font-size="28" font-weight="700" fill="#087f7b">84.2%</text>
+  <rect x="1198" y="395" width="190" height="8" rx="4" fill="#e8eef2"/><rect x="1198" y="395" width="160" height="8" rx="4" fill="#0c8b87"/>
+  <text x="1388" y="421" text-anchor="end" class="tiny muted">Tỷ lệ sử dụng vật liệu</text>
+
+  <text x="106" y="489" font-size="17" font-weight="700">Nhóm vật liệu</text>
+  <text x="106" y="510" class="small muted">Mỗi nhóm có danh sách chi tiết, khổ tấm và kết quả nesting riêng</text>
+  <rect x="1212" y="470" width="200" height="36" rx="8" fill="#fff" stroke="#dfe6ed"/>
+  <circle cx="1231" cy="487" r="5" fill="none" stroke="#8190a2" stroke-width="1.3"/><path d="m1235 491 4 4" stroke="#8190a2" stroke-width="1.3"/><text x="1247" y="491" class="small muted">Tìm nhóm...</text>
+
+  <!-- Group table -->
+  <rect x="106" y="530" width="1306" height="298" rx="12" class="card"/>
+  <rect x="107" y="531" width="1304" height="43" rx="11" fill="#f7f9fb"/>
+  <text x="132" y="558" class="label muted">NHÓM / VẬT LIỆU</text>
+  <text x="563" y="558" class="label muted">CHI TIẾT</text>
+  <text x="700" y="558" class="label muted">TẤM</text>
+  <text x="817" y="558" class="label muted">HIỆU SUẤT</text>
+  <text x="1049" y="558" class="label muted">TRẠNG THÁI</text>
+  <text x="1369" y="558" class="label muted" text-anchor="middle">TÁC VỤ</text>
+  <path d="M106 574h1306" class="line"/>
+  <!-- Row 1 -->
+  <rect x="128" y="590" width="36" height="36" rx="9" fill="#e4f4f2"/><path d="M137 600h18v16h-18zm3 4h12m-12 4h12" fill="none" stroke="#087f7b" stroke-width="1.3"/>
+  <text x="178" y="604" class="body" font-weight="700">SS400 · 2.0 mm</text><text x="178" y="622" class="tiny muted">Khổ tấm 1 500 × 3 000 mm</text>
+  <text x="563" y="612" class="body" font-weight="650">48</text><text x="700" y="612" class="body" font-weight="650">3</text>
+  <text x="817" y="604" class="small" font-weight="700" fill="#087f7b">86.4%</text><rect x="817" y="612" width="130" height="5" rx="3" fill="#e8eef2"/><rect x="817" y="612" width="112" height="5" rx="3" fill="#0c8b87"/>
+  <rect x="1049" y="595" width="111" height="26" rx="13" fill="#e7f6ec"/><circle cx="1063" cy="608" r="4" fill="#27a66a"/><text x="1075" y="612" class="tiny" fill="#26744f" font-weight="700">Đã nesting</text>
+  <rect x="1241" y="592" width="105" height="30" rx="7" fill="#fff" stroke="#dfe6ed"/><text x="1293" y="611" text-anchor="middle" class="small" font-weight="600">Mở nhóm</text>
+  <text x="1371" y="613" text-anchor="middle" class="body muted">···</text>
+  <path d="M128 638h1264" class="line"/>
+  <!-- Row 2 -->
+  <rect x="128" y="654" width="36" height="36" rx="9" fill="#eef1f8"/><path d="M137 664h18v16h-18zm3 4h12m-12 4h12" fill="none" stroke="#587086" stroke-width="1.3"/>
+  <text x="178" y="668" class="body" font-weight="700">SUS304 · 1.5 mm</text><text x="178" y="686" class="tiny muted">Khổ tấm 1 220 × 2 440 mm</text>
+  <text x="563" y="676" class="body" font-weight="650">72</text><text x="700" y="676" class="body" font-weight="650">5</text>
+  <text x="817" y="668" class="small" font-weight="700">81.7%</text><rect x="817" y="676" width="130" height="5" rx="3" fill="#e8eef2"/><rect x="817" y="676" width="106" height="5" rx="3" fill="#91a8b7"/>
+  <rect x="1049" y="659" width="111" height="26" rx="13" fill="#e7f6ec"/><circle cx="1063" cy="672" r="4" fill="#27a66a"/><text x="1075" y="676" class="tiny" fill="#26744f" font-weight="700">Đã nesting</text>
+  <rect x="1241" y="656" width="105" height="30" rx="7" fill="#fff" stroke="#dfe6ed"/><text x="1293" y="675" text-anchor="middle" class="small" font-weight="600">Mở nhóm</text><text x="1371" y="677" text-anchor="middle" class="body muted">···</text>
+  <path d="M128 702h1264" class="line"/>
+  <!-- Row 3 -->
+  <rect x="128" y="718" width="36" height="36" rx="9" fill="#fdf2df"/><path d="M137 728h18v16h-18zm3 4h12m-12 4h12" fill="none" stroke="#a7792d" stroke-width="1.3"/>
+  <text x="178" y="732" class="body" font-weight="700">Nhôm 5052 · 3.0 mm</text><text x="178" y="750" class="tiny muted">Khổ tấm 1 500 × 3 000 mm</text>
+  <text x="563" y="740" class="body" font-weight="650">38</text><text x="700" y="740" class="body" font-weight="650">—</text>
+  <text x="817" y="732" class="small muted">Chưa chạy</text><rect x="817" y="740" width="130" height="5" rx="3" fill="#e8eef2"/>
+  <rect x="1049" y="723" width="103" height="26" rx="13" fill="#fff4e2"/><circle cx="1063" cy="736" r="4" fill="#d79628"/><text x="1075" y="740" class="tiny" fill="#93631b" font-weight="700">Chờ nesting</text>
+  <rect x="1241" y="720" width="105" height="30" rx="7" fill="#fff" stroke="#dfe6ed"/><text x="1293" y="739" text-anchor="middle" class="small" font-weight="600">Mở nhóm</text><text x="1371" y="741" text-anchor="middle" class="body muted">···</text>
+  <rect x="106" y="852" width="1306" height="1" fill="#e1e7ee"/>
+  <circle cx="120" cy="876" r="4" fill="#25a56a"/><text x="132" y="880" class="tiny muted">4 nhóm · 186 chi tiết · Lưu tự động khi chuyển nhóm</text>
+  <text x="1396" y="880" text-anchor="end" class="tiny muted">Mockup đề xuất · Project Overview</text>
+</svg>

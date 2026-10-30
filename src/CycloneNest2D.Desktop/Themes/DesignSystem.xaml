@@ -2,19 +2,19 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
   <!-- ========== COLOR TOKENS (Light Theme) ========== -->
-  <Color x:Key="PrimaryColor">#087F8C</Color>
-  <Color x:Key="PrimaryDarkColor">#06616B</Color>
-  <Color x:Key="PrimaryLightColor">#20A7B3</Color>
+  <Color x:Key="PrimaryColor">#087F7B</Color>
+  <Color x:Key="PrimaryDarkColor">#066763</Color>
+  <Color x:Key="PrimaryLightColor">#20A39D</Color>
   <Color x:Key="AccentColor">#2563EB</Color>
-  <Color x:Key="BgColor">#F4F7FB</Color>
+  <Color x:Key="BgColor">#F3F6F9</Color>
   <Color x:Key="SurfaceColor">#FFFFFF</Color>
-  <Color x:Key="BorderColor">#D8E1EB</Color>
-  <Color x:Key="BorderHoverColor">#B8C6D6</Color>
-  <Color x:Key="TextPrimaryColor">#132238</Color>
-  <Color x:Key="TextSecondaryColor">#43566D</Color>
-  <Color x:Key="TextMutedColor">#596B80</Color>
+  <Color x:Key="BorderColor">#E1E7EE</Color>
+  <Color x:Key="BorderHoverColor">#C5D0DA</Color>
+  <Color x:Key="TextPrimaryColor">#17283D</Color>
+  <Color x:Key="TextSecondaryColor">#506278</Color>
+  <Color x:Key="TextMutedColor">#708096</Color>
   <Color x:Key="SidebarBgColor">#FFFFFF</Color>
-  <Color x:Key="SidebarActiveBgColor">#E4F4F5</Color>
+  <Color x:Key="SidebarActiveBgColor">#E5F4F3</Color>
   <Color x:Key="DangerColor">#C93232</Color>
   <Color x:Key="SuccessColor">#13875D</Color>
   <Color x:Key="WarningColor">#A56400</Color>
@@ -42,14 +42,14 @@
   <SolidColorBrush x:Key="IconStrokeBrush" Color="#465870"/>
   <SolidColorBrush x:Key="IconFillBrush" Color="#465870"/>
   <SolidColorBrush x:Key="CardBgBrush" Color="#FFFFFF"/>
-  <SolidColorBrush x:Key="CardBgAltBrush" Color="#F7F9FC"/>
-  <SolidColorBrush x:Key="CardBgHoverBrush" Color="#EEF3F8"/>
-  <SolidColorBrush x:Key="PartListBorderBrush" Color="#B7C4D2"/>
-  <SolidColorBrush x:Key="PartSelectionBgBrush" Color="#087F8C"/>
-  <SolidColorBrush x:Key="PartSelectionTextBrush" Color="#FFFFFF"/>
-  <SolidColorBrush x:Key="PartSelectionBorderBrush" Color="#06616B"/>
-  <SolidColorBrush x:Key="AccentTintBrush" Color="#D9F1F2"/>
-  <SolidColorBrush x:Key="AccentTintAltBrush" Color="#EDF8F8"/>
+  <SolidColorBrush x:Key="CardBgAltBrush" Color="#F7F9FB"/>
+  <SolidColorBrush x:Key="CardBgHoverBrush" Color="#EEF3F6"/>
+  <SolidColorBrush x:Key="PartListBorderBrush" Color="#E5EBF0"/>
+  <SolidColorBrush x:Key="PartSelectionBgBrush" Color="#E5F4F3"/>
+  <SolidColorBrush x:Key="PartSelectionTextBrush" Color="#17283D"/>
+  <SolidColorBrush x:Key="PartSelectionBorderBrush" Color="#087F7B"/>
+  <SolidColorBrush x:Key="AccentTintBrush" Color="#E3F5F3"/>
+  <SolidColorBrush x:Key="AccentTintAltBrush" Color="#F0F8F7"/>
   <SolidColorBrush x:Key="WindowBtnHoverBrush" Color="#EDF2F7"/>
   <SolidColorBrush x:Key="WindowBtnPressedBrush" Color="#DCE5EF"/>
   <SolidColorBrush x:Key="OverlayBgBrush" Color="#99101D2E"/>
@@ -104,12 +104,56 @@
               <Setter TargetName="Bd" Property="Opacity" Value="0.85"/>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+              <Setter TargetName="Bd" Property="Opacity" Value="0.65"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
+  </Style>
+  <Style x:Key="ModernTableHeader" TargetType="DataGridColumnHeader">
+    <Setter Property="HorizontalContentAlignment" Value="Left"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Background" Value="{DynamicResource CardBgAltBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+    <Setter Property="FontSize" Value="11.5"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+    <Setter Property="Padding" Value="12,11"/>
+  </Style>
+  <Style x:Key="ModernTableCell" TargetType="DataGridCell">
+    <Setter Property="HorizontalContentAlignment" Value="Left"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="10,4"/>
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    <Style.Triggers>
+      <Trigger Property="IsSelected" Value="True">
+        <Setter Property="Background" Value="{DynamicResource PartSelectionBgBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+  <Style x:Key="ModernTableRow" TargetType="DataGridRow">
+    <Setter Property="MinHeight" Value="42"/>
+    <Setter Property="Background" Value="{DynamicResource CardBgBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource PartListBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+    <Style.Triggers>
+      <Trigger Property="IsMouseOver" Value="True">
+        <Setter Property="Background" Value="{DynamicResource CardBgHoverBrush}"/>
+      </Trigger>
+      <Trigger Property="IsSelected" Value="True">
+        <Setter Property="Background" Value="{DynamicResource PartSelectionBgBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+  <Style x:Key="TableText" TargetType="TextBlock">
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
   </Style>
 
   <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource BaseButton}">
@@ -355,6 +399,11 @@
   <Style x:Key="CenteredEditor" TargetType="TextBox">
     <Setter Property="TextAlignment" Value="Center"/>
     <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+  </Style>
+  <Style x:Key="TableEditor" TargetType="TextBox">
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Padding" Value="10,4"/>
   </Style>
 
   <!-- Default button style override -->
@@ -364,12 +413,16 @@
   <!-- ===== Token bổ sung: thanh trên, thanh công cụ, canvas ===== -->
   <SolidColorBrush x:Key="TopBarBgBrush" Color="#FFFFFF"/>
   <SolidColorBrush x:Key="ToolbarBgBrush" Color="#FBFCFE"/>
-  <SolidColorBrush x:Key="CanvasBgBrush" Color="#EAF0F6"/>
+  <SolidColorBrush x:Key="CanvasBgBrush" Color="#F1F5F7"/>
   <SolidColorBrush x:Key="SheetFillBrush" Color="#FFFFFF"/>
   <SolidColorBrush x:Key="SheetBorderBrush" Color="#64748B"/>
   <SolidColorBrush x:Key="PartOutlineBrush" Color="#1E293B"/>
   <SolidColorBrush x:Key="CanvasTextBrush" Color="#334155"/>
   <SolidColorBrush x:Key="ThumbBgBrush" Color="#F4F7FA"/>
+  <SolidColorBrush x:Key="ProjectHeroBgBrush" Color="#17344A"/>
+  <SolidColorBrush x:Key="ProjectHeroTextBrush" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="ProjectHeroMutedBrush" Color="#C6D6DF"/>
+  <SolidColorBrush x:Key="ProjectHeroChipBrush" Color="#28536A"/>
 
 
   <!-- ===== Font chữ chung ===== -->
@@ -432,10 +485,10 @@
 
   <!-- ===== Sidebar dọc: icon trên, chữ dưới ===== -->
   <Style x:Key="RailNavButton" TargetType="RadioButton">
-    <Setter Property="Height" Value="74"/>
-    <Setter Property="Margin" Value="8,3"/>
+    <Setter Property="Height" Value="66"/>
+    <Setter Property="Margin" Value="6,3"/>
     <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
-    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="FontSize" Value="11.5"/>
     <Setter Property="FontWeight" Value="Medium"/>
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="Template">

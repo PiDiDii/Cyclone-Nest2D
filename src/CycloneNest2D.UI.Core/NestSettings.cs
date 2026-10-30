@@ -164,12 +164,11 @@ public sealed class NestSettings : ObservableObject
 
     public void SaveTo(string path)
     {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-            File.WriteAllText(path, ToJson());
-        }
-        catch { /* không lưu được cũng không sao */ }
+        string fullPath = Path.GetFullPath(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        string temporaryPath = fullPath + ".tmp";
+        File.WriteAllText(temporaryPath, ToJson());
+        File.Move(temporaryPath, fullPath, true);
     }
 
     public void LoadFrom(string path)

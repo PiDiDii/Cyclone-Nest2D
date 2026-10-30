@@ -8,15 +8,18 @@ public sealed record NestRun(NestResult Result, SheetDefinition Sheet, List<stri
 public static class NestingService
 {
     public static Task<NestRun> RunAsync(IReadOnlyList<PartDefinition> parts, NestSettings settings,
-                                         IProgress<string>? progress, CancellationToken cancel)
+                                         IProgress<string>? progress, CancellationToken cancel,
+                                         IProgress<double>? percentProgress = null)
     {
         var sheet = settings.ToSheet();
         var opt = settings.ToOptions(cancel, progress == null ? null : progress.Report);
+        opt.ReportProgress = percentProgress == null ? null : percentProgress.Report;
         return Task.Run(() =>
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var result = NestEngine.Run(parts, sheet, opt);
             var errors = Validator.Check(result, sheet);
+            percentProgress?.Report(1);
             return new NestRun(result, sheet, errors, cancel.IsCancellationRequested, sw.Elapsed);
         });
     }

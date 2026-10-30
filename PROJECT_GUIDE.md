@@ -17,6 +17,7 @@ Cyclone Nest2D là ứng dụng desktop Windows dùng WPF để đọc hình h�
 | `src/CycloneNest2D.Desktop/` | Ứng dụng WPF Windows: XAML, cửa sổ, canvas/vẽ, tương tác chuột/bàn phím, hộp thoại, PDF. Nên giữ lớp này chủ yếu là UI và adapter. |
 | `tests/CycloneNest2D.Tests/` | Console test harness không cần framework/NuGet bổ sung, kiểm tra lõi DXF/hình học/nesting/xuất. |
 | `tests/CycloneNest2D.UI.Tests/` | Console test harness cho UI Core và một số kiểm tra tĩnh XAML/luồng UI. Không phải kiểm thử tương tác WPF thực. |
+| `tests/CycloneNest2D.Performance/` | Benchmark console riêng cho throughput/chất lượng nesting; chạy workload tổng hợp hoặc DXF thật, xuất báo cáo JSON/CSV. |
 | `CycloneNest2D.sln` | Solution Visual Studio. |
 
 ### Các tệp Core quan trọng
@@ -156,9 +157,31 @@ Build solution và chạy console harness khi task cho phép:
 dotnet build CycloneNest2D.sln -c Release
 dotnet run --project tests/CycloneNest2D.Tests -c Release
 dotnet run --project tests/CycloneNest2D.UI.Tests -c Release
+dotnet run --project tests/CycloneNest2D.Performance -c Release -- --quick
 ```
 
 Desktop chỉ chạy trên Windows. Có thể cross-target build từ Linux/macOS nếu SDK được cấu hình Windows targeting; build cross-target không thay thế kiểm thử UI trên Windows.
+
+### Đánh giá hiệu năng nesting
+
+Benchmark chạy tuần tự, warm-up từng workload/profile, tách thời gian `NestEngine` khỏi `Validator`, và ghi throughput, p95, CPU, bytes cấp phát, GC, số tấm, hiệu suất vật liệu, tỷ lệ đặt đủ, lỗi validator và dấu vân tay kết quả. Bốn profile tạo ma trận để phân biệt ảnh hưởng bước xoay với chính sách dừng sớm:
+
+- `Balanced-90` / `Balanced-45`: cùng mục tiêu dừng 85%, chỉ khác bước xoay 90° / 45°.
+- `Exhaustive-90` / `Exhaustive-45`: cùng tắt mục tiêu dừng sớm, chỉ khác bước xoay.
+
+Chạy bộ đầy đủ và lưu báo cáo:
+
+```powershell
+dotnet run --project tests\CycloneNest2D.Performance -c Release -- --full --output artifacts\nesting-baseline
+```
+
+Đo bằng dữ liệu DXF thật (một file hoặc quét đệ quy thư mục), chỉnh khổ/lề/khe theo đơn hàng:
+
+```powershell
+dotnet run --project tests\CycloneNest2D.Performance -c Release -- --full --dxf "D:\Jobs\DXF" --sheet-width 2500 --sheet-height 1250 --margin 5 --spacing 3 --repeat 3 --max-seconds 5 --output artifacts\real-job
+```
+
+Để so sánh trước/sau tối ưu, dùng cùng máy, cấu hình Release, dữ liệu DXF, số lần lặp và ngân sách; không so Debug với Release hoặc dùng thời gian validator thay cho thời gian engine. Kết quả benchmark không tự khẳng định nguyên nhân hot path: dùng CPU/allocation profiler trên workload chậm nhất trước khi sửa thuật toán. Dấu vân tay khác nhau giữa các lần chạy cần được xem cùng trạng thái chạm giới hạn thời gian và tính song song của heuristic.
 
 ## 7. Chất lượng mã: kết quả rà soát và giới hạn xác minh
 
@@ -181,9 +204,16 @@ Desktop chỉ chạy trên Windows. Có thể cross-target build từ Linux/macO
 8. **Thiết lập timeout và cancellation có test biên.** Thời gian được tính trong lõi và lại được phân bổ cho các trial theo nhóm/khổ. Tiếp tục test lượng dữ liệu lớn, cancellation khi đang tạo variant, nhiều vật liệu và trường hợp 0/âm/NaN/infinity; bảo đảm mọi vòng lặp nặng có điểm kiểm tra cancellation.
 9. **Kiểm thử DXF interoperability.** Thêm bộ fixture do CAD thực xuất, kiểm tra phiên bản DXF, OCS/extrusion, bulge, SPLINE, blocks/arrays, encoding, layer và round-trip; xác nhận thủ công trên ZWCAD/Inventor/AutoCAD phù hợp phiên bản đích.
 10. **Hiệu năng/bộ nhớ raster.** Đặt giới hạn kích thước lưới/đầu vào, đo benchmark theo sheet/chi tiết/độ phân giải; xử lý file DXF lớn hoặc số lượng cực lớn có tiến độ và giới hạn tài nguyên. Không để input không tin cậy tạo cấp phát bất thường.
-11. **Chuẩn hóa ranh giới UI và service.** `MainViewModel` đang điều phối khá nhiều bước nghiệp vụ (preflight, grouping, chọn khổ, ghép quantity, stale/preview). Khi tính năng tăng, tách use-case/service cụ thể và immutable request/result để dễ test mà không phá kiến trúc hiện tại.
-12. **Phân loại lỗi thay vì catch tổng quát.** Những ranh giới UI/nhập file có thể bắt lỗi để tiếp tục batch, nhưng nên phân biệt lỗi định dạng/IO/operation cancelled/lỗi lập trình, tránh che lỗi bất ngờ bằng thông báo chung.
-13. **Tài liệu vận hành và phát hành.** Bổ sung release notes, phiên bản ứng dụng, ma trận Windows/.NET/CAD hỗ trợ, quy trình publish/signing và lưu kết quả kiểm tra CAD.
+11. **Nợ kiến trúc đang hiện hữu — không mở rộng các lớp trung tâm.** `MainViewModel` đang chứa lifecycle dự án, preflight/nesting đa nhóm, placement thủ công, export và state/preview; `MainWindow.xaml.cs` đồng thời xử lý nhiều trang, nhập liệu, menu, dialog và lifecycle. Hai console harness cũng gom nhiều miền vào một `Program.cs`. Đây là điểm tập trung rủi ro khi thêm tính năng. Tách theo lát cắt, ưu tiên:
+   1. `NestingCoordinator` cho preflight, nhóm vật liệu/khổ, tiến độ và ghép kết quả.
+   2. `ProjectSessionService` cho index/workspace, chuyển nhóm, migration và lưu nguyên tử.
+   3. `ManualPlacementService` cho place/move/delete và projection số lượng còn lại.
+   4. Các test theo miền/use-case và UI adapter nhỏ cho bảng Part, Sheet, canvas/dialog.
+
+   Giữ `MainViewModel` làm facade điều phối để giảm rủi ro binding; không bắt đầu bằng việc viết lại toàn bộ UI hoặc thay kiến trúc MVVM.
+12. **Gia cố persistence trước tính năng cộng tác/dữ liệu lớn.** Mọi write project/settings phải atomic; loader phải xác thực version/schema trước khi áp dụng dữ liệu; file version tương lai cần lỗi rõ ràng. Bổ sung kiểm thử lỗi ghi, crash/temp-file recovery, path DXF thiếu/đổi và migration.
+13. **Phân loại lỗi thay vì catch tổng quát.** Những ranh giới UI/nhập file có thể bắt lỗi để tiếp tục batch, nhưng nên phân biệt lỗi định dạng/IO/operation cancelled/lỗi lập trình, tránh che lỗi bất ngờ bằng thông báo chung.
+14. **Tài liệu vận hành và phát hành.** Bổ sung release notes, phiên bản ứng dụng, ma trận Windows/.NET/CAD hỗ trợ, quy trình publish/signing và lưu kết quả kiểm tra CAD.
 
 ### Kiểm tra đã thực hiện cho bản được gửi
 

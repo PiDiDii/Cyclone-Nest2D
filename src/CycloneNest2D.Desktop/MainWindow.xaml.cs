@@ -34,7 +34,7 @@ public partial class MainWindow : Window
         _vm.Presets.CollectionChanged += (_, _) => ScheduleSheetPresetRowsSync();
         SyncSheetPresetRows();
         var version = typeof(MainWindow).Assembly.GetName().Version;
-        AboutVersion.Text = $"Phiên bản {version?.Major}.{version?.Minor}.{version?.Build}";
+        AboutVersion.Text = $"Phiên bản {version?.Major}.{version?.Minor}.{version?.Build} · Cập nhật 30/10/2026";
         _vm.Parts.CollectionChanged += (_, _) =>
         {
             SchedulePartColumnAutoFit();
@@ -45,6 +45,7 @@ public partial class MainWindow : Window
         SheetCanvas.ZoomChanged += SheetCanvas_ZoomChanged;
         SheetCanvas.DragOver += SheetCanvas_DragOver;
         SheetCanvas.SelectionChanged += SheetCanvas_SelectionChanged;
+        SheetCanvas.DeleteSelectedPlacementsRequested += SheetCanvas_DeleteSelectedPlacementsRequested;
         UpdatePartSelectionSummary();
         UpdateZoomReadout();
         MainTabs.SelectionChanged += (s, e) => { if (ReferenceEquals(e.OriginalSource, MainTabs)) SyncRail(); };
@@ -65,7 +66,6 @@ public partial class MainWindow : Window
     {
         double percent = SheetCanvas.ZoomPercent;
         string text = $"{percent:0}%";
-        FooterZoom.Text = text;
         _updatingZoomPreset = true;
         var match = ZoomPresetBox.Items.OfType<ComboBoxItem>().FirstOrDefault(item =>
             double.TryParse(item.Tag?.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out double value) &&
@@ -88,6 +88,244 @@ public partial class MainWindow : Window
     {
         if (sender is FrameworkElement { Tag: not null } element && int.TryParse(element.Tag.ToString(), out int index))
             MainTabs.SelectedIndex = index;
+    }
+
+    private void OpenProjectGroup_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: ProjectGroupItem group }) return;
+        _vm.SelectedProjectGroup = group;
+        MainTabs.SelectedIndex = 3;
+    }
+
+    private void ProjectGroupsList_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source ||
+            ItemsControl.ContainerFromElement(ProjectGroupsList, source) is not ListBoxItem row)
+            return;
+        row.IsSelected = true;
+    }
+
+    private void CreateProjectGroup_Click(object sender, RoutedEventArgs e)
+    {
+        string? name = PromptForText("Tạo nhóm vật liệu", "Tên nhóm mới", "", "Tạo nhóm");
+        if (name == null) return;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            _vm.Toasts.Show(ToastKind.Warning, "Tên nhóm chưa hợp lệ", "Hãy nhập tên cho nhóm vật liệu.");
+            return;
+        }
+        _vm.CreateProjectGroup(name);
+    }
+
+    private void RenameProjectGroup_Click(object sender, RoutedEventArgs e)
+    {
+        var group = _vm.SelectedProjectGroup;
+        if (group == null) return;
+        string? name = PromptForText("Đổi tên nhóm vật liệu", "Tên nhóm", group.Name, "Lưu");
+        if (name == null) return;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            _vm.Toasts.Show(ToastKind.Warning, "Tên nhóm chưa hợp lệ", "Hãy nhập tên cho nhóm vật liệu.");
+            return;
+        }
+        _vm.RenameProjectGroup(group, name);
+    }
+
+    private void ProjectGroupsContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu menu) return;
+        var removeItem = menu.Items.OfType<MenuItem>().FirstOrDefault(item =>
+            string.Equals(item.Header?.ToString(), "Gỡ nhóm khỏi dự án", StringComparison.Ordinal));
+        if (removeItem != null) removeItem.IsEnabled = _vm.ProjectGroups.Count > 1;
+    }
+
+    private void RemoveProjectGroup_Click(object sender, RoutedEventArgs e)
+    {
+        var group = _vm.SelectedProjectGroup;
+        if (group == null || _vm.ProjectGroups.Count <= 1) return;
+        if (ConfirmationDialog.Confirm(this, "Gỡ nhóm vật liệu",
+                $"Gỡ nhóm “{group.Name}” khỏi dự án? Tệp workspace vẫn được giữ lại.", "Gỡ nhóm"))
+            _vm.RemoveProjectGroupCommand.Execute(null);
+    }
+
+    private string? PromptForText(string title, string label, string initialText, string confirmText)
+    {
+        var dialog = new Window
+        {
+            Title = title,
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            WindowStyle = WindowStyle.None,
+            ResizeMode = ResizeMode.NoResize,
+            AllowsTransparency = true,
+            Background = Brushes.Transparent,
+            Foreground = (Brush)FindResource("TextPrimaryBrush"),
+            ShowInTaskbar = false,
+            SizeToContent = SizeToContent.Height,
+            Width = 420
+        };
+        var surface = new Border
+        {
+            CornerRadius = new CornerRadius(11),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(20)
+        };
+        surface.SetResourceReference(Border.BackgroundProperty, "CardBgBrush");
+        surface.SetResourceReference(Border.BorderBrushProperty, "AppBorderBrush");
+        surface.Effect = new System.Windows.Media.Effects.DropShadowEffect
+        {
+            BlurRadius = 20,
+            ShadowDepth = 4,
+            Opacity = 0.2,
+            Color = System.Windows.Media.Colors.Black
+        };
+        surface.Child = new StackPanel();
+        var content = (StackPanel)surface.Child;
+        content.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontSize = 17,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 14)
+        });
+        content.Children.Add(new TextBlock
+        {
+            Text = label,
+            Margin = new Thickness(0, 0, 0, 5)
+        });
+        var input = new TextBox
+        {
+            Text = initialText,
+            MinWidth = 360,
+            Margin = new Thickness(0, 0, 0, 18)
+        };
+        input.SetResourceReference(FrameworkElement.StyleProperty, "Field");
+        content.Children.Add(input);
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        var cancel = new Button
+        {
+            Content = "Hủy",
+            IsCancel = true,
+            MinWidth = 84,
+            Margin = new Thickness(0, 0, 8, 0),
+            Padding = new Thickness(14, 8, 14, 8)
+        };
+        cancel.SetResourceReference(FrameworkElement.StyleProperty, "BaseButton");
+        var confirm = new Button
+        {
+            Content = confirmText,
+            IsDefault = true,
+            MinWidth = 100,
+            Padding = new Thickness(14, 8, 14, 8)
+        };
+        confirm.SetResourceReference(FrameworkElement.StyleProperty, "PrimaryButton");
+        confirm.Click += (_, _) => dialog.DialogResult = true;
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(confirm);
+        content.Children.Add(buttons);
+        dialog.Content = surface;
+        dialog.Loaded += (_, _) =>
+        {
+            input.Focus();
+            input.SelectAll();
+        };
+        return dialog.ShowDialog() == true ? input.Text.Trim() : null;
+    }
+
+    private void OpenPartPreview_Click(object sender, RoutedEventArgs e)
+    {
+        var part = _vm.SelectedPart;
+        if (part == null) return;
+        var preview = new PartPreviewView
+        {
+            Part = part,
+            Focusable = true
+        };
+        var background = new Border
+        {
+            CornerRadius = new CornerRadius(9),
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(0, 12, 0, 14),
+            Child = preview
+        };
+        background.SetResourceReference(Border.BackgroundProperty, "ThumbBgBrush");
+        background.SetResourceReference(Border.BorderBrushProperty, "AppBorderBrush");
+        var dialog = new Window
+        {
+            Title = $"Xem trước chi tiết — {part.Name}",
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Width = 1180,
+            Height = 820,
+            MinWidth = 1000,
+            MinHeight = 700,
+            Background = (Brush)FindResource("BgBrush"),
+            FontFamily = FontFamily,
+            FontSize = FontSize
+        };
+        var panel = new Grid { Margin = new Thickness(18) };
+        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var title = new TextBlock
+        {
+            Text = $"{part.Name}  ·  {part.Width:0.##} × {part.Height:0.##} mm",
+            FontSize = 17,
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetRow(title, 0);
+        panel.Children.Add(title);
+        Grid.SetRow(background, 1);
+        panel.Children.Add(background);
+        var controls = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        var zoomOut = new Button { Content = "−", MinWidth = 40, ToolTip = "Thu nhỏ" };
+        zoomOut.SetResourceReference(FrameworkElement.StyleProperty, "BaseButton");
+        zoomOut.Click += (_, _) => preview.ZoomBy(1 / 1.2);
+        var zoomIn = new Button { Content = "+", MinWidth = 40, ToolTip = "Phóng to" };
+        zoomIn.SetResourceReference(FrameworkElement.StyleProperty, "BaseButton");
+        zoomIn.Click += (_, _) => preview.ZoomBy(1.2);
+        var fit = new Button { Content = "Vừa khung", Margin = new Thickness(8, 0, 8, 0) };
+        fit.SetResourceReference(FrameworkElement.StyleProperty, "BaseButton");
+        fit.Click += (_, _) => preview.ZoomToFit();
+        var close = new Button { Content = "Đóng", MinWidth = 90, IsDefault = true };
+        close.SetResourceReference(FrameworkElement.StyleProperty, "PrimaryButton");
+        close.Click += (_, _) => dialog.Close();
+        controls.Children.Add(zoomOut);
+        controls.Children.Add(zoomIn);
+        controls.Children.Add(fit);
+        controls.Children.Add(close);
+        Grid.SetRow(controls, 2);
+        panel.Children.Add(controls);
+        dialog.Content = panel;
+        dialog.ShowDialog();
+    }
+
+    private void SheetCanvas_DeleteSelectedPlacementsRequested(object? sender, EventArgs e)
+    {
+        int count = SheetCanvas.SelectedIndices.Count;
+        if (count == 0) return;
+        if (!ConfirmationDialog.Confirm(this, "Xóa chi tiết trên tấm",
+                $"Xóa {count} chi tiết đang chọn khỏi tấm? Danh sách Part vẫn được giữ lại.", "Xóa"))
+            return;
+        _vm.DeleteSelectedPlacements();
+        SheetCanvas.ClearSelection();
+    }
+
+    private void DeleteSelectedSheet_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedSheet == null) return;
+        if (ConfirmationDialog.Confirm(this, "Xóa nesting của tấm",
+                $"Xóa nesting của tấm {_vm.SelectedSheet.Sheet.Index}? Các chi tiết sẽ được giữ lại để xếp lại.", "Xóa nesting"))
+            _vm.DeleteSelectedSheet();
     }
 
     private void WindowMinimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
@@ -167,15 +405,6 @@ public partial class MainWindow : Window
             double y = t.Top + SystemParameters.FixedFrameHorizontalBorderHeight;
             RootLayout.Margin = max ? new Thickness(x, y, x, y) : new Thickness(0);
         }
-    }
-
-    private void ProjectMenu_Click(object sender, RoutedEventArgs e)
-    {
-        if (ProjectMenu == null) return;
-        ProjectMenu.DataContext = _vm;
-        ProjectMenu.PlacementTarget = ProjectButton;
-        ProjectMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-        ProjectMenu.IsOpen = true;
     }
 
     private void PartsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdatePartSelectionSummary();
@@ -389,9 +618,9 @@ public partial class MainWindow : Window
 
     private void AutoFitPartColumns()
     {
-        if (PartsGrid.Columns.Count < 8) return;
-        double[] minimum = { 42, 170, 48, 82, 82, 150, 58, 58 };
-        double[] maximum = { 58, 360, 74, 118, 118, 280, 88, 82 };
+        double[] minimum = { 42, 170, 200, 82, 82, 62, 125 };
+        double[] maximum = { 58, 360, 260, 118, 118, 80, 240 };
+        if (PartsGrid.Columns.Count != minimum.Length) return;
         for (int i = 0; i < PartsGrid.Columns.Count; i++)
         {
             PartsGrid.Columns[i].MinWidth = minimum[i];
@@ -447,6 +676,10 @@ public partial class MainWindow : Window
         PartsGrid.CommitEdit(DataGridEditingUnit.Cell, true);
         PartsGrid.CommitEdit(DataGridEditingUnit.Row, true);
         var selected = PartsGrid.SelectedItems.Cast<PartItem>().ToList();
+        if (selected.Count == 0 ||
+            !ConfirmationDialog.Confirm(this, "Xóa chi tiết",
+                $"Xóa {selected.Count} dòng chi tiết đã chọn? Thao tác này không thể hoàn tác.", "Xóa"))
+            return;
         int removed = _vm.RemoveParts(selected);
         PartsGrid.UnselectAll();
         if (removed > 0) _vm.Toasts.Show(ToastKind.Success, "Đã xóa chi tiết", $"Đã xóa {removed} dòng Part.");
@@ -454,6 +687,10 @@ public partial class MainWindow : Window
 
     private void DeleteAllParts_Click(object sender, RoutedEventArgs e)
     {
+        if (_vm.Parts.Count == 0 ||
+            !ConfirmationDialog.Confirm(this, "Xóa toàn bộ chi tiết",
+                $"Xóa toàn bộ {_vm.Parts.Count} dòng chi tiết khỏi nhóm hiện hành?", "Xóa tất cả"))
+            return;
         _vm.ClearCommand.Execute(null);
         if (_vm.Parts.Count == 0) PartsGrid.UnselectAll();
     }
@@ -513,13 +750,6 @@ public partial class MainWindow : Window
         applyQuantity.Unchecked += (_, _) => quantityBox.IsEnabled = false;
         panel.Children.Add(qtyRow);
 
-        var initialCanRotate = single ? selected[0].CanRotate : true;
-        var rotateRow = BuildBooleanPropertyRow("Cho phép xoay", "Bật", initialCanRotate, single, out var applyRotate, out var rotateValue);
-        panel.Children.Add(rotateRow);
-        var initialFlip = single && selected[0].Flip;
-        var flipRow = BuildBooleanPropertyRow("Lật hình", "Bật", initialFlip, single, out var applyFlip, out var flipValue);
-        panel.Children.Add(flipRow);
-
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
         buttons.Children.Add(new Button { Content = "Hủy", IsCancel = true, MinWidth = 84, Margin = new Thickness(0, 0, 8, 0) });
         var save = new Button { Content = single ? "Lưu" : $"Áp dụng cho {selected.Count} dòng", IsDefault = true, MinWidth = 130 };
@@ -551,10 +781,6 @@ public partial class MainWindow : Window
                 int quantityValue = int.Parse(quantityBox.Text, CultureInfo.CurrentCulture);
                 foreach (var part in selected) part.Quantity = quantityValue;
             }
-            if (applyRotate.IsChecked == true)
-                foreach (var part in selected) part.CanRotate = rotateValue.IsChecked == true;
-            if (applyFlip.IsChecked == true)
-                foreach (var part in selected) part.Flip = flipValue.IsChecked == true;
             dialog.DialogResult = true;
         };
         buttons.Children.Add(save);
@@ -564,23 +790,6 @@ public partial class MainWindow : Window
         {
             _vm.Toasts.Show(ToastKind.Success, "Đã cập nhật thuộc tính", single ? "Đã lưu thay đổi cho chi tiết." : $"Đã áp dụng thay đổi cho {selected.Count} dòng.");
         }
-    }
-
-    private static Grid BuildBooleanPropertyRow(string label, string valueLabel, bool initialValue, bool applyByDefault, out CheckBox apply, out CheckBox value)
-    {
-        var row = new Grid { Margin = new Thickness(0, 5, 0, 7) };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(92) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(145) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        apply = new CheckBox { Content = "Áp dụng", IsChecked = applyByDefault, VerticalAlignment = VerticalAlignment.Center };
-        var caption = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(82, 101, 122)) };
-        var valueControl = new CheckBox { Content = valueLabel, IsChecked = initialValue, IsEnabled = applyByDefault, VerticalAlignment = VerticalAlignment.Center };
-        value = valueControl;
-        Grid.SetColumn(apply, 0); Grid.SetColumn(caption, 1); Grid.SetColumn(valueControl, 2);
-        row.Children.Add(apply); row.Children.Add(caption); row.Children.Add(valueControl);
-        apply.Checked += (_, _) => valueControl.IsEnabled = true;
-        apply.Unchecked += (_, _) => valueControl.IsEnabled = false;
-        return row;
     }
 
     private static TextBox AddInput(Panel panel, string label, string value)
@@ -821,7 +1030,17 @@ public partial class MainWindow : Window
             return;
         }
         if (_vm.IsBusy) _vm.CancelCommand.Execute(null);
-        _vm.Settings.SaveTo(NestSettings.DefaultFilePath);
+        try
+        {
+            _vm.Settings.SaveTo(NestSettings.DefaultFilePath);
+        }
+        catch (Exception ex)
+        {
+            var choice = MessageBox.Show(this,
+                $"Không thể lưu thiết lập ứng dụng:\n\n{ex.Message}\n\nBạn có muốn thoát mà không lưu thiết lập không?",
+                "Không lưu được thiết lập", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (choice != MessageBoxResult.Yes) e.Cancel = true;
+        }
     }
 
     private sealed class SheetPresetRow : INotifyPropertyChanged

@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CycloneNest2D.UI.Tests", "t
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CycloneNest2D.Desktop", "src\CycloneNest2D.Desktop\CycloneNest2D.Desktop.csproj", "{3050C95C-EB8E-4524-853F-4ACB8373A27E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CycloneNest2D.Performance", "tests\CycloneNest2D.Performance\CycloneNest2D.Performance.csproj", "{67148940-1701-4FC3-8C69-84F52F79F178}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -87,6 +89,18 @@ Global
 		{3050C95C-EB8E-4524-853F-4ACB8373A27E}.Release|x64.Build.0 = Release|Any CPU
 		{3050C95C-EB8E-4524-853F-4ACB8373A27E}.Release|x86.ActiveCfg = Release|Any CPU
 		{3050C95C-EB8E-4524-853F-4ACB8373A27E}.Release|x86.Build.0 = Release|Any CPU
+		{67148940-1701-4FC3-8C69-84F52F79F178}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{67148940-1701-4FC3-8C69-84F52F79F178}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{67148940-1701-4FC3-8C69-84F52F79F178}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{67148940-1701-4FC3-8C69-84F52F79F178}.Debug|x64.Build.0 = Debug|Any CPU
+		{67148940-1701-4FC3-8C69-84F52F79F178}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{67148940-1701-4FC3-8C69-84F52F79F178}.Debug|x86.Build.0 = Debug|Any CPU
+		{67148940-1701-4FC3-8C69-84F52F79F178}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{67148940-1701-4FC3-8C69-84F52F79F178}.Release|Any CPU.Build.0 = Release|Any CPU
+		{67148940-1701-4FC3-8C69-84F52F79F178}.Release|x64.ActiveCfg = Release|Any CPU
+		{67148940-1701-4FC3-8C69-84F52F79F178}.Release|x64.Build.0 = Release|Any CPU
+		{67148940-1701-4FC3-8C69-84F52F79F178}.Release|x86.ActiveCfg = Release|Any CPU
+		{67148940-1701-4FC3-8C69-84F52F79F178}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -97,5 +111,6 @@ Global
 		{6FDDB557-096A-48B5-9BB0-1DC255F0F0F1} = {D7C0285D-4462-469C-94DB-03A711AD1F66}
 		{BCCC1DED-523A-4A43-BECF-B70A6F29E913} = {017C45AE-36D0-4402-A8ED-6B876E095684}
 		{3050C95C-EB8E-4524-853F-4ACB8373A27E} = {D7C0285D-4462-469C-94DB-03A711AD1F66}
+		{67148940-1701-4FC3-8C69-84F52F79F178} = {017C45AE-36D0-4402-A8ED-6B876E095684}
 	EndGlobalSection
 EndGlobal

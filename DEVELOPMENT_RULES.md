@@ -26,6 +26,9 @@ tests/CycloneNest2D.Tests → CycloneNest2D.Core
 - `CycloneNest2D.Desktop` nắm XAML, render, input, dialog, lifecycle và adapter hệ điều hành; không đặt thuật toán miền lớn trong code-behind nếu có thể đặt ở Core/UI Core.
 - Không tạo phụ thuộc vòng. Không để Core tham chiếu UI Core hoặc Desktop.
 - Khi thay đổi ranh giới, cập nhật sơ đồ trong tài liệu kiến trúc và kiểm tra toàn bộ project references.
+- `MainViewModel` chỉ nên điều phối state/command; use-case mới về nesting, placement thủ công, project/workspace hoặc export phải thuộc service/use-case có trách nhiệm riêng, không tiếp tục dồn vào ViewModel hiện tại.
+- Code-behind WPF xử lý sự kiện, lifecycle và chuyển đổi input/view; không tự chứa quy tắc miền, persistence hoặc workflow mới nhiều bước.
+- File/lớp lớn hiện hữu là nợ kiến trúc, không phải tiền lệ để tiếp tục mở rộng. Với phần việc mới độc lập, tách theo trách nhiệm trước hoặc cùng lúc với thay đổi; refactor theo lát cắt có test, không viết lại toàn bộ ứng dụng một lần.
 
 ## 3. Bất biến hình học và an toàn sản xuất
 
@@ -76,12 +79,15 @@ tests/CycloneNest2D.Tests → CycloneNest2D.Core
 - Không commit/generated source hoặc binaries (`bin`, `obj`, `.vs`, `out`, `TestResults`) trừ khi người dùng yêu cầu artifact đó.
 - Không để dead code, option không còn dùng, tài liệu sai, sample chỉ phục vụ tính năng đã bị bỏ, hoặc project orphan trong solution.
 - Lỗi được xử lý tại ranh giới phù hợp: phân biệt lỗi dữ liệu/IO, hủy tác vụ và lỗi lập trình; không che lỗi bất ngờ bằng catch rồi tiếp tục như thành công.
+- File `.nest2d` và cấu hình người dùng phải được ghi theo kiểu an toàn (file tạm cùng thư mục rồi thay thế); lỗi ghi phải được hiển thị hoặc trả về cho người dùng, không được biến thành thành công im lặng. Từ chối schema tương lai chưa hỗ trợ thay vì nạp bằng giá trị mặc định.
 - Trước khi thêm helper hoặc sửa code chung, tìm nơi dùng hiện có để tránh nhân đôi logic.
 
 ## 7. Quy tắc kiểm thử
 
 - Khi sửa code có thể chạy được, thêm/điều chỉnh test hồi quy cho hành vi thay đổi; test phải kiểm tra kết quả/điều kiện chứ không chỉ xác nhận không ném exception.
 - Các test hình học cần kiểm tra tọa độ/kích thước/khoảng cách cụ thể; test UI Core cần kiểm tra cả state trước/sau và cancellation/error path khi phù hợp.
+- Tổ chức test theo miền/use-case để tìm và chạy riêng được; không tiếp tục phình một `Program.cs` console harness thành nơi chứa toàn bộ test. Khi chuyển sang test framework chuẩn, giữ các test hồi quy hiện có và thêm test discovery trên CI.
+- Khi sửa `RasterNester`/`NestEngine`, chạy benchmark Release `tests/CycloneNest2D.Performance` với workload tổng hợp và DXF đại diện; so sánh cùng máy, cấu hình, ngân sách và nhiều lần lặp. Báo riêng thời gian engine/validator, chất lượng, allocations và lỗi validator; không đặt ngưỡng thời gian tuyệt đối trong unit test. Dùng profiler trước khi kết luận nguyên nhân hot path.
 - Kiểm thử export bằng round-trip parser là hữu ích nhưng **không chứng minh** tương thích với AutoCAD/ZWCAD/Inventor. Ghi rõ cấp độ kiểm chứng.
 - Khi task yêu cầu không chạy test, **KHÔNG ĐƯỢC chạy test**. Có thể kiểm tra tĩnh như `grep`, tham chiếu project, parse XML/solution, diff và cấu trúc file; phải nói rõ test chưa chạy.
 - Khi được phép chạy, hiện tại test projects là console harness; chạy bằng `dotnet run --project tests/CycloneNest2D.Tests` và `dotnet run --project tests/CycloneNest2D.UI.Tests`. `dotnet test` chưa phải cổng đảm bảo test pass cho harness này.

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using CycloneNest2D.Core;
 using CycloneNest2D.UI;
 
@@ -177,6 +178,8 @@ Test("Chạy nesting: có kết quả, không lỗi kiểm tra, danh sách tấm
     Check(total == 2 + 4 + 3, $"tổng chi tiết {total}");
     Check(vm.Scene.Parts.Count == vm.SelectedSheet!.Sheet.Placements.Count, "scene khớp tấm");
     Check(!vm.IsStale && !vm.IsBusy, "không stale, không busy");
+    Check(vm.ProgressPercent == 100 && vm.ElapsedNestTimeText.Length > 0,
+        "kết thúc nesting cập nhật tiến độ và thời gian");
 });
 Test("Hit-test: trúng vật liệu thì ra chi tiết, lỗ trống thì không", () =>
 {
@@ -452,6 +455,8 @@ Test("Lưu/mở dự án: đường dẫn tương đối, layer, số lượng, 
     var childReference = ProjectStore.LoadProjectIndex(proj).Single();
     string childPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(proj)!, childReference.Path));
     string childJson = File.ReadAllText(childPath);
+    Check(childJson.Contains($"\"Version\": {ProjectStore.CurrentFormatVersion}", StringComparison.Ordinal),
+        "workspace ghi đúng version schema hiện tại");
     Check(childJson.Contains("..\\dxf\\") || childJson.Contains("../dxf/") || childJson.Contains("..\\\\dxf"), "đường dẫn DXF tương đối trong file nhóm");
 
     var vm2 = NewVm();
@@ -606,6 +611,33 @@ Test("Mở file dự án hỏng: báo lỗi chứ không sập", () =>
     Check(!vm.OpenProject(p), "trả về false");
     Check(dlg.Messages.Count == 1, "có hộp thoại lỗi");
 });
+Test("Từ chối schema dự án tương lai thay vì nạp sai dữ liệu", () =>
+{
+    var settings = new NestSettings();
+    var problems = new List<string>();
+    string futureGroup = Path.Combine(tmp, "future-group.nest2d");
+    File.WriteAllText(futureGroup, JsonSerializer.Serialize(new ProjectStore.ProjectDto
+    {
+        Kind = ProjectStore.GroupKind,
+        Version = ProjectStore.CurrentFormatVersion + 1
+    }));
+    bool groupRejected = false;
+    try { ProjectStore.LoadWorkspace(futureGroup, settings, problems); }
+    catch (InvalidDataException) { groupRejected = true; }
+    Check(groupRejected, "file nhóm version mới hơn bị từ chối rõ ràng");
+
+    string futureIndex = Path.Combine(tmp, "future-index.nest2d");
+    File.WriteAllText(futureIndex, JsonSerializer.Serialize(new ProjectStore.ProjectDto
+    {
+        Kind = ProjectStore.ProjectKind,
+        Version = ProjectStore.CurrentFormatVersion + 1,
+        Groups = { new ProjectStore.GroupReferenceDto { Id = "group", Name = "Nhóm", Path = "group.nest2d" } }
+    }));
+    bool indexRejected = false;
+    try { ProjectStore.LoadProjectIndex(futureIndex); }
+    catch (InvalidDataException) { indexRejected = true; }
+    Check(indexRejected, "file chỉ mục version mới hơn bị từ chối rõ ràng");
+});
 Test("Thông số: kiểm tra hợp lệ và lưu/nạp JSON (file hỏng thì giữ mặc định)", () =>
 {
     var s = new NestSettings();
@@ -620,6 +652,10 @@ Test("Thông số: kiểm tra hợp lệ và lưu/nạp JSON (file hỏng thì g
     Check(t.SheetPresets.Single(profile => profile.Material == "SS400").Note == "Mặt phẳng", "ghi chú profile được lưu/nạp");
     File.WriteAllText(p, "rac"); var u = new NestSettings(); u.LoadFrom(p);
     Check(u.Validate() == null && u.SheetWidth == 2500, "file hỏng -> mặc định");
+    bool saveFailureReported = false;
+    try { u.SaveTo("bad\0path"); }
+    catch (ArgumentException) { saveFailureReported = true; }
+    Check(saveFailureReported, "lỗi lưu thiết lập được trả về thay vì bị bỏ qua");
     var preset = NestSettings.Presets[1]; u.ApplyPreset(preset);
     Check(u.SheetWidth == preset.Width && u.SheetHeight == preset.Height, "preset");
 });
@@ -655,6 +691,24 @@ Test("Nesting xong và lỗi đều bắn thông báo nhanh", () =>
     Check(vm.Result != null, "có kết quả");
     Check(vm.Toasts.Items.Any(x => x.Kind == ToastKind.Success || x.Kind == ToastKind.Warning), "có thông báo kết quả");
 });
+Test("Hủy xác nhận thì không bắt đầu nesting", () =>
+{
+    var vm = NewVm();
+    vm.AddRect();
+    vm.Parts[0].Width = 300;
+    vm.Parts[0].Height = 200;
+    vm.Parts[0].Quantity = 2;
+    PrepareProfiles(vm);
+    dlg.ConfirmAnswer = false;
+    vm.RunAsync().GetAwaiter().GetResult();
+    Check(vm.Result == null && !vm.IsBusy, "không chạy khi người dùng hủy xác nhận");
+});
+Test("Tên dự án không lặp tên ứng dụng", () =>
+{
+    var vm = NewVm();
+    Check(vm.Title == "Dự án mới" && !vm.Title.Contains("Cyclone Nest2D", StringComparison.Ordinal),
+        "tiêu đề dự án chỉ hiển thị tên dự án");
+});
 Test("XAML: có GridSplitter kéo vùng, icon vector, toast host; không còn icon bằng ký tự", () =>
 {
     string? root = AppContext.BaseDirectory;
@@ -666,7 +720,38 @@ Test("XAML: có GridSplitter kéo vùng, icon vector, toast host; không còn ic
     Check(x.Contains("Toasts.Items"), "toast host");
     Check(x.Contains("VerticalAlignment=\"Top\"") && x.Contains("HorizontalAlignment=\"Right\""), "toast ở góc trên bên phải");
     Check(x.Contains("Header=\"Thông tin\"") && x.Contains("NavInfo\" Tag=\"6\""), "trang Thông tin sau Thiết lập");
-    Check(x.Contains("DeleteSelectedSheetCommand") && x.Contains("IsProjectDirty"), "xóa nesting theo tấm và trạng thái dự án chưa lưu");
+    Check(x.Contains("DeleteSelectedSheet_Click") && x.Contains("IsProjectDirty"), "xóa nesting theo tấm có xác nhận và trạng thái dự án chưa lưu");
+    Check(x.Contains("SelectedItem=\"{Binding SelectedProjectGroup, Mode=TwoWay}\"") &&
+          x.Contains("Header=\"Tạo nhóm vật liệu…\"") && x.Contains("Click=\"RenameProjectGroup_Click\""),
+        "chọn nhóm trên thanh trên cùng và tạo/đổi tên từ menu chuột phải");
+    Check(x.Contains("Border Grid.Column=\"1\" Background=\"{DynamicResource AccentTintBrush}\"") &&
+          !x.Contains("ProjectMenu_Click", StringComparison.Ordinal) &&
+          !x.Contains("x:Name=\"ProjectMenu\"", StringComparison.Ordinal),
+        "tên dự án chỉ hiển thị, có icon tương phản và không mở menu chức năng");
+    Check(x.Contains("Command=\"{Binding NewProjectCommand}\"") &&
+          x.Contains("Command=\"{Binding OpenProjectCommand}\"") &&
+          x.Contains("Command=\"{Binding SaveProjectCommand}\"") &&
+          app.Contains("x:Key=\"IcNewProject\"") && app.Contains("x:Key=\"IcOpenProject\""),
+        "có icon thao tác tạo/mở/lưu dự án trên thanh trên cùng");
+    Check(x.Contains("Data=\"{StaticResource IcEye}\"") &&
+          !x.Contains("DataGridCheckBoxColumn Header=\"Xoay\"") &&
+          !x.Contains("DataGridCheckBoxColumn Header=\"Lật\""),
+        "nút xem nhanh Part dùng icon, cột xoay/lật bị gỡ");
+    Check(x.Contains("Grid.Column=\"2\"") && x.Contains("Text=\"LAYER DXF\"") &&
+          x.Contains("Text=\"Hình xem trước\"") && x.Contains("x:Name=\"PartPreview\"") &&
+          x.Contains("Click=\"OpenPartPreview_Click\""),
+        "vùng Part chia đôi: layer phía trên, preview phía dưới, có nút mở xem lớn");
+    Check(theme.Contains("x:Key=\"CenteredEditor\"") &&
+          theme.Contains("<Setter Property=\"VerticalContentAlignment\" Value=\"Center\"/>") &&
+          x.Contains("EditingElementStyle=\"{StaticResource TableEditor}\""),
+        "ô nhập liệu trong bảng được căn giữa theo chiều dọc");
+    Check(!File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "MainWindow.xaml.cs"))
+              .Contains("BuildBooleanPropertyRow", StringComparison.Ordinal) &&
+          !File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "MainWindow.xaml.cs"))
+              .Contains("Cho phép xoay", StringComparison.Ordinal) &&
+          !File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "MainWindow.xaml.cs"))
+              .Contains("Lật hình", StringComparison.Ordinal),
+        "hộp thuộc tính không còn hai tùy chọn xoay/lật");
     Check(x.Contains("RowStyle=\"{StaticResource PartRowStyle}\"") &&
           theme.Contains("x:Key=\"PartSelectionBgBrush\"") && theme.Contains("x:Key=\"PartListBorderBrush\""),
         "selection và viền danh sách Part có token riêng");
@@ -691,11 +776,54 @@ Test("XAML: lệnh nesting chỉ hiện trong tab Nesting và danh mục tấm h
           !code.Contains("Help_Click", StringComparison.Ordinal),
         "nút trợ giúp và thanh công cụ trống đã được bỏ");
     var nestingTab = doc.Descendants(wpf + "TabItem").Single(element => (string?)element.Attribute("Header") == "Nesting");
+    Check(!nestingTab.Descendants(wpf + "ComboBox").Any(combo =>
+              ((string?)combo.Attribute("SelectedItem"))?.Contains("SelectedProjectGroup", StringComparison.Ordinal) == true),
+        "bỏ bộ chọn nhóm vật liệu trùng trong tab Nesting");
+    Check(nestingTab.Descendants(wpf + "UniformGrid").All(grid => (string?)grid.Attribute("Grid.Row") != "1") &&
+          nestingTab.Descendants(wpf + "TextBlock").Any(text => (string?)text.Attribute("Text") == "CHI TIẾT ĐÃ XẾP") &&
+          nestingTab.Descendants(wpf + "TextBlock").Any(text => (string?)text.Attribute("Text") == "TẤM ĐÃ DÙNG"),
+        "đưa chỉ số nesting lên cùng hàng tiêu đề");
     Check(nestingTab.Descendants(wpf + "Button").Any(button => ((string?)button.Attribute("Command"))?.Contains("RunCommand", StringComparison.Ordinal) == true) &&
           nestingTab.Descendants(wpf + "Button").Any(button => ((string?)button.Attribute("Command"))?.Contains("CancelCommand", StringComparison.Ordinal) == true),
         "nút chạy/dừng nằm trong tab Nesting");
+    Check(nestingTab.Descendants(wpf + "StackPanel").Any(panel =>
+              (string?)panel.Attribute("Grid.Column") == "2" &&
+              panel.Descendants(wpf + "Button").Any(button => ((string?)button.Attribute("Command"))?.Contains("RunCommand", StringComparison.Ordinal) == true) &&
+              panel.Descendants(wpf + "Button").Any(button => ((string?)button.Attribute("Command"))?.Contains("CancelCommand", StringComparison.Ordinal) == true)) &&
+          nestingTab.Descendants(wpf + "UniformGrid").Any(grid =>
+              (string?)grid.Attribute("Grid.Column") == "1" && (string?)grid.Attribute("Columns") == "4"),
+        "nút nằm cùng hàng chỉ số, các chỉ số được chia đều trong 4 cột");
+    Check(nestingTab.Descendants(wpf + "Button").Any(button =>
+              ((string?)button.Attribute("Command"))?.Contains("CancelCommand", StringComparison.Ordinal) == true &&
+              ((string?)button.Attribute("Style"))?.Contains("DangerButton", StringComparison.Ordinal) == true),
+        "nút dừng dùng màu cảnh báo rõ ràng, đồng bộ với theme");
+    Check(doc.Descendants(wpf + "ProgressBar").Any(bar =>
+              ((string?)bar.Attribute("Value"))?.Contains("ProgressPercent", StringComparison.Ordinal) == true) &&
+          doc.Descendants(wpf + "TextBlock").Any(text =>
+              ((string?)text.Attribute("Text"))?.Contains("ElapsedNestTimeText", StringComparison.Ordinal) == true) &&
+          doc.Descendants(wpf + "TextBlock").Any(text =>
+              ((string?)text.Attribute("Text"))?.Contains("EstimatedRemainingTimeText", StringComparison.Ordinal) == true),
+        "hộp tiến trình có phần trăm, thời gian đã chạy và ETA");
     var presetsGrid = doc.Descendants(wpf + "DataGrid").Single(element =>
         (string?)element.Attribute("{http://schemas.microsoft.com/winfx/2006/xaml}Name") == "SheetPresetsGrid");
+    var partsGrid = doc.Descendants(wpf + "DataGrid").Single(element =>
+        (string?)element.Attribute("{http://schemas.microsoft.com/winfx/2006/xaml}Name") == "PartsGrid");
+    System.Xml.Linq.XNamespace xamlNs = "http://schemas.microsoft.com/winfx/2006/xaml";
+    var partHeaderStyle = doc.Descendants(wpf + "Style").Single(style =>
+        (string?)style.Attribute(xamlNs + "Key") == "PartTableHeader");
+    Check(xaml.Contains("Width=\"3.5*\"") &&
+          partHeaderStyle.Descendants(wpf + "Setter").Any(setter =>
+              (string?)setter.Attribute("Property") == "HorizontalContentAlignment" &&
+              (string?)setter.Attribute("Value") == "Center"),
+        "vùng bảng chi tiết rộng, layer/preview bên phải; tiêu đề cột căn giữa");
+    Check(partsGrid.Descendants(wpf + "DataGridColumn").Count() == 0 &&
+          partsGrid.Descendants().Count(element =>
+              element.Name.LocalName is "DataGridTextColumn" or "DataGridTemplateColumn" or "DataGridCheckBoxColumn") == 7,
+        "danh sách Part chỉ còn bảy cột sau khi bỏ xoay/lật");
+    string desktopProject = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "CycloneNest2D.Desktop.csproj"));
+    Check(desktopProject.Contains("<Version>1.0.5</Version>", StringComparison.Ordinal) &&
+          desktopProject.Contains("Cập nhật 30/10/2026", StringComparison.Ordinal),
+        "tăng phiên bản và cập nhật ngày phát hành");
     Check((string?)presetsGrid.Attribute("SelectionMode") == "Extended" &&
           (string?)presetsGrid.Attribute("CanUserResizeColumns") == "False" &&
           new[] { "42", "138", "112", "116", "124", "230" }.SequenceEqual(
@@ -710,9 +838,10 @@ Test("XAML: lệnh nesting chỉ hiện trong tab Nesting và danh mục tấm h
           !xaml.Contains("AddStockFromNesting_Click", StringComparison.Ordinal),
         "menu chuột phải và các thao tác chỉnh sửa/xóa đã được nối");
     Check(xaml.Contains("Xóa nesting tấm đang chọn", StringComparison.Ordinal) &&
-          xaml.Contains("DeleteSelectedSheetCommand", StringComparison.Ordinal) &&
+          xaml.Contains("DeleteSelectedSheet_Click", StringComparison.Ordinal) &&
+          code.Contains("ConfirmationDialog.Confirm", StringComparison.Ordinal) &&
           !xaml.Contains("DeletePlacementCommand", StringComparison.Ordinal),
-        "thao tác xóa nhắm vào toàn bộ nesting của tấm được chọn");
+        "xóa nesting nhắm đúng tấm và yêu cầu xác nhận");
 });
 
 Console.WriteLine("Lớp WPF (kiểm tra tĩnh, vì không biên dịch được WPF trên Linux)");
@@ -922,10 +1051,11 @@ sealed class FakeDialogs : IDialogService
     public string? OpenFile { get; set; }
     public string[] Files = Array.Empty<string>();
     public bool ConfirmAnswer = true;
+    public List<string> Confirmations { get; } = new();
     public string[] PickOpenFiles(string title, string filter) => Files;
     public string? PickFolder(string title) => Folder;
     public string? PickSaveFile(string title, string filter, string defaultName) => SaveFile;
     public string? PickOpenFile(string title, string filter) => OpenFile;
     public void ShowMessage(string message) => Messages.Add(message);
-    public bool Confirm(string message) => ConfirmAnswer;
+    public bool Confirm(string message) { Confirmations.Add(message); return ConfirmAnswer; }
 }

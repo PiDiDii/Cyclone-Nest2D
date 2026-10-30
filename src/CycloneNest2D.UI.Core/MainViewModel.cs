@@ -36,7 +36,30 @@ public sealed class PartMaterialGroup
 /// <summary>Toàn bộ logic của cửa sổ chính; lớp WPF chỉ binding và vẽ.</summary>
 public sealed class MainViewModel : ObservableObject
 {
+    private sealed class ViewModelProgress<T> : IProgress<T>
+    {
+        private readonly SynchronizationContext? _context = SynchronizationContext.Current;
+        private readonly Action<T> _report;
+
+        public ViewModelProgress(Action<T> report) => _report = report;
+
+        public void Report(T value)
+        {
+            if (_context == null)
+            {
+                _report(value);
+                return;
+            }
+            _context.Post(static state =>
+            {
+                var (progress, item) = ((ViewModelProgress<T>, T))state!;
+                progress._report(item);
+            }, (this, value));
+        }
+    }
+
     private readonly IDialogService _dialogs;
+    private readonly object _progressSync = new();
     private CancellationTokenSource? _cts;
 
     private PartItem? _selectedPart;
@@ -53,9 +76,12 @@ public sealed class MainViewModel : ObservableObject
     private bool _isProjectDirty;
     private string _status = "Sẵn sàng. Kéo file DXF vào cửa sổ hoặc bấm Thêm DXF.";
     private string _progress = "";
+    private double _progressPercent;
     private string _summary = "";
     private string? _projectPath;
     private TimeSpan _lastNestDuration;
+    private TimeSpan _elapsedNestTime;
+    private TimeSpan? _estimatedRemainingTime;
     private DateTime? _lastNestAt;
     private SheetPreset? _preset;
     private string _selectedInfo = "";
@@ -81,6 +107,7 @@ public sealed class MainViewModel : ObservableObject
         };
         Settings.SheetPresets.CollectionChanged += (_, _) => IsProjectDirty = true;
         Parts.CollectionChanged += OnPartsChanged;
+        ProjectGroups.CollectionChanged += (_, _) => NotifyProjectSummary();
 
         AddDxfCommand = new RelayCommand(AddDxfDialog, () => !IsBusy);
         AddFolderCommand = new RelayCommand(AddFolderDialog, () => !IsBusy);
@@ -130,6 +157,9 @@ public sealed class MainViewModel : ObservableObject
     public int RequiredCount => Parts.Sum(p => Math.Max(0, p.Quantity));
     public int PlacedCount => Result?.Sheets.Sum(s => s.Placements.Count) ?? 0;
     public int RemainingCount => Math.Max(0, RequiredCount - PlacedCount);
+    public int ProjectGroupCount => ProjectGroups.Count;
+    public int ProjectPartCount => ProjectGroups.Sum(group => group.PartCount);
+    public int ProjectSheetCount => ProjectGroups.Sum(group => group.SheetCount);
 
     /// <summary>View lắng nghe để đưa khung nhìn về vừa khít tấm.</summary>
     public event Action? ResetViewRequested;
@@ -308,11 +338,87 @@ public sealed class MainViewModel : ObservableObject
     public bool IsEdited { get => _isEdited; private set => Set(ref _isEdited, value); }
     public string Status { get => _status; private set => Set(ref _status, value); }
     public string Progress { get => _progress; private set => Set(ref _progress, value); }
+    public double ProgressPercent { get => _progressPercent; private set => Set(ref _progressPercent, value); }
+    public string ElapsedNestTimeText => FormatProgressTime(_elapsedNestTime);
+    public string EstimatedRemainingTimeText => _estimatedRemainingTime is { } time
+        ? FormatProgressTime(time)
+        : "Đang ước tính...";
     public string Summary { get => _summary; private set => Set(ref _summary, value); }
     public TimeSpan LastNestDuration { get => _lastNestDuration; private set => Set(ref _lastNestDuration, value); }
     public DateTime? LastNestAt { get => _lastNestAt; private set => Set(ref _lastNestAt, value); }
-    public string? ProjectPath { get => _projectPath; private set { if (Set(ref _projectPath, value)) OnPropertyChanged(nameof(Title)); } }
-    public bool IsProjectDirty { get => _isProjectDirty; private set => Set(ref _isProjectDirty, value); }
+
+    private static string FormatProgressTime(TimeSpan time) =>
+        time.TotalMinutes >= 1
+            ? $"{(int)time.TotalMinutes:00}:{time.Seconds:00}"
+            : $"{time.TotalSeconds:0} giây";
+
+    private void UpdateProgressClock(Stopwatch stopwatch)
+    {
+        lock (_progressSync)
+        {
+            _elapsedNestTime = stopwatch.Elapsed;
+            OnPropertyChanged(nameof(ElapsedNestTimeText));
+            UpdateEstimatedRemainingTime();
+        }
+    }
+
+    private void UpdateEstimatedRemainingTime()
+    {
+        if (ProgressPercent <= 0)
+        {
+            _estimatedRemainingTime = null;
+        }
+        else
+        {
+            double remainingSeconds = _elapsedNestTime.TotalSeconds * (100 - ProgressPercent) / ProgressPercent;
+            _estimatedRemainingTime = TimeSpan.FromSeconds(Math.Max(0, remainingSeconds));
+        }
+        OnPropertyChanged(nameof(EstimatedRemainingTimeText));
+    }
+
+    private void UpdateProgressEstimate(double completed, double inFlight, long total)
+    {
+        if (total <= 0) return;
+        lock (_progressSync)
+        {
+            double estimate = Math.Clamp((completed + inFlight) / total * 100, 0, 99);
+            if (estimate > ProgressPercent)
+            {
+                ProgressPercent = estimate;
+                UpdateEstimatedRemainingTime();
+            }
+        }
+    }
+
+    private async Task RefreshProgressClockAsync(Stopwatch stopwatch)
+    {
+        while (stopwatch.IsRunning)
+        {
+            UpdateProgressClock(stopwatch);
+            await Task.Delay(500);
+        }
+        UpdateProgressClock(stopwatch);
+    }
+    public string? ProjectPath
+    {
+        get => _projectPath;
+        private set
+        {
+            if (!Set(ref _projectPath, value)) return;
+            OnPropertyChanged(nameof(Title));
+            OnPropertyChanged(nameof(ProjectName));
+        }
+    }
+    public bool IsProjectDirty
+    {
+        get => _isProjectDirty;
+        private set
+        {
+            if (Set(ref _isProjectDirty, value))
+                OnPropertyChanged(nameof(ProjectSaveState));
+        }
+    }
+    public string ProjectSaveState => IsProjectDirty ? "Chưa lưu thay đổi" : "Đã lưu";
     public string NewProjectGroupName { get => _newProjectGroupName; set => Set(ref _newProjectGroupName, value); }
     public ProjectGroupItem? SelectedProjectGroup
     {
@@ -330,8 +436,8 @@ public sealed class MainViewModel : ObservableObject
             RaiseCommands();
         }
     }
-    public string Title => "Cyclone Nest2D" + (ProjectPath == null ? "" : " - " + Path.GetFileName(ProjectPath)) +
-                           (_activeProjectGroup == null ? "" : $" · {_activeProjectGroup.Name}");
+    public string Title => ProjectPath == null ? "Dự án mới" : Path.GetFileNameWithoutExtension(ProjectPath);
+    public string ProjectName => ProjectPath == null ? "Dự án mới" : Path.GetFileNameWithoutExtension(ProjectPath);
     public SheetDefinition? ResultSheet => _resultSheet;
 
     // ---------- lệnh ----------
@@ -587,6 +693,9 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
+        if (!_dialogs.Confirm($"Bắt đầu nesting {totalInstances:N0} chi tiết cho {materialGroups.Count} nhóm vật liệu?"))
+            return;
+
         // Tên phải duy nhất, vì tên là khoá nhận dạng của chi tiết trong kết quả.
         foreach (var p in usable) p.Name = UniqueName(p.Name, p);
 
@@ -596,11 +705,18 @@ public sealed class MainViewModel : ObservableObject
         _cts = new CancellationTokenSource();
         IsBusy = true;
         Progress = "Đang chuẩn bị Nesting hình dạng thật...";
+        ProgressPercent = 0;
+        _elapsedNestTime = TimeSpan.Zero;
+        _estimatedRemainingTime = null;
+        OnPropertyChanged(nameof(ElapsedNestTimeText));
+        OnPropertyChanged(nameof(EstimatedRemainingTimeText));
         Status = $"Đang nesting · giới hạn {Settings.MaxSeconds:0.#} giây · mục tiêu {Settings.TargetUtilizationPercent:0.#}%...";
         var wallClock = Stopwatch.StartNew();
+        var progressClock = RefreshProgressClockAsync(wallClock);
         try
         {
             var combined = new NestResult { Strategy = "Nesting theo vật liệu và độ dày" };
+            long completedPlacements = 0;
             var errors = new List<string>();
             var groups = usable.GroupBy(p => (Material: MaterialKey(p.Material), Thickness: Math.Round(p.Thickness, 4)))
                 .OrderBy(g => g.Key.Material).ThenBy(g => g.Key.Thickness).ToList();
@@ -649,8 +765,14 @@ public sealed class MainViewModel : ObservableObject
                         trialSettings.MaxSeconds = Math.Max(0.05, remainingSeconds / remainingTrials);
                         string progressPrefix = $"Nhóm {groupIndex + 1}/{groups.Count} · {materialLabel} · {thickness:0.###} mm · khổ {sheetIndex + 1}/{groupSheets.Count}: {preset.Name}";
                         Progress = progressPrefix + " · đang tính phương án...";
-                        var progress = new Progress<string>(m => Progress = progressPrefix + " · " + m);
-                        var trial = await NestingService.RunAsync(defs, trialSettings, progress, _cts.Token);
+                        var progress = new ViewModelProgress<string>(m => Progress = progressPrefix + " · " + m);
+                        long remainingInGroup = remaining.Values.Sum(value => (long)value);
+                        var percentProgress = new ViewModelProgress<double>(percent =>
+                        {
+                            long completed = Interlocked.Read(ref completedPlacements);
+                            UpdateProgressEstimate(completed, remainingInGroup * percent * 0.35, totalInstances);
+                        });
+                        var trial = await NestingService.RunAsync(defs, trialSettings, progress, _cts.Token, percentProgress);
                         cancelled |= trial.Cancelled;
                         var first = trial.Result.Sheets.FirstOrDefault(sh => sh.Placements.Count > 0);
                         if (first == null) continue;
@@ -690,6 +812,7 @@ public sealed class MainViewModel : ObservableObject
                         if (output.Placements.Count == 0) continue;
                         usedForGroup++;
                         addedInBatch++;
+                        Interlocked.Add(ref completedPlacements, output.Placements.Count);
                         combined.Sheets.Add(output);
                         combined.Notes.Add($"Tấm {output.Index}: {materialLabel} · {thickness:0.###} mm · {bestPreset.Name} ({bestPreset.Width:0.##} × {bestPreset.Height:0.##} mm).");
                     }
@@ -719,9 +842,16 @@ public sealed class MainViewModel : ObservableObject
             LastNestAt = DateTime.Now;
             var run = new NestRun(combined, Settings.ToSheet(), errors, cancelled, wallClock.Elapsed, timeLimitReached);
             ShowResult(run);
+            lock (_progressSync)
+            {
+                ProgressPercent = 100;
+                UpdateEstimatedRemainingTime();
+            }
         }
         finally
         {
+            wallClock.Stop();
+            await progressClock;
             IsBusy = false;
             Progress = "";
             _cts.Dispose();
@@ -1670,6 +1800,14 @@ public sealed class MainViewModel : ObservableObject
         if (_activeProjectGroup == null) return;
         _activeProjectGroup.PartCount = Parts.Count;
         _activeProjectGroup.SheetCount = Result?.Sheets.Count ?? 0;
+        NotifyProjectSummary();
+    }
+
+    private void NotifyProjectSummary()
+    {
+        OnPropertyChanged(nameof(ProjectGroupCount));
+        OnPropertyChanged(nameof(ProjectPartCount));
+        OnPropertyChanged(nameof(ProjectSheetCount));
     }
 
     private static string GroupNameFor(IReadOnlyList<PartItem> parts, int index)

@@ -28,6 +28,7 @@ public sealed class NestOptions
 
     public CancellationToken Cancel { get; set; }
     public Action<string>? Report { get; set; }
+    public Action<double>? ReportProgress { get; set; }
 }
 
 /// <summary>

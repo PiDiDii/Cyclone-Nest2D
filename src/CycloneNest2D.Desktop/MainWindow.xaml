@@ -29,6 +29,13 @@
 
     <Window.Resources>
         <DataTemplate x:Key="LayerTemplate"><CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}" Margin="3,2"><TextBlock><Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold"/><Run Text="  "/><Run Text="{Binding Note, Mode=OneWay}" Foreground="Gray"/></TextBlock></CheckBox></DataTemplate>
+    <Style x:Key="PartTableHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource ModernTableHeader}">
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="Padding" Value="12,12"/>
+    </Style>
     <Style x:Key="CloseGlyph" TargetType="Path">
  <Setter Property="Stroke" Value="{DynamicResource IconStrokeBrush}"/>
  <Style.Triggers>
@@ -62,23 +69,23 @@
  <TextBlock Text="CYCLONE NEST2D" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
  </StackPanel>
 
- <Button Grid.Column="1" x:Name="ProjectButton" Style="{StaticResource ToolbarButton}" Click="ProjectMenu_Click" shell:WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Menu dự án">
+ <Border Grid.Column="1" Background="{DynamicResource AccentTintBrush}" BorderBrush="{DynamicResource PrimaryLightBrush}" BorderThickness="1" CornerRadius="8" Padding="9,5" VerticalAlignment="Center" ToolTip="{Binding ProjectPath, TargetNullValue='Dự án hiện tại'}">
  <StackPanel Orientation="Horizontal">
- <Path Data="{StaticResource IcFolderOpen}" Style="{StaticResource Ico}" Width="19" Height="19" Margin="0,0,9,0"/>
- <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" MaxWidth="300" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+ <Border Width="26" Height="26" CornerRadius="7" Background="{DynamicResource PrimaryBrush}" Margin="0,0,8,0">
+ <Path Data="{StaticResource IcFolderOpen}" Style="{StaticResource Ico}" Stroke="{DynamicResource OnPrimaryBrush}" Width="15" Height="15" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+ </Border>
+ <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" MaxWidth="210" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
  <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningBrush}" Margin="8,0,0,0" ToolTip="Có thay đổi chưa lưu trong dự án" Visibility="{Binding IsProjectDirty, Converter={StaticResource B2V}}"/>
- <Path Data="{StaticResource IcChevDown}" Style="{StaticResource Ico}" Width="12" Height="12" Margin="9,0,0,0"/>
  </StackPanel>
- <Button.ContextMenu>
- <ContextMenu x:Name="ProjectMenu">
- <MenuItem Header="Dự án mới" Command="{Binding NewProjectCommand}" InputGestureText="Ctrl+N"/>
- <MenuItem Header="Mở dự án..." Command="{Binding OpenProjectCommand}" InputGestureText="Ctrl+O"/>
- <Separator/>
- <MenuItem Header="Lưu" Command="{Binding SaveProjectCommand}" InputGestureText="Ctrl+S"/>
- <MenuItem Header="Lưu thành..." Command="{Binding SaveProjectAsCommand}"/>
- </ContextMenu>
- </Button.ContextMenu>
- </Button>
+ </Border>
+
+ <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="8,0,12,0">
+ <Button Style="{StaticResource ToolbarButton}" Command="{Binding NewProjectCommand}" Padding="5" Margin="0,0,3,0" ToolTip="Dự án mới" shell:WindowChrome.IsHitTestVisibleInChrome="True"><Border Background="{DynamicResource AccentTintBrush}" CornerRadius="6" Padding="5"><Path Data="{StaticResource IcNewProject}" Style="{StaticResource Ico}" Stroke="{DynamicResource PrimaryDarkBrush}" Width="18" Height="18"/></Border></Button>
+ <Button Style="{StaticResource ToolbarButton}" Command="{Binding OpenProjectCommand}" Padding="5" Margin="0,0,3,0" ToolTip="Mở dự án" shell:WindowChrome.IsHitTestVisibleInChrome="True"><Border Background="{DynamicResource AccentTintBrush}" CornerRadius="6" Padding="5"><Path Data="{StaticResource IcOpenProject}" Style="{StaticResource Ico}" Stroke="{DynamicResource PrimaryDarkBrush}" Width="18" Height="18"/></Border></Button>
+ <Button Style="{StaticResource ToolbarButton}" Command="{Binding SaveProjectCommand}" Padding="5" Margin="0,0,10,0" ToolTip="Lưu dự án" shell:WindowChrome.IsHitTestVisibleInChrome="True"><Border Background="{DynamicResource AccentTintBrush}" CornerRadius="6" Padding="5"><Path Data="{StaticResource IcSave}" Style="{StaticResource Ico}" Stroke="{DynamicResource PrimaryDarkBrush}" Width="18" Height="18"/></Border></Button>
+ <TextBlock Text="Nhóm:" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,7,0"/>
+ <ComboBox ItemsSource="{Binding ProjectGroups}" SelectedItem="{Binding SelectedProjectGroup, Mode=TwoWay}" DisplayMemberPath="Name" Width="210" ToolTip="Chuyển nhóm vật liệu" shell:WindowChrome.IsHitTestVisibleInChrome="True"/>
+ </StackPanel>
 
  <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,0">
  <Button x:Name="ThemeButton" Style="{StaticResource WindowButton}" Click="ToggleTheme_Click" shell:WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Đổi giao diện Sáng / Tối" Width="44">
@@ -101,7 +108,7 @@
  </Border>
 
  <Grid Grid.Row="1">
- <Grid.ColumnDefinitions><ColumnDefinition Width="98"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+ <Grid.ColumnDefinitions><ColumnDefinition Width="84"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
 
  <Border Grid.Column="0" Background="{DynamicResource SidebarBgBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,1,0">
  <StackPanel Margin="0,10,0,0">
@@ -154,46 +161,219 @@
                 <TabControl x:Name="MainTabs" SelectedIndex="3" Background="Transparent" BorderThickness="0" Padding="0" Margin="0">
             <TabControl.Template><ControlTemplate TargetType="TabControl"><Grid><TabPanel IsItemsHost="True" Visibility="Collapsed"/><ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" Margin="0"/></Grid></ControlTemplate></TabControl.Template>
             <TabItem Header="File">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="24" MaxWidth="940" HorizontalAlignment="Left">
-                    <TextBlock Text="Quản lý dự án" Style="{StaticResource SectionTitle}"/><TextBlock Text="Tạo mới, mở hoặc lưu trạng thái nesting hiện tại." Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,18"/>
-                    <WrapPanel><Button Content="Dự án mới" Command="{Binding NewProjectCommand}" ToolTip="Ctrl+N"/><Button Content="Mở dự án..." Command="{Binding OpenProjectCommand}" ToolTip="Ctrl+O"/><Button Content="Lưu" Command="{Binding SaveProjectCommand}" ToolTip="Ctrl+S"/><Button Content="Lưu thành..." Command="{Binding SaveProjectAsCommand}"/></WrapPanel>
-                    <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="18" Margin="0,14,0,0"><StackPanel><TextBlock Text="Dự án đang mở" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/><TextBlock Text="{Binding Title}" Margin="0,8,0,0" Foreground="{DynamicResource TextSecondaryBrush}"/><TextBlock Text="{Binding Status}" Margin="0,5,0,0" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/></StackPanel></Border>
-                    <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="18" Margin="0,14,0,0">
-                        <StackPanel>
-                            <TextBlock Text="Nhóm vật liệu trong dự án" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <TextBlock Text="Mỗi nhóm lưu danh sách chi tiết, khổ tấm và kết quả nesting riêng." Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,5,0,10"/>
-                            <ComboBox ItemsSource="{Binding ProjectGroups}" SelectedItem="{Binding SelectedProjectGroup, Mode=TwoWay}" DisplayMemberPath="Name" MinWidth="300" HorizontalAlignment="Left"/>
-                            <TextBlock Text="{Binding SelectedProjectGroup.Summary}" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,10"/>
-                            <TextBox Text="{Binding NewProjectGroupName, UpdateSourceTrigger=PropertyChanged}" MinWidth="300" MaxWidth="420" HorizontalAlignment="Left" ToolTip="Nhập tên nhóm để tạo mới hoặc đổi tên nhóm đang chọn"/>
-                            <WrapPanel Margin="0,10,0,0">
-                                <Button Content="Tạo nhóm" Command="{Binding CreateProjectGroupCommand}"/>
-                                <Button Content="Đổi tên" Command="{Binding RenameProjectGroupCommand}"/>
-                                <Button Content="Nhân bản" Command="{Binding DuplicateProjectGroupCommand}"/>
-                                <Button Content="Gỡ nhóm" Command="{Binding RemoveProjectGroupCommand}"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="24">
+                        <Grid Margin="0,0,0,18">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Tổng quan dự án" Style="{StaticResource SectionTitle}" FontSize="24"/>
+                                <TextBlock Text="Theo dõi tiến độ và chuyển nhanh giữa các nhóm vật liệu." Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                                <Button Content="Mở dự án..." Command="{Binding OpenProjectCommand}"/>
+                                <Button Content="Dự án mới" Command="{Binding NewProjectCommand}"/>
+                                <Button Content="Lưu dự án" Command="{Binding SaveProjectCommand}" Style="{StaticResource PrimaryButton}" Margin="0"/>
                             </WrapPanel>
-                            <TextBlock Text="Gỡ nhóm chỉ bỏ liên kết khỏi dự án, file nhóm vẫn được giữ lại." Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,5,0,0"/>
-                        </StackPanel>
-                    </Border>
-                    <TextBlock Text="Phím tắt: Ctrl+N dự án mới · Ctrl+O mở · Ctrl+S lưu · Ctrl+D thêm DXF · F5 chạy nesting." Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,18,0,0"/>
-                </StackPanel></ScrollViewer>
+                        </Grid>
+                        <Border Background="{DynamicResource ProjectHeroBgBrush}" CornerRadius="14" Padding="24" Margin="0,0,0,16">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding ProjectName}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource ProjectHeroTextBrush}"/>
+                                    <TextBlock Text="{Binding ProjectPath, TargetNullValue='Chưa lưu · tạo dự án hoặc lưu để bắt đầu'}" Foreground="{DynamicResource ProjectHeroMutedBrush}" Margin="0,6,0,12" TextTrimming="CharacterEllipsis"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Background="{DynamicResource ProjectHeroChipBrush}" CornerRadius="12" Padding="10,5" Margin="0,0,10,0">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Ellipse Width="8" Height="8" Fill="{DynamicResource SuccessBrush}" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding ProjectSaveState}" Foreground="{DynamicResource ProjectHeroTextBrush}" FontSize="12" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <TextBlock Text="{Binding Status}" Foreground="{DynamicResource ProjectHeroMutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
+                                    <Button Content="Lưu thành..." Command="{Binding SaveProjectAsCommand}" Background="Transparent" BorderBrush="{DynamicResource ProjectHeroMutedBrush}" Foreground="{DynamicResource ProjectHeroTextBrush}" Margin="0"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <UniformGrid Columns="3" Margin="0,0,0,22">
+                            <Border Style="{StaticResource CardFlat}" Padding="18" Margin="0,0,10,0">
+                                <StackPanel><TextBlock Text="NHÓM VẬT LIỆU" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal" Margin="0,8,0,0"><TextBlock Text="{Binding ProjectGroupCount}" FontSize="26" FontWeight="Bold"/><TextBlock Text=" nhóm" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="8,0,0,4"/></StackPanel></StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardFlat}" Padding="18" Margin="5,0">
+                                <StackPanel><TextBlock Text="CHI TIẾT TRONG DỰ ÁN" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal" Margin="0,8,0,0"><TextBlock Text="{Binding ProjectPartCount}" FontSize="26" FontWeight="Bold"/><TextBlock Text=" dòng" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="8,0,0,4"/></StackPanel></StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardFlat}" Padding="18" Margin="10,0,0,0">
+                                <StackPanel><TextBlock Text="TẤM ĐÃ NESTING" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal" Margin="0,8,0,0"><TextBlock Text="{Binding ProjectSheetCount}" FontSize="26" FontWeight="Bold"/><TextBlock Text=" tấm" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="8,0,0,4"/></StackPanel></StackPanel>
+                            </Border>
+                        </UniformGrid>
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Nhóm vật liệu" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                <TextBlock Text="Mỗi nhóm có danh sách chi tiết, khổ tấm và kết quả nesting riêng." Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="Nhấp chuột phải vào danh sách để tạo hoặc quản lý nhóm." Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ListBox x:Name="ProjectGroupsList" ItemsSource="{Binding ProjectGroups}" SelectedItem="{Binding SelectedProjectGroup, Mode=TwoWay}" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled" PreviewMouseRightButtonDown="ProjectGroupsList_PreviewMouseRightButtonDown">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="0"/>
+                                    <Setter Property="Margin" Value="0,0,0,8"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="GroupCard" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="10">
+                                                    <ContentPresenter/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="GroupCard" Property="BorderBrush" Value="{DynamicResource PrimaryLightBrush}"/></Trigger>
+                                                    <Trigger Property="IsSelected" Value="True"><Setter TargetName="GroupCard" Property="Background" Value="{DynamicResource AccentTintAltBrush}"/><Setter TargetName="GroupCard" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/></Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="16,12">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="100"/><ColumnDefinition Width="90"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="{Binding Path}" FontSize="11.5" Foreground="{DynamicResource TextMutedBrush}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding PartCount}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><TextBlock Text="chi tiết" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/></StackPanel>
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center"><TextBlock Text="{Binding SheetCount}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><TextBlock Text="tấm" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/></StackPanel>
+                                        <Button Grid.Column="3" Content="Mở nhóm" Tag="{Binding}" Click="OpenProjectGroup_Click" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                            <ListBox.ContextMenu>
+                                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}" Opened="ProjectGroupsContextMenu_Opened">
+                                    <MenuItem Header="Tạo nhóm vật liệu…" Click="CreateProjectGroup_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="Đổi tên nhóm…" Click="RenameProjectGroup_Click"/>
+                                    <MenuItem Header="Nhân bản nhóm" Command="{Binding DuplicateProjectGroupCommand}"/>
+                                    <Separator/>
+                                    <MenuItem Header="Gỡ nhóm khỏi dự án" Click="RemoveProjectGroup_Click"/>
+                                </ContextMenu>
+                            </ListBox.ContextMenu>
+                        </ListBox>
+                        <TextBlock Text="Gỡ nhóm chỉ bỏ liên kết khỏi dự án, file workspace vẫn được giữ lại." Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5" Margin="2,6,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
             <TabItem Header="Part">
-                <Grid Margin="12"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <DockPanel Grid.Row="0" Margin="0,0,0,12"><StackPanel><TextBlock Text="Quản lý chi tiết" Style="{StaticResource SectionTitle}"/><TextBlock Text="Nhấp chuột phải để chọn dòng, sửa thuộc tính hoặc xóa; có thể chọn nhiều dòng để áp dụng thuộc tính hàng loạt." Foreground="{DynamicResource TextSecondaryBrush}"/></StackPanel></DockPanel>
-                    <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="3*" MinWidth="320"/><ColumnDefinition Width="14"/><ColumnDefinition Width="2*" MinWidth="250"/></Grid.ColumnDefinitions><GridSplitter Grid.Column="1" Width="14" HorizontalAlignment="Center" VerticalAlignment="Stretch" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Background="Transparent" Cursor="SizeWE" ToolTip="Kéo để đổi kích thước"/>
-                        <Border Grid.Column="0" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14"><DockPanel><StackPanel DockPanel.Dock="Top"><WrapPanel Margin="0,0,0,10"><Button Command="{Binding AddDxfCommand}" ToolTip="Ctrl+D"><StackPanel Orientation="Horizontal"><Path Data="{StaticResource IcPlus}" Style="{StaticResource Ico}" Width="13" Height="13" Margin="0,0,6,0"/><TextBlock Text="Thêm DXF" VerticalAlignment="Center"/></StackPanel></Button><Button Content="Thêm thư mục" Command="{Binding AddFolderCommand}"/></WrapPanel></StackPanel>
-                            <Grid DockPanel.Dock="Bottom" Margin="0,8,0,0"><TextBlock x:Name="PartSelectionSummary" Text="0 dòng chi tiết" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" VerticalAlignment="Center"/></Grid><DataGrid x:Name="PartsGrid" ItemsSource="{Binding Parts}" SelectedItem="{Binding SelectedPart, Mode=TwoWay}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" CanUserSortColumns="False" CanUserReorderColumns="False" SelectionMode="Extended" SelectionUnit="FullRow" HeadersVisibility="Column" GridLinesVisibility="Horizontal" AllowDrop="True" IsEnabled="{Binding IsIdle}" PreviewMouseRightButtonDown="PartsGrid_PreviewMouseRightButtonDown" PreviewKeyDown="PartsGrid_PreviewKeyDown" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource PartListBorderBrush}" BorderThickness="1" RowBackground="{DynamicResource CardBgBrush}" AlternatingRowBackground="{DynamicResource CardBgAltBrush}" RowStyle="{StaticResource PartRowStyle}" ColumnHeaderStyle="{StaticResource CenteredHeader}" CellStyle="{StaticResource CenteredCell}" RowHeight="29" SelectionChanged="PartsGrid_SelectionChanged" Loaded="PartsGrid_Loaded" CellEditEnding="PartsGrid_CellEditEnding">
-                                <DataGrid.ContextMenu><ContextMenu Opened="PartsContextMenu_Opened"><MenuItem Header="Chọn tất cả" Click="SelectAllParts_Click"/><MenuItem Header="Bỏ chọn" Click="ClearPartSelection_Click"/><Separator/><MenuItem Header="Sửa / Thuộc tính…" Click="EditSelectedPartProperties_Click" Tag="requires-selection"/><Separator/><MenuItem Header="Xóa dòng đã chọn" Click="DeleteSelectedParts_Click" Tag="requires-selection"/><MenuItem Header="Xóa tất cả chi tiết…" Click="DeleteAllParts_Click"/></ContextMenu></DataGrid.ContextMenu><DataGrid.Columns>
-                                    <DataGridTextColumn Header="STT" Binding="{Binding Sequence, Mode=OneWay}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="48"/><DataGridTextColumn Header="Tên" Binding="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="*"/><DataGridTextColumn Header="SL" Binding="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="54"/><DataGridTextColumn Header="Rộng (mm)" Binding="{Binding Width, Mode=OneWay, StringFormat='{}{0:0.##}'}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="90"/><DataGridTextColumn Header="Cao (mm)" Binding="{Binding Height, Mode=OneWay, StringFormat='{}{0:0.##}'}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="90"/><DataGridTemplateColumn Header="Vật liệu · Độ dày" Width="250"><DataGridTemplateColumn.CellTemplate><DataTemplate><ComboBox ItemsSource="{Binding DataContext.Presets, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" SelectedItem="{Binding AssignedPreset, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" DisplayMemberPath="AssignmentLabel" Padding="4,2"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn><DataGridCheckBoxColumn Header="Xoay" Binding="{Binding CanRotate, Mode=TwoWay}" Width="76"/><DataGridCheckBoxColumn Header="Lật hình" Binding="{Binding Flip, Mode=TwoWay}" Width="70"/>
-                                </DataGrid.Columns>
-                            </DataGrid></DockPanel></Border>
-                        <Border Grid.Column="2" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*" MinHeight="210"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                            <DockPanel Grid.Row="0"><Button DockPanel.Dock="Right" Content="Fit Zoom" Click="PartPreviewFitZoom_Click" Padding="9,5" Margin="8,0,0,0" ToolTip="Đưa chi tiết vừa khung xem trước"/><StackPanel><TextBlock Text="Xem trước chi tiết" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><TextBlock Text="{Binding SelectedPart.Name, TargetNullValue=Chưa chọn chi tiết}" FontSize="13" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,3,0,2"/><TextBlock Text="{Binding SelectedPart.Info, TargetNullValue=Chọn một dòng để xem thông tin}" TextWrapping="Wrap" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,5"/></StackPanel></DockPanel>
-                            <TextBlock Grid.Row="1" Text="Layer DXF" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,3"/>
-                            <Border Grid.Row="2" Background="{DynamicResource CardBgAltBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="5" Margin="0,0,0,8" MaxHeight="100"><ListBox ItemsSource="{Binding SelectedPart.Layers}" ItemTemplate="{StaticResource LayerTemplate}" BorderThickness="0" Background="Transparent" ScrollViewer.VerticalScrollBarVisibility="Auto"/></Border>
-                            <Border Grid.Row="3" Background="{DynamicResource CardBgAltBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="8" MinHeight="210"><local:PartPreviewView x:Name="PartPreview" Part="{Binding SelectedPart}"/></Border>
-                            <TextBlock Grid.Row="4" Text="Con lăn chuột để zoom · Fit Zoom để căn vừa khung · bật/tắt layer để cập nhật hình" FontSize="11.5" Foreground="{DynamicResource TextMutedBrush}" Margin="2,5,0,0"/>
-                        </Grid></Border>
+                <Grid Margin="24">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Chi tiết" Style="{StaticResource SectionTitle}" FontSize="24"/>
+                            <TextBlock Text="Quản lý danh sách sản xuất và thông tin vật liệu theo từng chi tiết." Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,18,0">
+                            <StackPanel Margin="0,0,18,0"><TextBlock Text="MÃ CHI TIẾT" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal"><TextBlock Text="{Binding Parts.Count}" FontSize="17" FontWeight="Bold"/><TextBlock Text=" dòng" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="5,0,0,2"/></StackPanel></StackPanel>
+                            <Border Width="1" Height="30" Background="{DynamicResource AppBorderBrush}" Margin="0,0,18,0"/>
+                            <StackPanel Margin="0,0,18,0"><TextBlock Text="TỔNG SỐ LƯỢNG" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal"><TextBlock Text="{Binding RequiredCount}" FontSize="17" FontWeight="Bold"/><TextBlock Text=" chi tiết" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="5,0,0,2"/></StackPanel></StackPanel>
+                            <Border Width="1" Height="30" Background="{DynamicResource AppBorderBrush}" Margin="0,0,18,0"/>
+                            <StackPanel MaxWidth="170"><TextBlock Text="NHÓM ĐANG LÀM VIỆC" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding SelectedProjectGroup.Name, TargetNullValue='Chưa chọn nhóm'}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/></StackPanel>
+                        </StackPanel>
+                        <WrapPanel Grid.Column="2" VerticalAlignment="Center">
+                            <Button Content="Thêm thư mục" Command="{Binding AddFolderCommand}"/>
+                            <Button Content="Thêm hình chữ nhật" Command="{Binding AddRectCommand}"/>
+                            <Button Content="Thêm DXF" Command="{Binding AddDxfCommand}" Style="{StaticResource PrimaryButton}" Margin="0" ToolTip="Ctrl+D"/>
+                        </WrapPanel>
+                    </Grid>
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="3.5*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource CardFlat}" Padding="12">
+                            <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Grid Grid.Row="0" Margin="4,0,4,10">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="Danh sách chi tiết" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                        <TextBlock Text="Nhấp chuột phải để sửa thuộc tính, xóa hoặc chọn nhiều dòng." FontSize="11.5" Foreground="{DynamicResource TextMutedBrush}" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button Content="Chọn tất cả" Click="SelectAllParts_Click"/>
+                                        <Button Content="Bỏ chọn" Click="ClearPartSelection_Click" Margin="0"/>
+                                    </StackPanel>
+                                </Grid>
+                                <DataGrid x:Name="PartsGrid" Grid.Row="1" ItemsSource="{Binding Parts}" SelectedItem="{Binding SelectedPart, Mode=TwoWay}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" CanUserSortColumns="False" CanUserReorderColumns="False" SelectionMode="Extended" SelectionUnit="FullRow" HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource PartListBorderBrush}" AllowDrop="True" IsEnabled="{Binding IsIdle}" PreviewMouseRightButtonDown="PartsGrid_PreviewMouseRightButtonDown" PreviewKeyDown="PartsGrid_PreviewKeyDown" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderHoverBrush}" BorderThickness="1.5" RowBackground="{DynamicResource CardBgBrush}" AlternatingRowBackground="{DynamicResource CardBgAltBrush}" RowStyle="{StaticResource ModernTableRow}" ColumnHeaderStyle="{StaticResource PartTableHeader}" CellStyle="{StaticResource ModernTableCell}" RowHeight="42" SelectionChanged="PartsGrid_SelectionChanged" Loaded="PartsGrid_Loaded" CellEditEnding="PartsGrid_CellEditEnding">
+                                    <DataGrid.ContextMenu>
+                                        <ContextMenu Opened="PartsContextMenu_Opened">
+                                            <MenuItem Header="Chọn tất cả" Click="SelectAllParts_Click"/>
+                                            <MenuItem Header="Bỏ chọn" Click="ClearPartSelection_Click"/>
+                                            <Separator/>
+                                            <MenuItem Header="Sửa / Thuộc tính…" Click="EditSelectedPartProperties_Click" Tag="requires-selection"/>
+                                            <Separator/>
+                                            <MenuItem Header="Xóa dòng đã chọn" Click="DeleteSelectedParts_Click" Tag="requires-selection"/>
+                                            <MenuItem Header="Xóa tất cả chi tiết…" Click="DeleteAllParts_Click"/>
+                                        </ContextMenu>
+                                    </DataGrid.ContextMenu>
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="STT" Binding="{Binding Sequence, Mode=OneWay}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="48"/>
+                                        <DataGridTextColumn Header="Tên chi tiết" Binding="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" ElementStyle="{StaticResource TableText}" EditingElementStyle="{StaticResource TableEditor}" Width="*"/>
+                                        <DataGridTemplateColumn Header="Vật liệu · Độ dày" Width="220">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ComboBox ItemsSource="{Binding DataContext.Presets, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" SelectedItem="{Binding AssignedPreset, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" DisplayMemberPath="AssignmentLabel" Padding="6,3" ToolTip="Chọn vật liệu, độ dày và khổ tấm"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Rộng (mm)" Binding="{Binding Width, Mode=OneWay, StringFormat='{}{0:0.##}'}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="88"/>
+                                        <DataGridTextColumn Header="Cao (mm)" Binding="{Binding Height, Mode=OneWay, StringFormat='{}{0:0.##}'}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="88"/>
+                                        <DataGridTextColumn Header="Số lượng" Binding="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="76"/>
+                                        <DataGridTextColumn Header="Thông tin / ghi chú" Binding="{Binding Info, Mode=OneWay}" ElementStyle="{StaticResource TableText}" IsReadOnly="True" Width="170"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <Grid Grid.Row="2" Margin="4,9,4,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="PartSelectionSummary" Text="0 dòng chi tiết" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="Chuột phải: thuộc tính · Delete: xóa dòng đã chọn" Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                        <GridSplitter Grid.Column="1" Width="12" HorizontalAlignment="Center" VerticalAlignment="Stretch" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Background="Transparent" Cursor="SizeWE" ToolTip="Kéo để đổi kích thước"/>
+                        <Grid Grid.Column="2">
+                            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                            <Border Grid.Row="0" Style="{StaticResource CardFlat}" Padding="12" Margin="0,0,0,10">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                    <StackPanel Grid.Row="0" Margin="2,0,2,8">
+                                        <TextBlock Text="LAYER DXF" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                                        <TextBlock Text="Bật/tắt layer để cập nhật biên dạng chi tiết." FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                    <Border Grid.Row="1" Background="{DynamicResource CardBgAltBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="7">
+                                        <ListBox ItemsSource="{Binding SelectedPart.Layers}" ItemTemplate="{StaticResource LayerTemplate}" BorderThickness="0" Background="Transparent" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                            <Border Grid.Row="1" Style="{StaticResource CardFlat}" Padding="12">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                    <DockPanel Grid.Row="0" Margin="2,0,2,7">
+                                        <Button DockPanel.Dock="Right" Click="OpenPartPreview_Click" Padding="7" Margin="8,0,0,0" ToolTip="Mở cửa sổ xem trước chi tiết">
+                                            <Path Data="{StaticResource IcEye}" Style="{StaticResource Ico}" Width="18" Height="18"/>
+                                        </Button>
+                                        <Button DockPanel.Dock="Right" Content="Fit" Click="PartPreviewFitZoom_Click" Padding="8,4" Margin="6,0,0,0" ToolTip="Căn hình vừa khung xem trước"/>
+                                        <TextBlock Text="Hình xem trước" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                                    </DockPanel>
+                                    <StackPanel Grid.Row="1" Margin="2,0,2,8">
+                                        <TextBlock Text="{Binding SelectedPart.Name, TargetNullValue='Chưa chọn chi tiết'}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding SelectedPart.Info, TargetNullValue='Chọn một dòng để xem thông tin'}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding SelectedPart.Error}" Foreground="{DynamicResource DangerBrush}" FontSize="11.5" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <Border Grid.Row="2" Background="{DynamicResource CardBgAltBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                                        <local:PartPreviewView x:Name="PartPreview" Part="{Binding SelectedPart}" MinHeight="130" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </Grid>
                     </Grid>
                 </Grid>
             </TabItem>
@@ -219,25 +399,36 @@
                 </Grid>
             </TabItem>
  <TabItem Header="Nesting">
- <Grid Margin="14,12,14,12">
+ <Grid Margin="24,18,24,16">
  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
- <Border Style="{StaticResource CardFlat}" Padding="10,6" Margin="0,0,0,10">
- <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
- <Button Style="{StaticResource PrimaryButton}" Command="{Binding RunCommand}" Padding="18,0" Height="40" Margin="0,0,6,0" ToolTip="Chạy nesting (F5)">
- <StackPanel Orientation="Horizontal"><Path Data="{StaticResource IcPlay}" Style="{StaticResource IcoSolid}" Width="13" Height="13" Fill="{DynamicResource OnPrimaryBrush}" Margin="0,0,9,0"/><TextBlock Text="Chạy Nesting" FontSize="14" VerticalAlignment="Center" Foreground="{DynamicResource OnPrimaryBrush}"/></StackPanel>
+ <Grid Grid.Row="0" Margin="0,0,0,8">
+ <Grid.ColumnDefinitions><ColumnDefinition Width="1.1*"/><ColumnDefinition Width="2.2*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+ <StackPanel VerticalAlignment="Center">
+ <TextBlock Text="Nesting" Style="{StaticResource SectionTitle}" FontSize="24"/>
+ <TextBlock Text="Sắp xếp chi tiết trên tấm · Chỉnh tay trực tiếp trên vùng bố trí." Foreground="{DynamicResource TextSecondaryBrush}"/>
+ </StackPanel>
+ <UniformGrid Grid.Column="1" Columns="4" VerticalAlignment="Center" Margin="12,0">
+ <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="CHI TIẾT ĐÃ XẾP" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><TextBlock Text="{Binding PlacedCount}" FontSize="17" FontWeight="Bold"/><TextBlock Text="/" Foreground="{DynamicResource TextMutedBrush}" Margin="5,0"/><TextBlock Text="{Binding RequiredCount}" FontSize="14" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="0,0,0,2"/></StackPanel></StackPanel>
+ <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="TẤM ĐÃ DÙNG" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><TextBlock Text="{Binding Sheets.Count}" FontSize="17" FontWeight="Bold"/><TextBlock Text=" tấm" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="5,0,0,2"/></StackPanel></StackPanel>
+ <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="HIỆU SUẤT TẤM" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><TextBlock Text="{Binding SelectedSheet.Sheet.Utilization, StringFormat='{}{0:P1}', TargetNullValue='—'}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PrimaryDarkBrush}" HorizontalAlignment="Center"/></StackPanel>
+ <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="THỜI GIAN TÍNH" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><TextBlock Text="{Binding LastNestDuration.TotalSeconds, StringFormat='{}{0:0.0} giây'}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center"/></StackPanel>
+ </UniformGrid>
+ <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="12,0,0,0">
+ <Button Style="{StaticResource PrimaryButton}" Command="{Binding RunCommand}" Padding="18,8" Margin="0,0,8,0" MinWidth="148" ToolTip="Chạy nesting (F5)">
+ <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><Path Data="{StaticResource IcPlay}" Style="{StaticResource IcoSolid}" Width="13" Height="13" Fill="{DynamicResource OnPrimaryBrush}" Margin="0,0,9,0"/><TextBlock Text="Chạy nesting" FontSize="13.5" VerticalAlignment="Center" Foreground="{DynamicResource OnPrimaryBrush}"/></StackPanel>
  </Button>
- <Button Command="{Binding CancelCommand}" Padding="14,8" Margin="0" ToolTip="Dừng và giữ kết quả tốt nhất hiện có">
- <StackPanel Orientation="Horizontal"><Path Data="{StaticResource IcStop}" Style="{StaticResource IcoSolid}" Width="14" Height="14" Margin="0,0,8,0"/><TextBlock Text="Dừng" VerticalAlignment="Center"/></StackPanel>
+ <Button Style="{StaticResource DangerButton}" Command="{Binding CancelCommand}" Padding="16,8" Margin="0" MinWidth="92" ToolTip="Dừng và giữ kết quả tốt nhất hiện có">
+ <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><Path Data="{StaticResource IcStop}" Style="{StaticResource IcoSolid}" Width="13" Height="13" Fill="{DynamicResource DangerTextBrush}" Margin="0,0,7,0"/><TextBlock Text="Dừng" VerticalAlignment="Center" Foreground="{DynamicResource DangerTextBrush}"/></StackPanel>
  </Button>
  </StackPanel>
- </Border>
+ </Grid>
  <Grid Grid.Row="1">
  <Grid.ColumnDefinitions>
- <ColumnDefinition Width="330" MinWidth="260"/>
+ <ColumnDefinition Width="270" MinWidth="240"/>
  <ColumnDefinition Width="12"/>
- <ColumnDefinition Width="*" MinWidth="360"/>
+ <ColumnDefinition Width="*" MinWidth="340"/>
  <ColumnDefinition Width="12"/>
- <ColumnDefinition Width="340" MinWidth="270"/>
+ <ColumnDefinition Width="318" MinWidth="260"/>
  </Grid.ColumnDefinitions>
  <GridSplitter Grid.Column="1" Width="12" HorizontalAlignment="Center" VerticalAlignment="Stretch" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Background="Transparent" Cursor="SizeWE" ToolTip="Kéo để đổi kích thước"/>
  <GridSplitter Grid.Column="3" Width="12" HorizontalAlignment="Center" VerticalAlignment="Stretch" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Background="Transparent" Cursor="SizeWE" ToolTip="Kéo để đổi kích thước"/>
@@ -343,7 +534,7 @@
  <TextBlock Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold"><Run Text="Tấm "/><Run Text="{Binding SelectedSheet.Sheet.Index, Mode=OneWay}"/><Run Text=" / "/><Run Text="{Binding Sheets.Count, Mode=OneWay}"/></TextBlock>
  </Border>
  <Button Click="NextSheet_Click" Padding="9,6" Margin="0,0,10,0" ToolTip="Tấm tiếp theo"><Path Data="{StaticResource IcNext}" Style="{StaticResource Ico}" Width="14" Height="14"/></Button>
- <Button Command="{Binding DeleteSelectedSheetCommand}" Padding="9,6" Margin="0,0,8,0" ToolTip="Xóa toàn bộ nesting của tấm đang chọn">
+ <Button Click="DeleteSelectedSheet_Click" Padding="9,6" Margin="0,0,8,0" ToolTip="Xóa toàn bộ nesting của tấm đang chọn">
  <StackPanel Orientation="Horizontal"><Path Data="{StaticResource IcTrash}" Style="{StaticResource Ico}" Width="15" Height="15" Margin="0,0,6,0"/><TextBlock Text="Xóa" VerticalAlignment="Center"/></StackPanel>
  </Button>
  <RadioButton GroupName="CanvasTools" IsChecked="True" Style="{StaticResource NavButton}" Padding="9,6" Margin="0,0,3,0" ToolTip="Chọn và kéo chi tiết" Click="PointerTool_Click"><Path Data="{StaticResource IcSelect}" Style="{StaticResource Ico}" Width="16" Height="16"/></RadioButton>
@@ -399,7 +590,7 @@
  <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
  <MenuItem Header="Thêm tấm thủ công" Command="{Binding AddManualSheetCommand}"/>
  <Separator/>
- <MenuItem Header="Xóa nesting tấm đang chọn" Command="{Binding DeleteSelectedSheetCommand}"/>
+ <MenuItem Header="Xóa nesting tấm đang chọn" Click="DeleteSelectedSheet_Click"/>
  <MenuItem Header="Xóa toàn bộ kết quả nesting…" Click="ClearNesting_Click"/>
  </ContextMenu>
  </ListBox.ContextMenu>
@@ -534,10 +725,19 @@
                 <StackPanel>
                     <TextBlock Text="ĐANG NESTING" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
                     <TextBlock Text="Ứng dụng đang thử bố trí theo từng vật liệu, độ dày và khổ tấm." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,5,0,14" TextWrapping="Wrap"/>
-                    <ProgressBar IsIndeterminate="True" Height="8" Foreground="{DynamicResource PrimaryBrush}" Background="{DynamicResource ProgressTrackBrush}" BorderThickness="0"/>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding ProgressPercent, StringFormat='{}{0:0}%'}" FontWeight="Bold" Foreground="{DynamicResource PrimaryDarkBrush}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <ProgressBar Grid.Column="1" Value="{Binding ProgressPercent, Mode=OneWay}" Maximum="100" Height="8" Foreground="{DynamicResource PrimaryBrush}" Background="{DynamicResource ProgressTrackBrush}" BorderThickness="0" VerticalAlignment="Center"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding ElapsedNestTimeText, StringFormat='{}Đã chạy: {0}'}" FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <TextBlock Grid.Column="1" Text="{Binding EstimatedRemainingTimeText, StringFormat='{}Còn lại: {0}'}" FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Right"/>
+                    </Grid>
                     <TextBlock Text="{Binding Progress, TargetNullValue=Đang khởi tạo...}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,12,0,2" TextWrapping="Wrap"/>
                     <TextBlock Text="{Binding Status}" FontSize="11.5" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
-                    <Button Content="Dừng nesting" Command="{Binding CancelCommand}" HorizontalAlignment="Right" Margin="0,16,0,0" Padding="14,7" Foreground="{DynamicResource DangerTextBrush}"/>
+                    <Button Content="Dừng nesting" Style="{StaticResource DangerButton}" Command="{Binding CancelCommand}" HorizontalAlignment="Right" Margin="0,16,0,0" Padding="14,7"/>
                 </StackPanel>
             </Border>
         </Border>
@@ -568,16 +768,6 @@
  <TextBlock Foreground="{DynamicResource WarningBadgeTextBrush}" FontWeight="SemiBold" VerticalAlignment="Center"><Run Text="Còn "/><Run Text="{Binding RemainingCount, Mode=OneWay}"/><Run Text=" chi tiết chưa được xếp. Kiểm tra kích thước tấm hoặc đổi tham số."/></TextBlock>
  </StackPanel>
  </Border>
- </StackPanel>
- <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
- <TextBlock Text="Tấm:" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
- <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"><Run Text="{Binding SelectedSheet.Sheet.Width, Mode=OneWay, StringFormat='{}{0:0}'}"/><Run Text=" × "/><Run Text="{Binding SelectedSheet.Sheet.Height, Mode=OneWay, StringFormat='{}{0:0}'}"/><Run Text=" mm"/></TextBlock>
- <Border Width="1" Height="16" Background="{DynamicResource AppBorderBrush}" Margin="12,0"/>
- <TextBlock Text="Vật liệu:" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
- <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"><Run Text="{Binding SelectedSheet.Material, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding SelectedSheet.Thickness, Mode=OneWay, StringFormat='{}{0:0.###}'}"/><Run Text=" mm"/></TextBlock>
- <Border Width="1" Height="16" Background="{DynamicResource AppBorderBrush}" Margin="12,0"/>
- <TextBlock Text="Hiển thị:" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
- <TextBlock x:Name="FooterZoom" Text="Fit" Foreground="{DynamicResource TextSecondaryBrush}"/>
  </StackPanel>
  </Grid>
  </Border>

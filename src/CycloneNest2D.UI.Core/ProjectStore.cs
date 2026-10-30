@@ -9,6 +9,7 @@ public static class ProjectStore
     public const string Extension = ".nest2d";
     public const string ProjectKind = "CycloneNest2D.Project";
     public const string GroupKind = "CycloneNest2D.Group";
+    public const int CurrentFormatVersion = 2;
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
     public sealed class PartDto
@@ -78,6 +79,7 @@ public static class ProjectStore
                   ?? throw new InvalidDataException("File dự án rỗng.");
         if (dto.Kind != ProjectKind)
             throw new InvalidDataException("File không phải dự án nhiều nhóm.");
+        EnsureSupportedVersion(dto);
         if (dto.Groups.Count == 0)
             throw new InvalidDataException("Dự án chưa có nhóm vật liệu nào.");
         return dto.Groups;
@@ -92,7 +94,7 @@ public static class ProjectStore
         var dto = new ProjectDto
         {
             Kind = ProjectKind,
-            Version = 2,
+            Version = CurrentFormatVersion,
             Groups = groups.Select(group => new GroupReferenceDto
             {
                 Id = group.Id,
@@ -102,9 +104,7 @@ public static class ProjectStore
                 SheetCount = group.SheetCount
             }).ToList()
         };
-        string tempPath = fullPath + ".tmp";
-        File.WriteAllText(tempPath, JsonSerializer.Serialize(dto, Json));
-        File.Move(tempPath, fullPath, true);
+        WriteAtomically(fullPath, JsonSerializer.Serialize(dto, Json));
     }
 
     public static void Save(string path, NestSettings settings, IEnumerable<PartItem> parts) =>
@@ -115,7 +115,7 @@ public static class ProjectStore
         TimeSpan lastNestDuration, DateTime? lastNestAt)
     {
         string dir = Path.GetDirectoryName(Path.GetFullPath(path))!;
-        var dto = new ProjectDto { Kind = GroupKind, Version = 2, Settings = settings.ToJson() };
+        var dto = new ProjectDto { Kind = GroupKind, Version = CurrentFormatVersion, Settings = settings.ToJson() };
         foreach (var part in parts)
         {
             var item = new PartDto
@@ -142,7 +142,7 @@ public static class ProjectStore
         dto.LastNestAt = lastNestAt;
 
         Directory.CreateDirectory(dir);
-        File.WriteAllText(path, JsonSerializer.Serialize(dto, Json));
+        WriteAtomically(path, JsonSerializer.Serialize(dto, Json));
     }
 
     public static void CopyWorkspace(string sourcePath, string destinationPath)
@@ -153,13 +153,14 @@ public static class ProjectStore
                   ?? throw new InvalidDataException("File nhóm rỗng.");
         if (dto.Kind == ProjectKind)
             throw new InvalidDataException("Không thể dùng file dự án tổng làm file nhóm.");
+        EnsureSupportedVersion(dto);
         foreach (var part in dto.Parts.Where(part => part.Path != null))
         {
             string full = Path.GetFullPath(Path.Combine(sourceDirectory, part.Path!));
             part.Path = Path.GetRelativePath(destinationDirectory, full);
         }
         Directory.CreateDirectory(destinationDirectory);
-        File.WriteAllText(destinationPath, JsonSerializer.Serialize(dto, Json));
+        WriteAtomically(destinationPath, JsonSerializer.Serialize(dto, Json));
     }
 
     /// <summary>Loads current group files and legacy single-workspace project files.</summary>
@@ -170,6 +171,7 @@ public static class ProjectStore
                   ?? throw new InvalidDataException("File dự án rỗng.");
         if (dto.Kind == ProjectKind)
             throw new InvalidDataException("Đây là file dự án tổng; hãy mở dự án tổng để chọn nhóm.");
+        EnsureSupportedVersion(dto);
         if (dto.Settings != null) settings.FromJson(dto.Settings);
 
         var items = new List<PartItem>();
@@ -209,6 +211,23 @@ public static class ProjectStore
             LastNestDuration = TimeSpan.FromSeconds(Math.Max(0, dto.LastNestDurationSeconds)),
             LastNestAt = dto.LastNestAt
         };
+    }
+
+    private static void EnsureSupportedVersion(ProjectDto dto)
+    {
+        if (dto.Version < 1 || dto.Version > CurrentFormatVersion)
+            throw new InvalidDataException(
+                $"Phiên bản dữ liệu dự án {dto.Version} không được hỗ trợ (hiện hỗ trợ 1–{CurrentFormatVersion}).");
+    }
+
+    private static void WriteAtomically(string path, string contents)
+    {
+        string fullPath = Path.GetFullPath(path);
+        string directory = Path.GetDirectoryName(fullPath)!;
+        Directory.CreateDirectory(directory);
+        string temporaryPath = fullPath + ".tmp";
+        File.WriteAllText(temporaryPath, contents);
+        File.Move(temporaryPath, fullPath, true);
     }
 
     /// <summary>Loads a workspace. Missing or invalid DXFs are reported without losing remaining parts.</summary>

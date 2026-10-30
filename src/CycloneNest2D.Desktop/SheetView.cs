@@ -32,7 +32,9 @@ public sealed class SheetView : FrameworkElement
     public double ZoomPercent => _zoom * 100;
     public event EventHandler? ZoomChanged;
     public event EventHandler? SelectionChanged;
+    public event EventHandler? DeleteSelectedPlacementsRequested;
     public IReadOnlyCollection<int> SelectedIndices => _selectedIndices;
+    public void ClearSelection() => SetSelection(Array.Empty<int>());
     public bool PanMode
     {
         get => _panMode;
@@ -629,8 +631,7 @@ public sealed class SheetView : FrameworkElement
         }
         if (e.Key == Key.Delete && _selectedIndices.Count > 0)
         {
-            Model?.DeleteSelectedPlacements();
-            SetSelection(Array.Empty<int>());
+            DeleteSelectedPlacementsRequested?.Invoke(this, EventArgs.Empty);
             e.Handled = true;
             return;
         }

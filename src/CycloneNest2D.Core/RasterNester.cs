@@ -221,11 +221,14 @@ internal static class RasterNester
 
         var syncLock = new object();
         bool earlyStop = false;
+        int completedLayouts = 0;
+        int progressSteps = Math.Max(1, keyRuns.Count + 6);
 
         Parallel.ForEach(keyRuns, runItem =>
         {
             if (earlyStop || IsStopped(opt, sw)) return;
-            var outcome = Pack(runItem.Order, types, sheet, c, s, rows, cols, primaryX, opt, sw);
+            var outcome = Pack(runItem.Order, types, sheet, c, s, rows, cols, primaryX, opt, sw,
+                fraction => opt.ReportProgress?.Invoke(0.9 * (Volatile.Read(ref completedLayouts) + fraction) / progressSteps));
             lock (syncLock)
             {
                 if (best == null || Better(outcome, best, primaryX))
@@ -235,6 +238,8 @@ internal static class RasterNester
                     bestName = $"sắp theo {runItem.Name}";
                 }
                 opt.Report?.Invoke($"Lấp {(opt.Direction == NestDirection.FillWidth ? "theo chiều rộng" : "theo chiều dài")}: {outcome.Sheets.Count} tấm, còn {outcome.Unplaced} chi tiết chưa đặt.");
+                Interlocked.Increment(ref completedLayouts);
+                opt.ReportProgress?.Invoke(0.9 * completedLayouts / progressSteps);
                 if (result.Unplaced.Count == 0 && GoalReached(outcome, fullSheetArea, target))
                 {
                     best = outcome;
@@ -261,10 +266,12 @@ internal static class RasterNester
                     if (rng.Next(2) == 0) (candidate[i], candidate[j]) = (candidate[j], candidate[i]);
                     else { var item = candidate[i]; candidate.RemoveAt(i); candidate.Insert(j, item); }
                 }
-                var outcome = Pack(candidate, types, sheet, c, s, rows, cols, primaryX, opt, sw);
+                var outcome = Pack(candidate, types, sheet, c, s, rows, cols, primaryX, opt, sw,
+                    fraction => opt.ReportProgress?.Invoke(0.9 * (keyRuns.Count + it + fraction) / progressSteps));
                 if (Better(outcome, best, primaryX)) { best = outcome; bestOrder = candidate; bestName = $"tìm kiếm thứ tự (lượt {it + 1})"; }
                 double utilization = OccupiedArea(outcome) / (fullSheetArea * Math.Max(1, outcome.Sheets.Count)) * 100;
                 opt.Report?.Invoke($"Tìm kiếm {it + 1}/{searchIterations}: {outcome.Sheets.Count} tấm, hiệu suất {utilization:0.0}% (mục tiêu {target:0.#}%).");
+                opt.ReportProgress?.Invoke(0.9 * (keyRuns.Count + it + 1) / progressSteps);
                 if (result.Unplaced.Count == 0 && GoalReached(outcome, fullSheetArea, target))
                 {
                     best = outcome; bestOrder = candidate; bestName = $"đã đạt mục tiêu hiệu suất ở lượt {it + 1}";
@@ -482,14 +489,18 @@ internal static class RasterNester
     // ---------- Đặt chi tiết ----------
 
     private static Outcome Pack(List<(int Type, int Inst)> order, List<PartType> types, SheetDefinition sheet,
-        double c, int s, int rows, int cols, bool primaryX, NestOptions opt, Stopwatch sw)
+        double c, int s, int rows, int cols, bool primaryX, NestOptions opt, Stopwatch sw,
+        Action<double>? reportProgress = null)
     {
         var oc = new Outcome();
         var impossible = new HashSet<int>();
         var feasibleBuf = new ulong[(cols + 63) / 64 + 4];
+        int progressInterval = Math.Max(1, order.Count / 100);
 
         for (int itemIndex = 0; itemIndex < order.Count; itemIndex++)
         {
+            if (itemIndex % progressInterval == 0)
+                reportProgress?.Invoke((double)itemIndex / Math.Max(1, order.Count));
             if (IsStopped(opt, sw))
             {
                 oc.Unplaced += order.Count - itemIndex;
@@ -526,6 +537,7 @@ internal static class RasterNester
             }
             else { impossible.Add(ti); oc.Unplaced++; }
         }
+        reportProgress?.Invoke(1);
         return oc;
     }
 

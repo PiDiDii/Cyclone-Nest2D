@@ -1006,7 +1006,24 @@ public sealed class UiCoreRegressionTests
                   partsGrid.Descendants().Count(element =>
                       element.Name.LocalName is "DataGridTextColumn" or "DataGridTemplateColumn" or "DataGridCheckBoxColumn") == 7,
                 "danh sách Part chỉ còn bảy cột sau khi bỏ xoay/lật");
-            Check(new[] { "48", "240", "160", "88", "88", "72", "*" }.SequenceEqual(
+            Check((string?)partsGrid.Attribute("GridLinesVisibility") == "All" &&
+                  (string?)partsGrid.Attribute("HorizontalGridLinesBrush") == "{DynamicResource PartListBorderBrush}" &&
+                  (string?)partsGrid.Attribute("VerticalGridLinesBrush") == "{DynamicResource PartListBorderBrush}" &&
+                  partsGrid.Descendants(wpf + "Setter").Any(setter =>
+                      (string?)setter.Attribute("Property") == "BorderThickness" &&
+                      (string?)setter.Attribute("Value") == "0,0,1,1"),
+                "danh sách chi tiết có lưới ngang/dọc theo màu theme");
+            var selectionSummary = doc.Descendants(wpf + "TextBlock").SingleOrDefault(text =>
+                (string?)text.Attribute(xamlNs + "Name") == "PartSelectionSummary");
+            var selectionToolbar = selectionSummary?.Ancestors(wpf + "StackPanel").FirstOrDefault(panel =>
+                panel.Descendants(wpf + "Button").Any(button => (string?)button.Attribute("Content") == "Chọn tất cả"));
+            Check(selectionToolbar?.Descendants(wpf + "Button").Any(button => (string?)button.Attribute("Content") == "Bỏ chọn") == true,
+                "bộ đếm lựa chọn nằm trong hàng nút thao tác");
+            Check(!xaml.Contains("Chuột phải: thuộc tính · Delete: xóa dòng đã chọn", StringComparison.Ordinal) &&
+                  !partsGrid.Parent!.Parent!.Elements(wpf + "Grid").Any(grid =>
+                      (string?)grid.Attribute("Grid.Row") == "2"),
+                "đã bỏ toàn bộ dòng trạng thái/hướng dẫn dưới bảng");
+            Check(new[] { "48", "280", "280", "100", "100", "100", "*" }.SequenceEqual(
                       partsGrid.Descendants().Where(element =>
                           element.Name.LocalName is "DataGridTextColumn" or "DataGridTemplateColumn")
                           .Select(column => (string?)column.Attribute("Width"))) &&
@@ -1026,14 +1043,16 @@ public sealed class UiCoreRegressionTests
                   mainWindowCode.Contains("PartColumnContextMenu_Opening", StringComparison.Ordinal) &&
                   mainWindowCode.Contains("Căn tiêu đề", StringComparison.Ordinal) &&
                   mainWindowCode.Contains("Căn nội dung", StringComparison.Ordinal) &&
-                  mainWindowCode.Contains("Enum.GetValues<PartGridTextAlignment>()", StringComparison.Ordinal) &&
+                  mainWindowCode.Contains("new[] { PartGridTextAlignment.Left, PartGridTextAlignment.Center }", StringComparison.Ordinal) &&
+                  mainWindowCode.Contains("PartGridAlignmentChoice", StringComparison.Ordinal) &&
                   !partHeaderStyle.Descendants(wpf + "Setter").Any(setter => (string?)setter.Attribute("Property") == "ContextMenu") &&
                   partAlignmentCode.Contains("part-grid-alignment.json", StringComparison.Ordinal) &&
+                  partAlignmentCode.Contains("Normalize(alignment)", StringComparison.Ordinal) &&
                   mainWindowCode.Contains("PartColumnAlignment_Click", StringComparison.Ordinal),
-                "không còn tự đo cột theo nội dung; menu tiêu đề có căn trái/giữa/phải và lưu tùy chỉnh");
+                "không tự đo cột; menu căn tiêu đề/nội dung chỉ có trái/giữa và lưu thiết lập");
             string desktopProject = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "CycloneNest2D.Desktop.csproj"));
-            Check(desktopProject.Contains("<Version>1.0.10</Version>", StringComparison.Ordinal) &&
-                  desktopProject.Contains("Cập nhật 30/10/2026", StringComparison.Ordinal),
+            Check(desktopProject.Contains("<Version>1.0.11</Version>", StringComparison.Ordinal) &&
+                  desktopProject.Contains("Cập nhật 31/10/2026", StringComparison.Ordinal),
                 "tăng phiên bản và cập nhật ngày phát hành");
             Check((string?)presetsGrid.Attribute("SelectionMode") == "Extended" &&
                   (string?)presetsGrid.Attribute("CanUserResizeColumns") == "False" &&

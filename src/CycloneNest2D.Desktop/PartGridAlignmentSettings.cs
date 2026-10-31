@@ -8,6 +8,7 @@ internal enum PartGridTextAlignment
 {
     Left,
     Center,
+    // Kept to read existing settings; Get and Set normalize this value to Center.
     Right
 }
 
@@ -26,11 +27,18 @@ internal sealed class PartGridAlignmentSettings
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "Nesting2D", "part-grid-alignment.json");
 
-    public PartGridColumnAlignment Get(string columnName) =>
-        _columns.TryGetValue(columnName, out var value) ? value : new PartGridColumnAlignment();
+    public PartGridColumnAlignment Get(string columnName)
+    {
+        if (!_columns.TryGetValue(columnName, out var value)) return new PartGridColumnAlignment();
+        Normalize(value);
+        return value;
+    }
 
-    public void Set(string columnName, PartGridColumnAlignment alignment) =>
+    public void Set(string columnName, PartGridColumnAlignment alignment)
+    {
+        Normalize(alignment);
         _columns[columnName] = alignment;
+    }
 
     public static PartGridAlignmentSettings Load(string path)
     {
@@ -43,9 +51,16 @@ internal sealed class PartGridAlignmentSettings
             if (string.IsNullOrWhiteSpace(name) ||
                 !Enum.IsDefined(alignment.Header) || !Enum.IsDefined(alignment.Content))
                 throw new InvalidDataException($"Thiết lập căn chỉnh cho cột '{name}' không hợp lệ.");
+            Normalize(alignment);
             settings.Set(name, alignment);
         }
         return settings;
+    }
+
+    private static void Normalize(PartGridColumnAlignment alignment)
+    {
+        if (alignment.Header == PartGridTextAlignment.Right) alignment.Header = PartGridTextAlignment.Center;
+        if (alignment.Content == PartGridTextAlignment.Right) alignment.Content = PartGridTextAlignment.Center;
     }
 
     public void Save(string path)
@@ -61,14 +76,12 @@ internal sealed class PartGridAlignmentSettings
     public static HorizontalAlignment ToHorizontalAlignment(PartGridTextAlignment alignment) => alignment switch
     {
         PartGridTextAlignment.Left => HorizontalAlignment.Left,
-        PartGridTextAlignment.Right => HorizontalAlignment.Right,
         _ => HorizontalAlignment.Center
     };
 
     public static System.Windows.TextAlignment ToTextAlignment(PartGridTextAlignment alignment) => alignment switch
     {
         PartGridTextAlignment.Left => System.Windows.TextAlignment.Left,
-        PartGridTextAlignment.Right => System.Windows.TextAlignment.Right,
         _ => System.Windows.TextAlignment.Center
     };
 }

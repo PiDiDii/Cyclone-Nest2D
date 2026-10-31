@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private bool _isInitialized;
     private ResourceDictionary? _darkThemeDict;
     private PartGridAlignmentSettings _partGridAlignmentSettings = new();
+    private sealed record PartGridAlignmentChoice(DataGridColumn Column, bool IsHeader, PartGridTextAlignment Alignment);
 
     public MainWindow(NestSettings settings)
     {
@@ -38,7 +39,7 @@ public partial class MainWindow : Window
         _vm.Presets.CollectionChanged += (_, _) => ScheduleSheetPresetRowsSync();
         SyncSheetPresetRows();
         var version = typeof(MainWindow).Assembly.GetName().Version;
-        AboutVersion.Text = $"Phiên bản {version?.Major}.{version?.Minor}.{version?.Build} · Cập nhật 30/10/2026";
+        AboutVersion.Text = $"Phiên bản {version?.Major}.{version?.Minor}.{version?.Build} · Cập nhật 31/10/2026";
         _vm.Parts.CollectionChanged += (_, _) =>
         {
             UpdatePartSelectionSummary();
@@ -467,6 +468,8 @@ public partial class MainWindow : Window
             var cellStyle = new Style(typeof(DataGridCell), (Style)FindResource("ModernTableCell"));
             cellStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, horizontal));
             cellStyle.Setters.Add(new Setter(Control.VerticalContentAlignmentProperty, VerticalAlignment.Center));
+            cellStyle.Setters.Add(new Setter(Control.BorderBrushProperty, FindResource("PartListBorderBrush")));
+            cellStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0, 0, 1, 1)));
             column.CellStyle = cellStyle;
 
             var headerStyle = new Style(typeof(DataGridColumnHeader), (Style)FindResource("PartTableHeader"));
@@ -500,36 +503,30 @@ public partial class MainWindow : Window
 
         string columnName = header.Column.Header?.ToString() ?? "";
         var alignment = _partGridAlignmentSettings.Get(columnName);
-        var menu = CreatePartColumnAlignmentMenu(alignment);
+        var menu = CreatePartColumnAlignmentMenu(header.Column, alignment);
         header.ContextMenu = menu;
         menu.PlacementTarget = header;
         menu.IsOpen = true;
         e.Handled = true;
     }
 
-    private ContextMenu CreatePartColumnAlignmentMenu(PartGridColumnAlignment alignment)
+    private ContextMenu CreatePartColumnAlignmentMenu(DataGridColumn column, PartGridColumnAlignment alignment)
     {
         var menu = new ContextMenu();
-        AddAlignmentGroup(menu, "Căn tiêu đề", "Header", alignment.Header);
-        AddAlignmentGroup(menu, "Căn nội dung", "Content", alignment.Content);
+        AddAlignmentGroup(menu, column, "Căn tiêu đề", isHeader: true, selected: alignment.Header);
+        AddAlignmentGroup(menu, column, "Căn nội dung", isHeader: false, selected: alignment.Content);
         return menu;
     }
 
-    private void AddAlignmentGroup(ContextMenu menu, string label, string target, PartGridTextAlignment selected)
+    private void AddAlignmentGroup(ContextMenu menu, DataGridColumn column, string label, bool isHeader, PartGridTextAlignment selected)
     {
         var group = new MenuItem { Header = label };
-        foreach (var value in Enum.GetValues<PartGridTextAlignment>())
+        foreach (var value in new[] { PartGridTextAlignment.Left, PartGridTextAlignment.Center })
         {
-            string title = value switch
-            {
-                PartGridTextAlignment.Left => "Căn trái",
-                PartGridTextAlignment.Center => "Căn giữa",
-                _ => "Căn phải"
-            };
             group.Items.Add(new MenuItem
             {
-                Header = title,
-                Tag = $"{target}:{value}",
+                Header = value == PartGridTextAlignment.Left ? "Căn trái" : "Căn giữa",
+                Tag = new PartGridAlignmentChoice(column, isHeader, value),
                 IsCheckable = true,
                 IsChecked = value == selected
             });
@@ -541,27 +538,17 @@ public partial class MainWindow : Window
 
     private void PartColumnAlignment_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not MenuItem { Tag: string tag }) return;
-        var parts = tag.Split(':', 2);
-        if (parts.Length != 2 || !Enum.TryParse(parts[1], out PartGridTextAlignment value)) return;
-        ContextMenu? menu = null;
-        DependencyObject? current = sender as DependencyObject;
-        while (current != null)
-        {
-            if (current is ContextMenu found) { menu = found; break; }
-            current = current is MenuItem menuItem
-                ? menuItem.Parent ?? ItemsControl.ItemsControlFromItemContainer(menuItem)
-                : LogicalTreeHelper.GetParent(current);
-        }
-        if (menu?.PlacementTarget is not DataGridColumnHeader header) return;
-
-        string columnName = header.Column.Header?.ToString() ?? "";
+        if (sender is not MenuItem { Tag: PartGridAlignmentChoice choice }) return;
+        string columnName = choice.Column.Header?.ToString() ?? "";
         var alignment = _partGridAlignmentSettings.Get(columnName);
-        if (parts[0] == "Header") alignment.Header = value;
-        else alignment.Content = value;
+        if (choice.IsHeader) alignment.Header = choice.Alignment;
+        else alignment.Content = choice.Alignment;
         _partGridAlignmentSettings.Set(columnName, alignment);
         ApplyPartGridAlignmentSettings();
-        menu.IsOpen = false;
+        if (sender is MenuItem option &&
+            ItemsControl.ItemsControlFromItemContainer(option) is MenuItem group &&
+            ItemsControl.ItemsControlFromItemContainer(group) is ContextMenu menu)
+            menu.IsOpen = false;
         try
         {
             _partGridAlignmentSettings.Save(PartGridAlignmentSettings.DefaultFilePath);
@@ -578,9 +565,7 @@ public partial class MainWindow : Window
         if (PartSelectionSummary == null || PartsGrid == null) return;
         int total = _vm.Parts.Count;
         int selected = PartsGrid.SelectedItems.Count;
-        PartSelectionSummary.Text = selected > 0
-            ? $"Đã chọn {selected} / {total} dòng"
-            : $"{total} dòng chi tiết";
+        PartSelectionSummary.Text = $"Đã chọn {selected} / {total} dòng";
     }
 
     private void PointerTool_Click(object sender, RoutedEventArgs e)

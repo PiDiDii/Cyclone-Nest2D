@@ -59,6 +59,13 @@ public sealed class MainViewModel : ObservableObject
     }
 
     private readonly IDialogService _dialogs;
+    private readonly ProjectService _projectService = new();
+    private readonly ProjectLifecycleService _projectLifecycleService = new();
+    private readonly NestingOrchestrator _nestingOrchestrator = new();
+    private readonly ManualPlacementService _manualPlacementService = new();
+    private readonly PartManagementService _partManagementService = new();
+    private readonly SceneBuilder _sceneBuilder = new();
+    private readonly ExportCoordinator _exportCoordinator = new();
     private readonly object _progressSync = new();
     private CancellationTokenSource? _cts;
 
@@ -236,14 +243,7 @@ public sealed class MainViewModel : ObservableObject
             part.AssignPreset(preset);
     }
 
-    private void LinkAllMatchingParts()
-    {
-        foreach (var part in Parts.Where(p => p.AssignedPreset == null && !string.IsNullOrWhiteSpace(p.Material) && p.Thickness > 0))
-        {
-            var match = Settings.SheetPresets.FirstOrDefault(sh => MaterialKey(sh.Material) == MaterialKey(part.Material) && Math.Round(sh.Thickness, 4) == Math.Round(part.Thickness, 4));
-            if (match != null) part.AssignPreset(match);
-        }
-    }
+    private void LinkAllMatchingParts() => _projectLifecycleService.LinkAllMatchingParts(Parts, Settings.SheetPresets);
 
     public int AssignPresetToParts(IEnumerable<PartItem> parts, SheetPreset preset)
     {
@@ -591,8 +591,7 @@ public sealed class MainViewModel : ObservableObject
 
     public void AddRect()
     {
-        var item = PartItem.NewRect(UniqueName("Chu_nhat", null), 200, 100);
-        Parts.Add(item);
+        var item = _partManagementService.AddRectangle(Parts, UniqueName);
         SelectedPart = item;
         Status = "Đã thêm hình chữ nhật 200 x 100: sửa Rộng/Cao/Số lượng ngay trong bảng.";
     }
@@ -617,36 +616,29 @@ public sealed class MainViewModel : ObservableObject
     {
         if (SelectedPart == null) return;
         int i = Parts.IndexOf(SelectedPart);
-        Parts.Remove(SelectedPart);
+        _partManagementService.RemoveParts(Parts, new[] { SelectedPart });
         SelectedPart = Parts.Count == 0 ? null : Parts[Math.Min(i, Parts.Count - 1)];
     }
 
     public int RemoveParts(IEnumerable<PartItem> parts)
     {
-        var removing = parts.Where(p => Parts.Contains(p)).Distinct().ToArray();
-        if (removing.Length == 0) return 0;
-        if (SelectedPart != null && removing.Contains(SelectedPart)) SelectedPart = null;
-        foreach (var part in removing) Parts.Remove(part);
-        Status = $"Đã xóa {removing.Length} dòng Part.";
-        return removing.Length;
+        var removing = _partManagementService.RemoveParts(Parts, parts);
+        if (removing == 0) return 0;
+        if (SelectedPart != null && parts.Contains(SelectedPart)) SelectedPart = null;
+        Status = $"Đã xóa {removing} dòng Part.";
+        return removing;
     }
 
     public void ClearParts()
     {
         if (Parts.Count > 0 && !_dialogs.Confirm("Xoá toàn bộ danh sách chi tiết?")) return;
-        Parts.Clear();
+        _partManagementService.ClearParts(Parts);
         SelectedPart = null;
     }
 
     /// <summary>Tên chưa trùng (so không phân biệt hoa thường); except = dòng đang đổi tên.</summary>
-    public string UniqueName(string name, PartItem? except)
-    {
-        if (string.IsNullOrWhiteSpace(name)) name = "Chi_tiet";
-        string cand = name;
-        for (int n = 2; Parts.Any(p => p != except && string.Equals(p.Name, cand, StringComparison.OrdinalIgnoreCase)); n++)
-            cand = $"{name}_{n}";
-        return cand;
-    }
+    public string UniqueName(string name, PartItem? except) =>
+        _partManagementService.UniqueName(Parts, name, except);
 
     private void PostMessages(IEnumerable<string> msgs)
     {
@@ -675,31 +667,11 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        var preflight = new List<string>();
-        foreach (var p in usable)
-        {
-            if (string.IsNullOrWhiteSpace(p.Material)) preflight.Add($"{p.Name}: hãy chọn vật liệu/độ dày từ Danh sách khổ tấm.");
-            if (!(p.Thickness > 0)) preflight.Add($"{p.Name}: cấu hình đã chọn chưa có độ dày hợp lệ.");
-            if (p.IsDxf)
-            {
-                if (p.Geometry == null) preflight.Add($"{p.Name}: không có geometry DXF hợp lệ; không thể nesting.");
-                else
-                {
-                    var contour = ShapeOps.Build(p.Geometry);
-                    if (!contour.Reliable) preflight.Add($"{p.Name}: contour DXF lỗi — {contour.Problem ?? "không tìm thấy đường biên kín"}. Sửa DXF hoặc chọn lại layer trước khi nesting.");
-                }
-            }
-        }
         var validSheets = Settings.SheetPresets.Where(s => !string.IsNullOrWhiteSpace(s.Material) &&
             !string.Equals(s.Material, "Chưa phân loại", StringComparison.OrdinalIgnoreCase) && s.Thickness > 0 &&
             s.Width > 2 * Settings.Margin && s.Height > 2 * Settings.Margin).ToList();
-        var materialGroups = usable.GroupBy(p => (Material: MaterialKey(p.Material), Thickness: Math.Round(p.Thickness, 4))).ToList();
-        foreach (var group in materialGroups)
-        {
-            if (string.IsNullOrWhiteSpace(group.First().Material) || group.Key.Thickness <= 0) continue;
-            bool hasSheet = validSheets.Any(sh => MaterialKey(sh.Material) == group.Key.Material && Math.Round(sh.Thickness, 4) == group.Key.Thickness);
-            if (!hasSheet) preflight.Add($"{group.First().Material} · {group.Key.Thickness:0.####} mm: chưa có khổ tấm khả dụng tương ứng trong Danh sách khổ tấm.");
-        }
+        var preflight = _nestingOrchestrator.BuildPreflightIssues(usable, Settings, validSheets);
+        var materialGroups = _nestingOrchestrator.GroupMaterialThicknesses(usable).ToList();
         if (preflight.Count > 0)
         {
             Messages.Clear();
@@ -915,28 +887,14 @@ public sealed class MainViewModel : ObservableObject
     private SheetResult? CurrentSheet => SelectedSheet?.Sheet;
 
     private SheetDefinition DefinitionFor(SheetResult sheet)
-    {
-        var defaults = _resultSheet ?? Settings.ToSheet();
-        return new SheetDefinition(sheet.Width, sheet.Height, defaults.Margin, defaults.Spacing);
-    }
+        => _sceneBuilder.DefinitionFor(sheet, _resultSheet, Settings);
 
     private List<string> ValidateResult(NestResult result)
-    {
-        var errors = new List<string>();
-        foreach (var sheet in result.Sheets)
-        {
-            var single = new NestResult();
-            single.Sheets.Add(sheet);
-            errors.AddRange(Validator.Check(single, DefinitionFor(sheet)));
-        }
-        return errors;
-    }
+        => _exportCoordinator.ValidateResult(result, DefinitionFor);
 
     private void RebuildScene()
     {
-        Scene = CurrentSheet != null && _resultSheet != null
-            ? PreviewBuilder.Build(CurrentSheet, DefinitionFor(CurrentSheet))
-            : PreviewScene.Empty(Settings.ToSheet());
+        Scene = _sceneBuilder.Build(CurrentSheet, _resultSheet, Settings);
         RefreshPlacementSelection();
         SelectedInfo = DescribeSelected();
     }
@@ -952,29 +910,16 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Kiểm tra (không ghi) việc đặt chi tiết tại góc dưới-trái (x, y). null = hợp lệ.</summary>
     public string? CheckMove(int index, double x, double y)
     {
-        if (CurrentSheet == null || _resultSheet == null || index < 0 || index >= CurrentSheet.Placements.Count)
-            return "Không có chi tiết được chọn.";
-        var cand = PlacementOps.Moved(CurrentSheet.Placements[index], x, y);
-        return Validator.CheckPlacement(CurrentSheet, index, cand, DefinitionFor(CurrentSheet));
+        var sheet = CurrentSheet;
+        if (sheet == null || _resultSheet == null) return "Không có chi tiết được chọn.";
+        return _manualPlacementService.CheckMove(sheet, DefinitionFor(sheet), index, x, y);
     }
 
     public string? CheckMoveSelected(double dx, double dy)
     {
         var sheet = CurrentSheet;
         if (sheet == null || _resultSheet == null || _selectedPlacementIndices.Count == 0) return "Chưa chọn chi tiết.";
-        var selected = _selectedPlacementIndices.Where(i => i >= 0 && i < sheet.Placements.Count).ToHashSet();
-        if (selected.Count == 0) return "Chưa chọn chi tiết.";
-        var obstacles = new SheetResult { Index = sheet.Index, Width = sheet.Width, Height = sheet.Height, Material = sheet.Material, Thickness = sheet.Thickness, StockName = sheet.StockName };
-        for (int i = 0; i < sheet.Placements.Count; i++) if (!selected.Contains(i)) obstacles.Placements.Add(sheet.Placements[i]);
-        var definition = DefinitionFor(sheet);
-        foreach (int index in selected.Order())
-        {
-            var candidate = PlacementOps.Moved(sheet.Placements[index], sheet.Placements[index].X + dx, sheet.Placements[index].Y + dy);
-            string? error = Validator.CheckPlacement(obstacles, -1, candidate, definition);
-            if (error != null) return error;
-            obstacles.Placements.Add(candidate);
-        }
-        return null;
+        return _manualPlacementService.CheckMoveSelected(sheet, DefinitionFor(sheet), _selectedPlacementIndices, dx, dy);
     }
 
     public bool TryMoveSelected(double dx, double dy)
@@ -988,11 +933,13 @@ public sealed class MainViewModel : ObservableObject
             Toasts.Show(ToastKind.Warning, "Không thể di chuyển nhóm", error);
             return false;
         }
-        foreach (int index in _selectedPlacementIndices)
+
+        if (!_manualPlacementService.TryMoveSelected(sheet, DefinitionFor(sheet), _selectedPlacementIndices, dx, dy))
         {
-            var placement = sheet.Placements[index];
-            sheet.Placements[index] = PlacementOps.Moved(placement, placement.X + dx, placement.Y + dy);
+            Status = "Không thể di chuyển nhóm: phạm vi không hợp lệ.";
+            return false;
         }
+
         AfterManualEdit($"Đã di chuyển {_selectedPlacementIndices.Count} chi tiết.");
         return true;
     }
@@ -1000,105 +947,10 @@ public sealed class MainViewModel : ObservableObject
     public bool MoveSelectedUntilBlocked(double dx, double dy)
     {
         var sheet = CurrentSheet;
-        if (sheet == null || _selectedPlacementIndices.Count == 0) return false;
-        bool horizontal = Math.Abs(dx) > 1e-9;
-        if (horizontal == (Math.Abs(dy) > 1e-9)) return false;
-        var selected = _selectedPlacementIndices.Where(i => i >= 0 && i < sheet.Placements.Count).ToArray();
-        if (selected.Length == 0) return false;
-        double sign = Math.Sign(horizontal ? dx : dy);
-        double min = horizontal ? selected.Min(i => sheet.Placements[i].X) : selected.Min(i => sheet.Placements[i].Y);
-        double max = horizontal ? selected.Max(i => sheet.Placements[i].X + sheet.Placements[i].Width) : selected.Max(i => sheet.Placements[i].Y + sheet.Placements[i].Height);
-        double limit = horizontal
-            ? sign > 0 ? sheet.Width - _resultSheet!.Margin - max : min - _resultSheet!.Margin
-            : sign > 0 ? sheet.Height - _resultSheet!.Margin - max : min - _resultSheet!.Margin;
-        if (limit <= 1e-6) return false;
-        var selectedSet = selected.ToHashSet();
-        var obstacles = new SheetResult
-        {
-            Index = sheet.Index, Width = sheet.Width, Height = sheet.Height,
-            Material = sheet.Material, Thickness = sheet.Thickness, StockName = sheet.StockName
-        };
-        for (int i = 0; i < sheet.Placements.Count; i++)
-            if (!selectedSet.Contains(i)) obstacles.Placements.Add(sheet.Placements[i]);
-        int stationaryCount = obstacles.Placements.Count;
-        var definition = DefinitionFor(sheet);
-
-        string? CheckAt(double distance)
-        {
-            double tx = horizontal ? sign * distance : 0;
-            double ty = horizontal ? 0 : sign * distance;
-            foreach (int index in selected)
-            {
-                var original = sheet.Placements[index];
-                var candidate = PlacementOps.Moved(original, original.X + tx, original.Y + ty);
-                string? error = Validator.CheckPlacement(obstacles, -1, candidate, definition);
-                if (error != null)
-                {
-                    obstacles.Placements.RemoveRange(stationaryCount, obstacles.Placements.Count - stationaryCount);
-                    return error;
-                }
-                obstacles.Placements.Add(candidate);
-            }
-            obstacles.Placements.RemoveRange(stationaryCount, obstacles.Placements.Count - stationaryCount);
-            return null;
-        }
-
-        double nearestObstacle = double.PositiveInfinity;
-        foreach (int index in selected)
-        {
-            var part = sheet.Placements[index];
-            foreach (var obstacle in obstacles.Placements)
-            {
-                bool overlapsAcrossAxis = horizontal
-                    ? part.Y < obstacle.Y + obstacle.Height + definition.Spacing &&
-                      obstacle.Y < part.Y + part.Height + definition.Spacing
-                    : part.X < obstacle.X + obstacle.Width + definition.Spacing &&
-                      obstacle.X < part.X + part.Width + definition.Spacing;
-                if (!overlapsAcrossAxis) continue;
-
-                double partStart = horizontal ? part.X : part.Y;
-                double partSize = horizontal ? part.Width : part.Height;
-                double obstacleStart = horizontal ? obstacle.X : obstacle.Y;
-                double obstacleSize = horizontal ? obstacle.Width : obstacle.Height;
-                double distance;
-                if (sign > 0)
-                {
-                    if (obstacleStart + obstacleSize + definition.Spacing < partStart) continue;
-                    distance = obstacleStart - (partStart + partSize + definition.Spacing);
-                }
-                else
-                {
-                    if (obstacleStart - definition.Spacing > partStart + partSize) continue;
-                    distance = partStart - (obstacleStart + obstacleSize + definition.Spacing);
-                }
-                nearestObstacle = Math.Min(nearestObstacle, Math.Max(0, distance));
-            }
-        }
-
-        // Skip empty travel before the nearest possible bounding-box interaction;
-        // retain the established one-millimeter probe interval near geometry.
-        const double probeStep = 1;
-        double lastValid = 0, firstInvalid = double.NaN;
-        double distanceToProbe = Math.Min(limit, double.IsFinite(nearestObstacle)
-            ? Math.Max(probeStep, nearestObstacle)
-            : limit);
-        for (double distance = distanceToProbe; ; distance = Math.Min(distance + probeStep, limit))
-        {
-            if (CheckAt(distance) != null) { firstInvalid = distance; break; }
-            lastValid = distance;
-            if (distance >= limit - 1e-9) break;
-        }
-        if (!double.IsNaN(firstInvalid))
-        {
-            double lo = lastValid, hi = firstInvalid;
-            for (int i = 0; i < 10; i++)
-            {
-                double mid = (lo + hi) / 2;
-                if (CheckAt(mid) == null) lo = mid; else hi = mid;
-            }
-            lastValid = lo;
-        }
-        return lastValid > 1e-6 && TryMoveSelected(horizontal ? sign * lastValid : 0, horizontal ? 0 : sign * lastValid);
+        if (sheet == null || _selectedPlacementIndices.Count == 0 || _resultSheet == null) return false;
+        bool moved = _manualPlacementService.MoveSelectedUntilBlocked(sheet, DefinitionFor(sheet), _selectedPlacementIndices, dx, dy);
+        if (moved) AfterManualEdit($"Đã di chuyển {_selectedPlacementIndices.Count} chi tiết theo vật cản.");
+        return moved;
     }
 
     public int DeleteSelectedPlacements()
@@ -1233,51 +1085,23 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Dời chi tiết nếu hợp lệ. Trả về null nếu thành công, ngược lại là lý do (không đổi gì).</summary>
     public string? TryMove(int index, double x, double y)
     {
-        var err = CheckMove(index, x, y);
+        var sheet = CurrentSheet;
+        if (sheet == null || _resultSheet == null) return "Không có tấm đang chọn.";
+        var err = _manualPlacementService.TryMove(sheet, DefinitionFor(sheet), index, x, y);
         if (err != null) { Status = "Không thể đặt ở đó: " + err; Toasts.Show(ToastKind.Warning, "Không thể đặt ở đó", err); return err; }
-        var s = CurrentSheet!;
-        s.Placements[index] = PlacementOps.Moved(s.Placements[index], x, y);
-        AfterManualEdit($"Đã dời {s.Placements[index].PartName} #{s.Placements[index].Instance}.");
+        var p = sheet.Placements[index];
+        AfterManualEdit($"Đã dời {p.PartName} #{p.Instance}.");
         return null;
     }
 
     /// <summary>Dời part theo một trục tới vị trí xa nhất trước vật cản hoặc mép tấm.</summary>
     public bool MoveUntilBlocked(int index, double dx, double dy)
     {
-        if (CurrentSheet == null || _resultSheet == null || index < 0 || index >= CurrentSheet.Placements.Count) return false;
-        bool horizontal = Math.Abs(dx) > 1e-9;
-        if (horizontal == (Math.Abs(dy) > 1e-9)) return false;
-        var p = CurrentSheet.Placements[index];
-        double sign = Math.Sign(horizontal ? dx : dy);
-        double limit = horizontal
-            ? sign > 0 ? CurrentSheet.Width - _resultSheet.Margin - p.X - p.Width : p.X - _resultSheet.Margin
-            : sign > 0 ? CurrentSheet.Height - _resultSheet.Margin - p.Y - p.Height : p.Y - _resultSheet.Margin;
-        if (limit <= 1e-6) return false;
-
-        const double probeStep = 0.25;
-        double lastValid = 0, firstInvalid = double.NaN;
-        for (double distance = Math.Min(probeStep, limit); ; distance = Math.Min(distance + probeStep, limit))
-        {
-            double x = p.X + (horizontal ? sign * distance : 0);
-            double y = p.Y + (horizontal ? 0 : sign * distance);
-            if (CheckMove(index, x, y) != null) { firstInvalid = distance; break; }
-            lastValid = distance;
-            if (distance >= limit - 1e-9) break;
-        }
-        if (!double.IsNaN(firstInvalid))
-        {
-            double lo = lastValid, hi = firstInvalid;
-            for (int i = 0; i < 12; i++)
-            {
-                double mid = (lo + hi) / 2;
-                double x = p.X + (horizontal ? sign * mid : 0);
-                double y = p.Y + (horizontal ? 0 : sign * mid);
-                if (CheckMove(index, x, y) == null) lo = mid; else hi = mid;
-            }
-            lastValid = lo;
-        }
-        if (lastValid <= 1e-6) return false;
-        return TryMove(index, p.X + (horizontal ? sign * lastValid : 0), p.Y + (horizontal ? 0 : sign * lastValid)) == null;
+        var sheet = CurrentSheet;
+        if (sheet == null || _resultSheet == null || index < 0 || index >= sheet.Placements.Count) return false;
+        bool moved = _manualPlacementService.MoveUntilBlocked(sheet, DefinitionFor(sheet), index, dx, dy);
+        if (moved) AfterManualEdit($"Đã dời {sheet.Placements[index].PartName} #{sheet.Placements[index].Instance} đến vị trí tối đa.");
+        return moved;
     }
 
     /// <summary>Thả một instance từ bộ lọc vào sheet; tâm hình được đặt tại tọa độ thả (mm).</summary>
@@ -1377,23 +1201,30 @@ public sealed class MainViewModel : ObservableObject
     {
         var sheet = CurrentSheet;
         if (sheet == null || SelectedPlacement < 0 || SelectedPlacement >= sheet.Placements.Count) return;
-        var before = sheet.Placements[SelectedPlacement];
-        var candidate = before with { Shape = before.Shape == null ? null : ShapeOps.MirrorHorizontal(before.Shape) };
-        var error = Validator.CheckPlacement(sheet, SelectedPlacement, candidate, DefinitionFor(sheet));
-        if (error != null) { Status = "Không lật được: " + error; Toasts.Show(ToastKind.Warning, "Không lật được", error); return; }
-        sheet.Placements[SelectedPlacement] = candidate;
-        AfterManualEdit($"Đã lật {candidate.PartName} #{candidate.Instance} theo trục dọc.");
+        var definition = DefinitionFor(sheet);
+        if (!_manualPlacementService.TryMirror(sheet, definition, SelectedPlacement))
+        {
+            var error = Validator.CheckPlacement(sheet, SelectedPlacement, sheet.Placements[SelectedPlacement], definition);
+            Status = "Không lật được: " + (error ?? "không xác định");
+            Toasts.Show(ToastKind.Warning, "Không lật được", Status);
+            return;
+        }
+        AfterManualEdit($"Đã lật {sheet.Placements[SelectedPlacement].PartName} #{sheet.Placements[SelectedPlacement].Instance} theo trục dọc.");
     }
 
     public void RotateSelected()
     {
         var s = CurrentSheet;
         if (s == null || _resultSheet == null || SelectedPlacement < 0 || SelectedPlacement >= s.Placements.Count) return;
-        var cand = PlacementOps.Rotated90(s.Placements[SelectedPlacement]);
-        var err = Validator.CheckPlacement(s, SelectedPlacement, cand, DefinitionFor(s));
-        if (err != null) { Status = "Không xoay được: " + err; Toasts.Show(ToastKind.Warning, "Không xoay được", err); return; }
-        s.Placements[SelectedPlacement] = cand;
-        AfterManualEdit($"Đã xoay {cand.PartName} #{cand.Instance} thêm 90°.");
+        var definition = DefinitionFor(s);
+        if (!_manualPlacementService.TryRotate(s, definition, SelectedPlacement))
+        {
+            var error = Validator.CheckPlacement(s, SelectedPlacement, s.Placements[SelectedPlacement], definition);
+            Status = "Không xoay được: " + (error ?? "không xác định");
+            Toasts.Show(ToastKind.Warning, "Không xoay được", Status);
+            return;
+        }
+        AfterManualEdit($"Đã xoay {s.Placements[SelectedPlacement].PartName} #{s.Placements[SelectedPlacement].Instance} thêm 90°.");
     }
 
     private void AfterManualEdit(string msg)
@@ -1427,7 +1258,7 @@ public sealed class MainViewModel : ObservableObject
         if (destination == null) return;
         try
         {
-            var files = ExportService.ExportSheets(Result, _resultSheet, destination, options);
+            var files = _exportCoordinator.ExportSheets(Result, _resultSheet, destination, options);
             string location = options.FileLayout == DxfFileLayout.SingleFile ? files[0] : destination;
             Status = $"Đã xuất {files.Count} DXF: {location}";
             Toasts.Show(ToastKind.Success, "Đã xuất DXF", options.FileLayout == DxfFileLayout.SingleFile ? Path.GetFileName(location) : $"{files.Count} file trong {location}");
@@ -1443,7 +1274,7 @@ public sealed class MainViewModel : ObservableObject
         Parts.Clear();
         ClearResult();
         ProjectGroups.Clear();
-        var group = new ProjectGroupItem(Guid.NewGuid().ToString("N"), "Nhóm vật liệu 1", "");
+        var group = _projectLifecycleService.CreateEmptyGroup(ProjectPath ?? "", "Nhóm vật liệu 1");
         ProjectGroups.Add(group);
         _activeProjectGroup = group;
         _syncingProjectGroups = true;
@@ -1503,18 +1334,8 @@ public sealed class MainViewModel : ObservableObject
             ProjectGroups.Clear();
             if (isProjectIndex)
             {
-                string projectDirectory = Path.GetDirectoryName(fullPath)!;
-                foreach (var reference in references!)
-                {
-                    string childPath = Path.GetFullPath(Path.Combine(projectDirectory, reference.Path));
-                    ProjectGroups.Add(new ProjectGroupItem(reference.Id, reference.Name, childPath)
-                    {
-                        PartCount = reference.PartCount,
-                        SheetCount = reference.SheetCount
-                    });
-                    if (!File.Exists(childPath))
-                        problems.Add($"Nhóm '{reference.Name}' không tìm thấy file con: {childPath}");
-                }
+                foreach (var group in _projectLifecycleService.BuildProjectGroupsFromIndex(fullPath, problems))
+                    ProjectGroups.Add(group);
                 ProjectPath = fullPath;
                 _activeProjectGroup = null;
                 _syncingProjectGroups = true;
@@ -1550,12 +1371,7 @@ public sealed class MainViewModel : ObservableObject
                     Math.Abs(preset.Height - Settings.SheetHeight) < 1e-6);
                 OnPropertyChanged(nameof(SelectedPreset));
                 var snapshot = legacySnapshot!;
-                var name = GroupNameFor(snapshot.Parts, 1);
-                var legacyGroup = new ProjectGroupItem(Guid.NewGuid().ToString("N"), name, fullPath)
-                {
-                    PartCount = snapshot.Parts.Count,
-                    SheetCount = snapshot.Result?.Sheets.Count ?? 0
-                };
+                var legacyGroup = _projectLifecycleService.CreateLegacyGroup(fullPath, snapshot.Parts, snapshot.Result);
                 ProjectGroups.Add(legacyGroup);
                 ProjectPath = fullPath;
                 _activeProjectGroup = legacyGroup;
@@ -1589,42 +1405,17 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             string fullPath = Path.GetFullPath(path);
-            bool sameProject = ProjectPath != null &&
-                string.Equals(Path.GetFullPath(ProjectPath), fullPath, StringComparison.OrdinalIgnoreCase);
-            string dataDirectory = ProjectStore.DataDirectory(fullPath);
-            foreach (var group in ProjectGroups)
-            {
-                string targetChild = Path.Combine(dataDirectory, group.Id + ProjectStore.Extension);
-                bool needsChildPath = string.IsNullOrWhiteSpace(group.Path) ||
-                    string.Equals(Path.GetFullPath(group.Path), fullPath, StringComparison.OrdinalIgnoreCase);
-                if (!needsChildPath && !sameProject && File.Exists(group.Path))
-                {
-                    if (!string.Equals(Path.GetFullPath(group.Path), Path.GetFullPath(targetChild), StringComparison.OrdinalIgnoreCase))
-                        ProjectStore.CopyWorkspace(group.Path, targetChild);
-                    group.Path = targetChild;
-                }
-                else if (needsChildPath)
-                {
-                    group.Path = targetChild;
-                }
-            }
+            _projectLifecycleService.SyncGroupPathsForProject(ProjectPath, fullPath, ProjectGroups);
 
             var active = _activeProjectGroup;
             if (active != null)
             {
                 if (string.IsNullOrWhiteSpace(active.Path) ||
                     string.Equals(Path.GetFullPath(active.Path), fullPath, StringComparison.OrdinalIgnoreCase))
-                    active.Path = Path.Combine(dataDirectory, active.Id + ProjectStore.Extension);
+                    active.Path = _projectLifecycleService.BuildChildProjectPath(fullPath, active.Id);
                 SaveActiveWorkspace();
             }
-            ProjectStore.SaveProjectIndex(fullPath, ProjectGroups.Select(group => new ProjectStore.GroupReferenceDto
-            {
-                Id = group.Id,
-                Name = group.Name,
-                Path = group.Path,
-                PartCount = group.PartCount,
-                SheetCount = group.SheetCount
-            }).ToList());
+            _projectLifecycleService.SaveProjectIndex(fullPath, ProjectGroups);
             ProjectPath = fullPath;
             IsProjectDirty = false;
             OnPropertyChanged(nameof(Title));
@@ -1642,19 +1433,16 @@ public sealed class MainViewModel : ObservableObject
         if (groupName.Length == 0) { _dialogs.ShowMessage("Hãy nhập tên nhóm vật liệu."); return false; }
         if (ProjectPath == null && !SaveProject(true)) return false;
         if (IsProjectDirty && !SaveProject(false)) return false;
-        if (ProjectGroups.Any(group => string.Equals(group.Name, groupName, StringComparison.OrdinalIgnoreCase)))
+
+        string resolvedGroupName = _projectLifecycleService.BuildUniqueGroupName(ProjectGroups, groupName);
+        if (!string.Equals(groupName, resolvedGroupName, StringComparison.OrdinalIgnoreCase))
         {
             _dialogs.ShowMessage("Tên nhóm đã tồn tại trong dự án.");
             return false;
         }
 
-        string groupId = Guid.NewGuid().ToString("N");
-        var group = new ProjectGroupItem(groupId, groupName,
-            Path.Combine(ProjectStore.DataDirectory(ProjectPath!), groupId + ProjectStore.Extension));
-        var groupSettings = new NestSettings();
-        groupSettings.FromJson(Settings.ToJson());
-        ProjectStore.SaveWorkspace(group.Path, groupSettings, Array.Empty<PartItem>(), null, null,
-            false, false, TimeSpan.Zero, null);
+        var group = _projectLifecycleService.CreateGroupForProject(ProjectPath!, resolvedGroupName);
+        _projectLifecycleService.SaveEmptyGroupWorkspace(group, Settings);
         ProjectGroups.Add(group);
         IsProjectDirty = true;
         NewProjectGroupName = "";
@@ -1667,8 +1455,7 @@ public sealed class MainViewModel : ObservableObject
     {
         string groupName = (name ?? "").Trim();
         if (group == null || groupName.Length == 0) return false;
-        if (ProjectGroups.Any(other => other != group &&
-            string.Equals(other.Name, groupName, StringComparison.OrdinalIgnoreCase)))
+        if (_projectLifecycleService.IsGroupNameTaken(ProjectGroups, groupName, group))
         {
             _dialogs.ShowMessage("Tên nhóm đã tồn tại trong dự án.");
             return false;
@@ -1684,20 +1471,11 @@ public sealed class MainViewModel : ObservableObject
     {
         var source = _activeProjectGroup;
         if (source == null || ProjectPath == null) return false;
-        string copyName = source.Name + " - bản sao";
-        int suffix = 2;
-        while (ProjectGroups.Any(group => string.Equals(group.Name, copyName, StringComparison.OrdinalIgnoreCase)))
-            copyName = source.Name + " - bản sao " + suffix++;
+
+        string copyName = _projectLifecycleService.BuildDuplicateGroupName(ProjectGroups, source.Name);
         if (!SaveProject(false)) return false;
 
-        string newPath = Path.Combine(ProjectStore.DataDirectory(ProjectPath),
-            Guid.NewGuid().ToString("N") + ProjectStore.Extension);
-        ProjectStore.CopyWorkspace(source.Path, newPath);
-        var duplicate = new ProjectGroupItem(Guid.NewGuid().ToString("N"), copyName, newPath)
-        {
-            PartCount = source.PartCount,
-            SheetCount = source.SheetCount
-        };
+        var duplicate = _projectLifecycleService.DuplicateGroup(ProjectPath, source, copyName);
         ProjectGroups.Add(duplicate);
         IsProjectDirty = true;
         SelectedProjectGroup = duplicate;
@@ -1805,35 +1583,19 @@ public sealed class MainViewModel : ObservableObject
 
     private void SaveActiveWorkspace()
     {
-        if (_activeProjectGroup == null || string.IsNullOrWhiteSpace(_activeProjectGroup.Path)) return;
-        ProjectStore.SaveWorkspace(_activeProjectGroup.Path, Settings, Parts, Result, _resultSheet,
+        _projectLifecycleService.SaveActiveWorkspace(_activeProjectGroup, Settings, Parts, Result, _resultSheet,
             IsStale, IsEdited, LastNestDuration, LastNestAt);
         UpdateActiveGroupSummary();
     }
 
-    private void UpdateActiveGroupSummary()
-    {
-        if (_activeProjectGroup == null) return;
-        _activeProjectGroup.PartCount = Parts.Count;
-        _activeProjectGroup.SheetCount = Result?.Sheets.Count ?? 0;
-        NotifyProjectSummary();
-    }
+    private void UpdateActiveGroupSummary() =>
+        _projectLifecycleService.UpdateGroupSummary(_activeProjectGroup, Parts.Count, Result?.Sheets.Count ?? 0, NotifyProjectSummary);
 
     private void NotifyProjectSummary()
     {
         OnPropertyChanged(nameof(ProjectGroupCount));
         OnPropertyChanged(nameof(ProjectPartCount));
         OnPropertyChanged(nameof(ProjectSheetCount));
-    }
-
-    private static string GroupNameFor(IReadOnlyList<PartItem> parts, int index)
-    {
-        var materials = parts.Select(part => part.Material).Where(material => !string.IsNullOrWhiteSpace(material))
-            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var thicknesses = parts.Select(part => part.Thickness).Where(thickness => thickness > 0).Distinct().ToList();
-        return materials.Count == 1 && thicknesses.Count == 1
-            ? $"{materials[0]} · {thicknesses[0]:0.###} mm"
-            : $"Nhóm vật liệu {index}";
     }
 
     private void Fail(string msg)

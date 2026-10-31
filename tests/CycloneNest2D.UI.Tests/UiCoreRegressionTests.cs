@@ -9,6 +9,79 @@ namespace CycloneNest2D.UI.Tests;
 
 public sealed class UiCoreRegressionTests
 {
+    [Fact]
+    [Trait("Domain", "ProjectService")]
+    public void ProjectService_CreatesStableProjectGroupNames()
+    {
+        var service = new ProjectService();
+        var group = service.CreateProjectGroup("  Nhóm 1  ");
+
+        Assert.Equal("Nhóm 1", group.Name);
+        Assert.False(string.IsNullOrWhiteSpace(group.Id));
+    }
+
+    [Fact]
+    [Trait("Domain", "ProjectLifecycle")]
+    public void ProjectLifecycleService_BuildsUniqueGroupNameAndReferences()
+    {
+        var service = new ProjectLifecycleService();
+        var groups = new[]
+        {
+            new ProjectGroupItem("g1", "Nhóm vật liệu", "C:/tmp/g1.nest2d")
+        };
+
+        Assert.Equal("Nhóm vật liệu 2", service.BuildUniqueGroupName(groups, "Nhóm vật liệu"));
+        Assert.Equal("Nhóm vật liệu - bản sao", service.BuildDuplicateGroupName(groups, "Nhóm vật liệu"));
+        Assert.Single(service.BuildProjectReferences(groups));
+    }
+
+    [Fact]
+    [Trait("Domain", "ManualPlacement")]
+    public void ManualPlacementService_RejectsAndMovesWithinBounds()
+    {
+        var service = new ManualPlacementService();
+        var sheet = new SheetResult
+        {
+            Index = 1,
+            Width = 100,
+            Height = 100,
+            Material = "SS400",
+            Thickness = 2,
+            StockName = "Tấm test"
+        };
+        sheet.Placements.Add(new Placement("A", 1, 10, 10, 20, 20, false));
+        sheet.Placements.Add(new Placement("B", 1, 60, 10, 20, 20, false));
+        var definition = new SheetDefinition(100, 100, 5, 3);
+
+        Assert.NotNull(service.CheckMoveSelected(sheet, definition, new[] { 1 }, -50, 0));
+        Assert.True(service.MoveSelectedUntilBlocked(sheet, definition, new[] { 1 }, 25, 0));
+        Assert.True(sheet.Placements[1].X > 60);
+    }
+
+    [Fact]
+    [Trait("Domain", "NestingPreflight")]
+    public void NestingOrchestrator_FlagsMissingMaterialAndMissingSheet()
+    {
+        var settings = new NestSettings { SheetWidth = 1000, SheetHeight = 600, Margin = 5 };
+        var validSheets = new[]
+        {
+            new SheetPreset("Tấm 1", 1000, 600, "SS400", 2)
+        };
+
+        var missingMaterial = PartItem.NewRect("Phần không vật liệu", 50, 40, 1);
+        missingMaterial.Material = "";
+        missingMaterial.Thickness = 2;
+
+        var validPart = PartItem.NewRect("Phần hợp lệ", 40, 30, 1);
+        validPart.Material = "SS400";
+        validPart.Thickness = 2;
+
+        var issues = new NestingOrchestrator().BuildPreflightIssues(new[] { missingMaterial, validPart }, settings, validSheets);
+
+        Assert.Contains(issues, issue => issue.Contains("Phần không vật liệu", StringComparison.Ordinal));
+        Assert.DoesNotContain(issues, issue => issue.Contains("Phần hợp lệ", StringComparison.Ordinal));
+    }
+
     public static IEnumerable<object[]> PartManagementCases() => DiscoverCases("PartManagement");
     public static IEnumerable<object[]> NestingPreviewCases() => DiscoverCases("NestingPreview");
     public static IEnumerable<object[]> ManualPlacementCases() => DiscoverCases("ManualPlacement");

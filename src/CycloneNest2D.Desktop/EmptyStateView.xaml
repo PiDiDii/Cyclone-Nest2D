@@ -1,0 +1,28 @@
+<UserControl x:Class="CycloneNest2D.Desktop.EmptyStateView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:CycloneNest2D.Desktop"
+             HorizontalAlignment="Center" VerticalAlignment="Center">
+    <Border Background="{DynamicResource OverlayCardBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="28">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Setter Property="Visibility" Value="Collapsed"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding Result}" Value="{x:Null}">
+                        <Setter Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
+        <StackPanel HorizontalAlignment="Center" MaxWidth="320">
+            <TextBlock Text="Chưa có bố trí" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center"/>
+            <TextBlock Text="Kéo một chi tiết từ Bộ lọc chi tiết vào tấm để bắt đầu xếp thủ công, hoặc chạy tự động." Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,6,0,14" TextAlignment="Center" TextWrapping="Wrap"/>
+            <Button Command="{Binding RunCommand}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <Path Data="{StaticResource IcPlay}" Style="{StaticResource IcoSolid}" Width="12" Height="12" Fill="{DynamicResource OnPrimaryBrush}" Margin="0,0,8,0"/>
+                    <TextBlock Text="Chạy Nesting" VerticalAlignment="Center" Foreground="{DynamicResource OnPrimaryBrush}"/>
+                </StackPanel>
+            </Button>
+        </StackPanel>
+    </Border>
+</UserControl>

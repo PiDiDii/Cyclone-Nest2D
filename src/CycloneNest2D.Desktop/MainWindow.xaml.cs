@@ -399,6 +399,30 @@ public partial class MainWindow : Window
         catch { }
     }
 
+    private void ToggleShortcutOverlay_Click(object sender, RoutedEventArgs e) => ToggleShortcutOverlay();
+
+    private void ToggleShortcutOverlay()
+    {
+        if (ShortcutOverlayPopup == null) return;
+        if (ShortcutOverlayPopup.IsOpen)
+        {
+            ShortcutOverlayPopup.IsOpen = false;
+            return;
+        }
+
+        ShortcutOverlayText.Text =
+            "Ctrl+N — dự án mới\n" +
+            "Ctrl+O — mở dự án\n" +
+            "Ctrl+S — lưu dự án\n" +
+            "Ctrl+D — thêm DXF\n" +
+            "F5 — chạy nesting\n" +
+            "R — xoay chi tiết\n" +
+            "M — lật chi tiết\n" +
+            "Delete — xóa phần tử đang chọn\n" +
+            "Esc — đóng màn hình trợ giúp";
+        ShortcutOverlayPopup.IsOpen = true;
+    }
+
     private void Window_StateChanged(object? sender, EventArgs e) => UpdateWindowStateVisuals();
 
     private void UpdateWindowStateVisuals()
@@ -1091,6 +1115,23 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             MessageBox.Show(this, "Không thể tạo bản xem trước: " + ex.Message, "Lỗi báo cáo", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.F1 || e.Key == System.Windows.Input.Key.OemQuestion)
+        {
+            e.Handled = true;
+            ToggleShortcutOverlay();
+            return;
+        }
+
+        if (e.Key == System.Windows.Input.Key.Escape && ShortcutOverlayPopup != null && ShortcutOverlayPopup.IsOpen)
+        {
+            e.Handled = true;
+            ShortcutOverlayPopup.IsOpen = false;
+            return;
         }
     }
 

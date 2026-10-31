@@ -9,7 +9,7 @@
 
             <Style TargetType="{x:Type Window}">
                 <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
-                <Setter Property="FontSize" Value="13.5"/>
+                <Setter Property="FontSize" Value="14"/>
                 <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
                 <Setter Property="Background" Value="{DynamicResource BgBrush}"/>
             </Style>

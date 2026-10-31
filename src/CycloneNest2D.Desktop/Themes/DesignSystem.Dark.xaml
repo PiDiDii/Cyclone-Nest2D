@@ -12,7 +12,7 @@
   <Color x:Key="BorderHoverColor">#3B5268</Color>
   <Color x:Key="TextPrimaryColor">#E9F0F7</Color>
   <Color x:Key="TextSecondaryColor">#B1BFCE</Color>
-  <Color x:Key="TextMutedColor">#91A2B5</Color>
+  <Color x:Key="TextMutedColor">#BAC9D8</Color>
   <Color x:Key="SidebarBgColor">#101923</Color>
   <Color x:Key="SidebarActiveBgColor">#10333B</Color>
   <Color x:Key="DangerColor">#F87171</Color>

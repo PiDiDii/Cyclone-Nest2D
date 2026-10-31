@@ -1429,38 +1429,32 @@ public sealed class MainViewModel : ObservableObject
 
     public bool CreateProjectGroup(string name)
     {
-        string groupName = (name ?? "").Trim();
-        if (groupName.Length == 0) { _dialogs.ShowMessage("Hãy nhập tên nhóm vật liệu."); return false; }
         if (ProjectPath == null && !SaveProject(true)) return false;
         if (IsProjectDirty && !SaveProject(false)) return false;
 
-        string resolvedGroupName = _projectLifecycleService.BuildUniqueGroupName(ProjectGroups, groupName);
-        if (!string.Equals(groupName, resolvedGroupName, StringComparison.OrdinalIgnoreCase))
+        if (!_projectLifecycleService.TryCreateGroup(ProjectGroups, ProjectPath, name, _dialogs, out var group, out var message))
         {
-            _dialogs.ShowMessage("Tên nhóm đã tồn tại trong dự án.");
+            if (!string.IsNullOrEmpty(message)) Status = message;
             return false;
         }
 
-        var group = _projectLifecycleService.CreateGroupForProject(ProjectPath!, resolvedGroupName);
-        _projectLifecycleService.SaveEmptyGroupWorkspace(group, Settings);
-        ProjectGroups.Add(group);
+        _projectLifecycleService.SaveEmptyGroupWorkspace(group!, Settings);
+        ProjectGroups.Add(group!);
         IsProjectDirty = true;
         NewProjectGroupName = "";
-        SelectedProjectGroup = group;
+        SelectedProjectGroup = group!;
         SaveProject(false);
         return true;
     }
 
     public bool RenameProjectGroup(ProjectGroupItem? group, string name)
     {
-        string groupName = (name ?? "").Trim();
-        if (group == null || groupName.Length == 0) return false;
-        if (_projectLifecycleService.IsGroupNameTaken(ProjectGroups, groupName, group))
+        if (!_projectLifecycleService.TryRenameGroup(ProjectGroups, group, name, _dialogs, out var message))
         {
-            _dialogs.ShowMessage("Tên nhóm đã tồn tại trong dự án.");
+            if (!string.IsNullOrEmpty(message)) Status = message;
             return false;
         }
-        group.Name = groupName;
+
         NewProjectGroupName = "";
         IsProjectDirty = true;
         OnPropertyChanged(nameof(Title));
@@ -1471,27 +1465,34 @@ public sealed class MainViewModel : ObservableObject
     {
         var source = _activeProjectGroup;
         if (source == null || ProjectPath == null) return false;
-
-        string copyName = _projectLifecycleService.BuildDuplicateGroupName(ProjectGroups, source.Name);
         if (!SaveProject(false)) return false;
 
-        var duplicate = _projectLifecycleService.DuplicateGroup(ProjectPath, source, copyName);
-        ProjectGroups.Add(duplicate);
+        if (!_projectLifecycleService.TryDuplicateGroup(ProjectGroups, ProjectPath, source, out var duplicate, out var message))
+        {
+            if (!string.IsNullOrEmpty(message)) Status = message;
+            return false;
+        }
+
+        ProjectGroups.Add(duplicate!);
         IsProjectDirty = true;
-        SelectedProjectGroup = duplicate;
+        SelectedProjectGroup = duplicate!;
         return SaveProject(false);
     }
 
     public bool RemoveProjectGroup(ProjectGroupItem? group)
     {
-        if (group == null || ProjectGroups.Count <= 1 || !ProjectGroups.Contains(group)) return false;
-        if (!_dialogs.Confirm($"Gỡ nhóm '{group.Name}' khỏi dự án? File con trên ổ đĩa sẽ được giữ nguyên.")) return false;
+        if (!_projectLifecycleService.TryRemoveGroup(ProjectGroups, group, _dialogs, out var reason))
+        {
+            if (!string.IsNullOrEmpty(reason) && reason != "Người dùng hủy bỏ") Status = reason;
+            return false;
+        }
+
         if (group == _activeProjectGroup)
         {
             var next = ProjectGroups.First(other => other != group);
             SelectedProjectGroup = next;
         }
-        ProjectGroups.Remove(group);
+        ProjectGroups.Remove(group!);
         IsProjectDirty = true;
         RaiseCommands();
         return SaveProject(false);
@@ -1534,10 +1535,13 @@ public sealed class MainViewModel : ObservableObject
 
     private void RestoreSelectedProjectGroup(ProjectGroupItem? group)
     {
-        _syncingProjectGroups = true;
-        SelectedProjectGroup = group;
-        _syncingProjectGroups = false;
-        OnPropertyChanged(nameof(Title));
+        _projectLifecycleService.RestoreSelectedProjectGroup(group, value =>
+        {
+            _syncingProjectGroups = true;
+            SelectedProjectGroup = value;
+            _syncingProjectGroups = false;
+            OnPropertyChanged(nameof(Title));
+        });
     }
 
     private void LoadProjectGroup(ProjectGroupItem group, List<string> problems)

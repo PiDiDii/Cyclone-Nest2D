@@ -156,6 +156,94 @@ public sealed class ProjectLifecycleService
         notify();
     }
 
+    public bool TryCreateGroup(IReadOnlyCollection<ProjectGroupItem> groups, string? projectPath, string name,
+        IDialogService dialogs, out ProjectGroupItem? group, out string? message)
+    {
+        string groupName = (name ?? "").Trim();
+        if (groupName.Length == 0)
+        {
+            group = null;
+            message = "Hãy nhập tên nhóm vật liệu.";
+            dialogs.ShowMessage(message);
+            return false;
+        }
+
+        string resolvedGroupName = BuildUniqueGroupName(groups, groupName);
+        if (!string.Equals(groupName, resolvedGroupName, StringComparison.OrdinalIgnoreCase))
+        {
+            group = null;
+            message = "Tên nhóm đã tồn tại trong dự án.";
+            dialogs.ShowMessage(message);
+            return false;
+        }
+
+        group = CreateGroupForProject(projectPath, resolvedGroupName);
+        message = null;
+        return true;
+    }
+
+    public bool TryRenameGroup(IReadOnlyCollection<ProjectGroupItem> groups, ProjectGroupItem? group, string name,
+        IDialogService dialogs, out string? message)
+    {
+        string groupName = (name ?? "").Trim();
+        if (group == null || groupName.Length == 0)
+        {
+            message = "Tên nhóm không hợp lệ.";
+            return false;
+        }
+
+        if (IsGroupNameTaken(groups, groupName, group))
+        {
+            message = "Tên nhóm đã tồn tại trong dự án.";
+            dialogs.ShowMessage(message);
+            return false;
+        }
+
+        group.Name = groupName;
+        message = null;
+        return true;
+    }
+
+    public bool TryDuplicateGroup(IReadOnlyCollection<ProjectGroupItem> groups, string projectPath, ProjectGroupItem? source,
+        out ProjectGroupItem? duplicate, out string? message)
+    {
+        duplicate = null;
+        if (source == null || string.IsNullOrWhiteSpace(projectPath))
+        {
+            message = "Không có dự án hoặc nhóm nguồn để nhân bản.";
+            return false;
+        }
+
+        string copyName = BuildDuplicateGroupName(groups, source.Name);
+        duplicate = DuplicateGroup(projectPath, source, copyName);
+        message = null;
+        return true;
+    }
+
+    public bool TryRemoveGroup(IReadOnlyCollection<ProjectGroupItem> groups, ProjectGroupItem? group, IDialogService dialogs,
+        out string? reason)
+    {
+        if (group == null || groups.Count <= 1 || !groups.Contains(group))
+        {
+            reason = "Nhóm không hợp lệ.";
+            return false;
+        }
+
+        if (!dialogs.Confirm($"Gỡ nhóm '{group.Name}' khỏi dự án? File con trên ổ đĩa sẽ được giữ nguyên."))
+        {
+            reason = "Người dùng hủy bỏ.";
+            return false;
+        }
+
+        reason = null;
+        return true;
+    }
+
+    public void RestoreSelectedProjectGroup(ProjectGroupItem? group, Action<ProjectGroupItem?> setSelectedGroup)
+    {
+        setSelectedGroup(group);
+    }
+
     public void SaveActiveWorkspace(ProjectGroupItem? group, NestSettings settings, IEnumerable<PartItem> parts, NestResult? result,
         SheetDefinition? resultSheet, bool isStale, bool isEdited, TimeSpan lastNestDuration, DateTime? lastNestAt)
     {

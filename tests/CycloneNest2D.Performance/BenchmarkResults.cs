@@ -17,6 +17,19 @@ internal sealed record BenchmarkRun
     public double RotationStep { get; init; }
     public double TargetUtilizationPercent { get; init; }
     public double TimeBudgetSeconds { get; init; }
+    public bool DiagnosticsEnabled { get; init; }
+    public double VariantGeometryMilliseconds { get; init; }
+    public double VariantRasterizationMilliseconds { get; init; }
+    public double RasterCellSizeMillimeters { get; init; }
+    public long PrimaryVariantsBuilt { get; init; }
+    public long FineVariantsBuilt { get; init; }
+    public double SearchMilliseconds { get; init; }
+    public double VerifyMilliseconds { get; init; }
+    public long VerifyIndexCulled { get; init; }
+    public long VerifyPlacementChecks { get; init; }
+    public long VerifyBoundsRejected { get; init; }
+    public double ConflictMilliseconds { get; init; }
+    public long ConflictCalls { get; init; }
     public double NestingMilliseconds { get; init; }
     public double ValidationMilliseconds { get; init; }
     public double EndToEndMilliseconds { get; init; }
@@ -118,7 +131,11 @@ internal static class CsvReport
     [
         "Workload", "Description", "Profile", "Repetition", "PartTypes", "RequestedInstances",
         "SheetWidth", "SheetHeight", "Margin", "Spacing", "RotationStep", "TargetUtilizationPercent",
-        "TimeBudgetSeconds", "NestingMilliseconds", "ValidationMilliseconds", "EndToEndMilliseconds",
+        "TimeBudgetSeconds", "DiagnosticsEnabled", "VariantGeometryMilliseconds", "VariantRasterizationMilliseconds",
+        "RasterCellSizeMillimeters", "PrimaryVariantsBuilt", "FineVariantsBuilt",
+        "SearchMilliseconds", "VerifyMilliseconds", "VerifyIndexCulled", "VerifyPlacementChecks", "VerifyBoundsRejected",
+        "ConflictMilliseconds", "ConflictCalls",
+        "NestingMilliseconds", "ValidationMilliseconds", "EndToEndMilliseconds",
         "CpuMilliseconds", "AllocatedBytes", "WorkingSetBeforeBytes", "WorkingSetAfterBytes",
         "Gen0Collections", "Gen1Collections", "Gen2Collections", "PlacedInstances", "UnplacedInstances",
         "SheetCount", "UtilizationPercent", "CompletionPercent", "ValidationErrors", "HitTimeBudget",
@@ -136,6 +153,15 @@ internal static class CsvReport
                 run.PartTypes.ToString(CultureInfo.InvariantCulture), run.RequestedInstances.ToString(CultureInfo.InvariantCulture),
                 Number(run.SheetWidth), Number(run.SheetHeight), Number(run.Margin), Number(run.Spacing),
                 Number(run.RotationStep), Number(run.TargetUtilizationPercent), Number(run.TimeBudgetSeconds),
+                run.DiagnosticsEnabled.ToString(CultureInfo.InvariantCulture),
+                Number(run.VariantGeometryMilliseconds), Number(run.VariantRasterizationMilliseconds),
+                Number(run.RasterCellSizeMillimeters), run.PrimaryVariantsBuilt.ToString(CultureInfo.InvariantCulture),
+                run.FineVariantsBuilt.ToString(CultureInfo.InvariantCulture),
+                Number(run.SearchMilliseconds), Number(run.VerifyMilliseconds),
+                run.VerifyIndexCulled.ToString(CultureInfo.InvariantCulture),
+                run.VerifyPlacementChecks.ToString(CultureInfo.InvariantCulture),
+                run.VerifyBoundsRejected.ToString(CultureInfo.InvariantCulture), Number(run.ConflictMilliseconds),
+                run.ConflictCalls.ToString(CultureInfo.InvariantCulture),
                 Number(run.NestingMilliseconds), Number(run.ValidationMilliseconds), Number(run.EndToEndMilliseconds),
                 Number(run.CpuMilliseconds), run.AllocatedBytes.ToString(CultureInfo.InvariantCulture),
                 run.WorkingSetBeforeBytes.ToString(CultureInfo.InvariantCulture), run.WorkingSetAfterBytes.ToString(CultureInfo.InvariantCulture),

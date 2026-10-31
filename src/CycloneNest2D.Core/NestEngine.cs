@@ -26,6 +26,9 @@ public sealed class NestOptions
     /// <summary>Bước góc xoay (độ).</summary>
     public double RotationStep { get; set; } = 90;
 
+    /// <summary>Thu thập timing nội bộ tùy chọn; không đặt trong các lượt chạy cần đo overhead thuần.</summary>
+    public NestDiagnostics? Diagnostics { get; set; }
+
     public CancellationToken Cancel { get; set; }
     public Action<string>? Report { get; set; }
     public Action<double>? ReportProgress { get; set; }

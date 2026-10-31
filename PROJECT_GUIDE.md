@@ -105,7 +105,9 @@ Lưu ý: dữ liệu dự án hiện lưu danh sách preset nhưng không có t�
 
 `NestEngine.Run` chặn các contour không tin cậy rồi gọi `RasterNester.Run`.
 
-`RasterNester` tạo lưới theo kích thước tấm và các variant của mỗi loại chi tiết theo góc xoay. Raster được xây bảo thủ: ô chạm vật liệu được đánh dấu chiếm, nhưng vùng lỗ được giữ trống. Các part đặt trước được giãn theo khe hở. Thuật toán dùng phép toán bit để tìm vị trí ứng viên nhanh và xác minh ứng viên bằng hình học chính xác (`ShapeOps.Conflict`). Nó thử các thứ tự sắp xếp theo diện tích, cạnh dài, cạnh ngắn, chu vi, có thêm số lượt xáo trộn tất định. Có thể dừng sớm khi đạt utilization mục tiêu. `MaxSeconds` bị giới hạn trong khoảng nội bộ 0.05–3600 giây.
+`RasterNester` chọn cell size thích ứng theo kích thước khổ, chi tiết nhỏ nhất, spacing, độ phức tạp contour và giới hạn bộ nhớ/lưới. Lưới raster được xây bảo thủ: ô chạm vật liệu được đánh dấu chiếm, nhưng vùng lỗ được giữ trống. Các part đặt trước được giãn theo khe hở. Thuật toán dùng phép toán bit để tìm vị trí ứng viên nhanh; trước khi xác minh chính xác bằng hình học (`ShapeOps.Conflict`), Verify dùng danh sách placement sắp theo X cùng giới hạn kích thước lớn nhất để bỏ qua các placement chắc chắn nằm ngoài vùng lân cận. Phép lọc này chỉ loại cặp không thể chạm theo X; kiểm tra khoảng cách/hộp bao và contour thật vẫn được giữ nguyên.
+
+Với bước xoay mịn, variant 0°/90°/180°/270° được dựng và thử trước. Khi bật target, engine dành tối đa 20% ngân sách cho lượt coarse nhanh; nếu chưa đạt target, phần góc mịn theo `RotationStep` chỉ được dựng/thử tiếp khi còn thời gian. Khi tắt target, góc mịn cũng được mở rộng nếu còn ngân sách. Các orientation không thuộc lưới góc người dùng chọn không được tự thêm. Cell size chỉ refinement khi chi tiết nhỏ hoặc spacing nhỏ so với lưới theo khổ; refinement bị chặn ở mức tăng tối đa 25% số ô và vẫn tuân thủ giới hạn raster. Độ phức tạp contour có thể chọn ô lớn hơn để giới hạn raster work. Thuật toán giữ các thứ tự sắp theo diện tích, cạnh dài, cạnh ngắn, chu vi cùng số lượt xáo trộn tất định; có thể dừng sớm khi đạt utilization mục tiêu. `MaxSeconds` bị giới hạn trong khoảng nội bộ 0.05–3600 giây.
 
 `NestResult` mang sheet, placement, utilization, ghi chú, chiến lược và danh sách chưa đặt. Utilization dùng diện tích vật liệu thật (không tính lỗ), theo mô tả trong README. Khi có lỗ/contour lõm, hộp bao không thể dùng để kết luận va chạm.
 
@@ -165,7 +167,7 @@ Có thể lọc theo domain bằng trait, ví dụ `dotnet test tests/CycloneNes
 
 ### Đánh giá hiệu năng nesting
 
-Benchmark chạy tuần tự, warm-up từng workload/profile, tách thời gian `NestEngine` khỏi `Validator`, và ghi throughput, p95, CPU, bytes cấp phát, GC, số tấm, hiệu suất vật liệu, tỷ lệ đặt đủ, lỗi validator và dấu vân tay kết quả. Bốn profile tạo ma trận để phân biệt ảnh hưởng bước xoay với chính sách dừng sớm:
+Benchmark chạy tuần tự, warm-up từng workload/profile, tách thời gian `NestEngine` khỏi `Validator`, và ghi throughput, p95, CPU, bytes cấp phát, GC, số tấm, hiệu suất vật liệu, tỷ lệ đặt đủ, lỗi validator và dấu vân tay kết quả. Tùy chọn `--diagnostics` đo cell size đã chọn, số variant góc coarse/fine, thời gian dựng contour Variant/raster hóa mask, Search, Verify, thời gian và số lần gọi `ShapeOps.Conflict`; phép đo này thêm overhead. Search bao gồm Verify và Verify bao gồm Conflict nên các thời gian lồng nhau, không cộng trực tiếp. Search/Verify/Conflict được cộng từ các heuristic chạy song song nên tổng thời gian từng bước có thể lớn hơn thời gian thực tế của engine. Bốn profile tạo ma trận để phân biệt ảnh hưởng bước xoay với chính sách dừng sớm:
 
 - `Balanced-90` / `Balanced-45`: cùng mục tiêu dừng 85%, chỉ khác bước xoay 90° / 45°.
 - `Exhaustive-90` / `Exhaustive-45`: cùng tắt mục tiêu dừng sớm, chỉ khác bước xoay.

@@ -29,6 +29,8 @@ internal static class PerformanceProgram
             Console.WriteLine($"Mode: {(config.Full ? "FULL" : "QUICK")} · {config.Repetitions} lần đo/profile · " +
                               $"ngân sách {config.MaxSeconds:0.##} giây/lần · {workloads.Count} workload(s)");
             Console.WriteLine("Các lượt benchmark chạy tuần tự; warm-up và validator không tính vào thời gian NestEngine.\n");
+            if (config.Diagnostics)
+                Console.WriteLine("Diagnostics bật: Search bao gồm Verify; Verify bao gồm Conflict (thời gian lồng nhau, không cộng trực tiếp).\n");
 
             var runs = new List<BenchmarkRun>();
             foreach (var workload in workloads)
@@ -97,13 +99,15 @@ internal static class PerformanceProgram
     private static BenchmarkRun RunOnce(BenchmarkWorkload workload, BenchmarkProfile profile,
         BenchmarkConfig config, bool warmup, int repetition = 0)
     {
+        var diagnostics = !warmup && config.Diagnostics ? new NestDiagnostics() : null;
         var options = new NestOptions
         {
             AllowRotation = true,
             Direction = NestDirection.FillWidth,
             RotationStep = profile.RotationStep,
             TargetUtilizationPercent = profile.TargetUtilizationPercent,
-            MaxSeconds = warmup ? Math.Min(config.MaxSeconds, 0.25) : config.MaxSeconds
+            MaxSeconds = warmup ? Math.Min(config.MaxSeconds, 0.25) : config.MaxSeconds,
+            Diagnostics = diagnostics
         };
 
         if (warmup)
@@ -138,6 +142,16 @@ internal static class PerformanceProgram
         var validationTimer = Stopwatch.StartNew();
         List<string> validationErrors = Validator.Check(result, workload.Sheet);
         validationTimer.Stop();
+        if (validationErrors.Count > 0)
+        {
+            string placements = string.Join("; ", result.Sheets.SelectMany(sheetResult => sheetResult.Placements)
+                .Where(placement => validationErrors.Any(error => error.Contains(
+                    $"{placement.PartName} #{placement.Instance}", StringComparison.Ordinal)))
+                .Select(placement => $"{placement.PartName} #{placement.Instance} at ({placement.X:R},{placement.Y:R}) " +
+                                    $"{placement.Width:R}×{placement.Height:R}"));
+            Console.Error.WriteLine($"Validator: {workload.Name} / {profile.Name} #{repetition}: " +
+                                    string.Join(" | ", validationErrors.Take(3)) + $" [{placements}]");
+        }
 
         int requested = workload.Parts.Sum(part => Math.Max(0, part.Quantity));
         int placed = result.Sheets.Sum(sheet => sheet.Placements.Count);
@@ -157,6 +171,19 @@ internal static class PerformanceProgram
             RotationStep = profile.RotationStep,
             TargetUtilizationPercent = profile.TargetUtilizationPercent,
             TimeBudgetSeconds = config.MaxSeconds,
+            DiagnosticsEnabled = diagnostics != null,
+            VariantGeometryMilliseconds = diagnostics?.VariantGeometryMilliseconds ?? 0,
+            VariantRasterizationMilliseconds = diagnostics?.VariantRasterizationMilliseconds ?? 0,
+            RasterCellSizeMillimeters = diagnostics?.RasterCellSizeMillimeters ?? 0,
+            PrimaryVariantsBuilt = diagnostics?.PrimaryVariantsBuilt ?? 0,
+            FineVariantsBuilt = diagnostics?.FineVariantsBuilt ?? 0,
+            SearchMilliseconds = diagnostics?.SearchMilliseconds ?? 0,
+            VerifyMilliseconds = diagnostics?.VerifyMilliseconds ?? 0,
+            VerifyIndexCulled = diagnostics?.VerifyIndexCulled ?? 0,
+            VerifyPlacementChecks = diagnostics?.VerifyPlacementChecks ?? 0,
+            VerifyBoundsRejected = diagnostics?.VerifyBoundsRejected ?? 0,
+            ConflictMilliseconds = diagnostics?.ConflictMilliseconds ?? 0,
+            ConflictCalls = diagnostics?.ConflictCalls ?? 0,
             NestingMilliseconds = stopwatch.Elapsed.TotalMilliseconds,
             ValidationMilliseconds = validationTimer.Elapsed.TotalMilliseconds,
             EndToEndMilliseconds = stopwatch.Elapsed.TotalMilliseconds + validationTimer.Elapsed.TotalMilliseconds,
@@ -209,6 +236,12 @@ internal static class PerformanceProgram
             $"nest {run.NestingMilliseconds,8:0.0} ms · verify {run.ValidationMilliseconds,7:0.0} ms · " +
             $"{run.PlacedInstances}/{run.RequestedInstances} · {run.SheetCount} tấm · " +
             $"eff {run.UtilizationPercent,5:0.0}% · alloc {FormatBytes(run.AllocatedBytes)}" +
+            (run.DiagnosticsEnabled
+                ? $" · var {run.VariantGeometryMilliseconds:0.0}+{run.VariantRasterizationMilliseconds:0.0} ms" +
+                  $" · search {run.SearchMilliseconds:0.0} · verify {run.VerifyMilliseconds:0.0}" +
+                  $" · verify pairs {run.VerifyIndexCulled:N0} indexed out, {run.VerifyPlacementChecks:N0}/{run.VerifyBoundsRejected:N0} bounds culled" +
+                  $" · Conflict {run.ConflictCalls}×/{run.ConflictMilliseconds:0.0} ms"
+                : "") +
             $"{(run.HitTimeBudget ? " · TIME LIMIT" : "")}" +
             $"{(run.ValidationErrors > 0 ? $" · VALIDATION ERRORS {run.ValidationErrors}" : "")}");
     }
@@ -304,6 +337,7 @@ internal static class PerformanceProgram
             Options:
               --quick                 3 synthetic workloads, one measured run/profile (default)
               --full                  Full workload matrix, three measured runs/profile
+              --diagnostics           Collect internal timings; adds measurement overhead
               --repeat <count>        Override measured repetitions (1-20)
               --max-seconds <seconds> NestEngine time budget per run (0.1-3600)
               --dxf <file-or-folder>  Add a real DXF file, or recursively load a folder of DXFs

@@ -22,6 +22,8 @@ internal static class RasterNester
     private const int MaxRejects = 400;
     private const int MaxRasterDimension = 8192;
     private const long MaxRasterCells = 16_777_216;
+    private const double RasterScanWorkBudget = 2_000_000;
+    private const double MaxAdaptiveGridGrowth = 1.25;
 
     // ---------- Cấu trúc dữ liệu ----------
 
@@ -30,6 +32,7 @@ internal static class RasterNester
         public double Angle;
         public DxfShape Shape = null!;
         public LoopSet Loops = null!;
+        public bool HasContour;
         public double W, H;
         public int Wc, Hc, S;
         public (int S, int L)[][] Cover = null!;  // theo hàng, cột tính từ góc chi tiết
@@ -41,10 +44,20 @@ internal static class RasterNester
         public string Name = "";
         public int Quantity;
         public bool HasShape;
+        public bool CanRotate;
         public DxfShape Base = null!;
+        public LoopSet BaseLoops = null!;
         public readonly List<Variant> Variants = new();
+        public readonly List<double> PrimaryAngles = new();
+        public readonly List<double> FineAngles = new();
+        public readonly HashSet<string> MaskKeys = new();
         public double Area, W, H;
     }
+
+    private sealed record LayoutSearchResult(
+        Outcome? Best,
+        List<(int Type, int Inst)> BestOrder,
+        string BestName);
 
     private sealed record Placed(int Type, int Instance, Variant V, double X, double Y);
 
@@ -56,7 +69,9 @@ internal static class RasterNester
         public readonly ulong[][][] P;      // P[hàng][j]: cửa sổ OR độ dài 2^j (null nếu chưa tính)
         public readonly int[][] PVer;
         public readonly List<Placed> Items = new();
+        public readonly List<Placed> ItemsByX = new();
         public readonly HashSet<int> Failed = new();
+        public double MaxPlacedWidth;
 
         public Sheet(int rows, int cols)
         {
@@ -67,6 +82,21 @@ internal static class RasterNester
             RowVer = new int[rows];
             P = new ulong[rows][][];
             PVer = new int[rows][];
+        }
+
+        public void Add(Placed item)
+        {
+            Items.Add(item);
+            MaxPlacedWidth = Math.Max(MaxPlacedWidth, item.V.W);
+
+            int low = 0, high = ItemsByX.Count;
+            while (low < high)
+            {
+                int middle = low + (high - low) / 2;
+                if (ItemsByX[middle].X <= item.X) low = middle + 1;
+                else high = middle;
+            }
+            ItemsByX.Insert(low, item);
         }
 
         public double TopMm => Items.Count == 0 ? 0 : Items.Max(p => p.Y + p.V.H);
@@ -115,26 +145,6 @@ internal static class RasterNester
         double maxSeconds = Math.Clamp(double.IsFinite(opt.MaxSeconds) ? opt.MaxSeconds : 30, 0.05, 3600);
         opt.MaxSeconds = maxSeconds;
         double target = Math.Clamp(double.IsFinite(opt.TargetUtilizationPercent) ? opt.TargetUtilizationPercent : 0, 0, 100);
-        double c = Math.Max(1.0, Math.Ceiling(Math.Max(sheet.UsableWidth, sheet.UsableHeight) / 1250.0 * 2) / 2);
-        double colsValue = Math.Ceiling(sheet.UsableWidth / c - 1e-9);
-        double rowsValue = Math.Ceiling(sheet.UsableHeight / c - 1e-9);
-        double spacingCells = sheet.Spacing > 1e-9 ? Math.Ceiling(sheet.Spacing / c - 1e-9) : 0;
-        if (!double.IsFinite(c) || !double.IsFinite(colsValue) || !double.IsFinite(rowsValue) ||
-            !double.IsFinite(spacingCells) || colsValue < 1 || rowsValue < 1 ||
-            colsValue > MaxRasterDimension || rowsValue > MaxRasterDimension ||
-            colsValue * rowsValue > MaxRasterCells || spacingCells > MaxRasterDimension)
-        {
-            result.Strategy = "Không thể nesting: lưới raster vượt giới hạn tài nguyên.";
-            result.Notes.Add($"Lưới tối đa là {MaxRasterDimension} × {MaxRasterDimension} ô và {MaxRasterCells:N0} ô tổng; hãy giảm kích thước tấm hoặc khoảng cách.");
-            foreach (var part in parts.Where(part => part.Quantity > 0))
-                result.Unplaced.Add($"{part.Name} ×{part.Quantity}: chưa xử lý vì lưới raster vượt giới hạn tài nguyên.");
-            return result;
-        }
-
-        int s = (int)spacingCells;
-        int cols = Math.Max(1, (int)colsValue);
-        int rows = Math.Max(1, (int)rowsValue);
-
         var types = new List<PartType>();
         double step = opt.RotationStep > 0 ? opt.RotationStep : 90;
         for (int partIndex = 0; partIndex < parts.Count; partIndex++)
@@ -153,6 +163,7 @@ internal static class RasterNester
             var t = new PartType
             {
                 Name = p.Name, Quantity = p.Quantity, HasShape = p.Shape != null,
+                CanRotate = opt.AllowRotation && p.CanRotate,
                 Base = p.Shape ?? ShapeOps.RectShape(p.Name, p.Width, p.Height),
                 W = p.Width, H = p.Height
             };
@@ -164,126 +175,75 @@ internal static class RasterNester
                 result.Strategy = "Không thể nesting: contour không hợp lệ.";
                 return result;
             }
+            t.BaseLoops = baseLoops;
             t.Area = baseLoops.Area > 0 ? baseLoops.Area : p.Width * p.Height;
             if (t.HasShape && baseLoops.OpenChains > 0)
                 result.Notes.Add($"{p.Name}: bỏ qua {baseLoops.OpenChains} đường hở phụ; contour ngoài kín và hợp lệ.");
 
-            var angles = new List<double> { 0 };
-            if (opt.AllowRotation && p.CanRotate)
-                for (double a = step; a < 360 - 1e-9; a += step) angles.Add(a);
-
-            var seen = new HashSet<string>();
-            foreach (double angle in angles)
-            {
-                if (IsStopped(opt, sw)) break;
-                if (!t.HasShape && Math.Abs(angle % 90) > 1e-9) continue;
-                var v = BuildVariant(t, angle, c, s, opt, sw);
-                if (v == null) continue;
-                if (v.Wc > cols || v.Hc > rows || v.W > sheet.UsableWidth + 1e-6 || v.H > sheet.UsableHeight + 1e-6) continue;
-                if (!seen.Add(MaskKey(v))) continue;
-                t.Variants.Add(v);
-            }
-            if (IsStopped(opt, sw))
-            {
-                result.Unplaced.Clear();
-                foreach (var pending in parts.Where(pending => pending.Quantity > 0))
-                    result.Unplaced.Add($"{pending.Name}: chưa xử lý vì {StopMessage(opt)}.");
-                result.Strategy = opt.Cancel.IsCancellationRequested ? "Đã hủy nesting." : "Đã dừng do giới hạn thời gian.";
-                return result;
-            }
-            if (t.Variants.Count == 0)
-            {
-                result.Unplaced.Add($"{p.Name} ({p.Width:0.##} × {p.Height:0.##}) ×{p.Quantity}: không vừa khổ tấm ở các góc xoay được phép.");
-                continue;
-            }
+            foreach (double angle in RequestedAngles(step, t.CanRotate))
+                if (t.HasShape || IsOrthogonal(angle))
+                    (IsOrthogonal(angle) ? t.PrimaryAngles : t.FineAngles).Add(angle);
             types.Add(t);
         }
 
         if (types.Count == 0) return result;
+        double c = ChooseCellSize(sheet, types);
+        opt.Diagnostics?.RecordRasterCellSize(c);
+        double colsValue = Math.Ceiling(sheet.UsableWidth / c - 1e-9);
+        double rowsValue = Math.Ceiling(sheet.UsableHeight / c - 1e-9);
+        double spacingCells = sheet.Spacing > 1e-9 ? Math.Ceiling(sheet.Spacing / c - 1e-9) : 0;
+        if (!double.IsFinite(c) || !double.IsFinite(colsValue) || !double.IsFinite(rowsValue) ||
+            !double.IsFinite(spacingCells) || colsValue < 1 || rowsValue < 1 ||
+            colsValue > MaxRasterDimension || rowsValue > MaxRasterDimension ||
+            colsValue * rowsValue > MaxRasterCells || spacingCells > MaxRasterDimension)
+        {
+            result.Strategy = "Không thể nesting: lưới raster vượt giới hạn tài nguyên.";
+            result.Notes.Add($"Lưới tối đa là {MaxRasterDimension} × {MaxRasterDimension} ô và {MaxRasterCells:N0} ô tổng; hãy giảm kích thước tấm hoặc khoảng cách.");
+            foreach (var part in parts.Where(part => part.Quantity > 0))
+                result.Unplaced.Add($"{part.Name} ×{part.Quantity}: chưa xử lý vì lưới raster vượt giới hạn tài nguyên.");
+            return result;
+        }
+
+        int s = (int)spacingCells;
+        int cols = Math.Max(1, (int)colsValue);
+        int rows = Math.Max(1, (int)rowsValue);
+        if (!BuildVariants(types, sheet, c, s, cols, rows, primaryAngles: true, opt, sw))
+        {
+            result.Unplaced.Clear();
+            foreach (var pending in parts.Where(pending => pending.Quantity > 0))
+                result.Unplaced.Add($"{pending.Name}: chưa xử lý vì {StopMessage(opt)}.");
+            result.Strategy = opt.Cancel.IsCancellationRequested ? "Đã hủy nesting." : "Đã dừng do giới hạn thời gian.";
+            return result;
+        }
+
         var all = new List<(int Type, int Inst)>();
         for (int i = 0; i < types.Count; i++)
             for (int k = 1; k <= types[i].Quantity; k++) all.Add((i, k));
 
-        var keys = new (string Name, Func<PartType, double> Key)[]
-        {
-            ("diện tích hình thật", t => t.Area),
-            ("cạnh dài", t => Math.Max(t.W, t.H)),
-            ("cạnh ngắn", t => Math.Min(t.W, t.H)),
-            ("chu vi", t => t.W + t.H),
-        };
         bool primaryX = opt.Direction == NestDirection.FillWidth ? sheet.Width >= sheet.Height : sheet.Width < sheet.Height;
         double fullSheetArea = sheet.Width * sheet.Height;
-        Outcome? best = null;
-        List<(int Type, int Inst)> bestOrder = all;
-        string bestName = "";
+        bool hasFineAngles = types.Any(t => t.FineAngles.Count > 0);
+        double originalMaxSeconds = opt.MaxSeconds;
+        if (hasFineAngles)
+            opt.MaxSeconds = Math.Min(originalMaxSeconds, sw.Elapsed.TotalSeconds + Math.Max(0.05, originalMaxSeconds * 0.2));
+        var primaryOrder = all.OrderByDescending(item => types[item.Type].Area)
+            .ThenBy(item => item.Type).ThenBy(item => item.Inst).ToList();
+        var layout = SearchLayouts(types, all, sheet, c, s, rows, cols, primaryX, target, fullSheetArea,
+            opt, sw, null, primaryOrder, "", 0, hasFineAngles ? 2 : 1,
+            runOrderHeuristics: !hasFineAngles, runLocalSearch: !hasFineAngles);
+        opt.MaxSeconds = originalMaxSeconds;
 
-        var keyRuns = keys.Select(k => (
-            k.Name,
-            Order: all.OrderByDescending(x => k.Key(types[x.Type])).ThenBy(x => x.Type).ThenBy(x => x.Inst).ToList()
-        )).ToList();
-
-        var syncLock = new object();
-        bool earlyStop = false;
-        int completedLayouts = 0;
-        int progressSteps = Math.Max(1, keyRuns.Count + 6);
-
-        Parallel.ForEach(keyRuns, runItem =>
+        if (hasFineAngles && layout.Best is { } primaryBest && !GoalReached(primaryBest, fullSheetArea, target) &&
+            !IsStopped(opt, sw) && BuildVariants(types, sheet, c, s, cols, rows, primaryAngles: false, opt, sw))
         {
-            if (earlyStop || IsStopped(opt, sw)) return;
-            var outcome = Pack(runItem.Order, types, sheet, c, s, rows, cols, primaryX, opt, sw,
-                fraction => opt.ReportProgress?.Invoke(0.9 * (Volatile.Read(ref completedLayouts) + fraction) / progressSteps));
-            lock (syncLock)
-            {
-                if (best == null || Better(outcome, best, primaryX))
-                {
-                    best = outcome;
-                    bestOrder = runItem.Order;
-                    bestName = $"sắp theo {runItem.Name}";
-                }
-                opt.Report?.Invoke($"Lấp {(opt.Direction == NestDirection.FillWidth ? "theo chiều rộng" : "theo chiều dài")}: {outcome.Sheets.Count} tấm, còn {outcome.Unplaced} chi tiết chưa đặt.");
-                Interlocked.Increment(ref completedLayouts);
-                opt.ReportProgress?.Invoke(0.9 * completedLayouts / progressSteps);
-                if (result.Unplaced.Count == 0 && GoalReached(outcome, fullSheetArea, target))
-                {
-                    best = outcome;
-                    bestOrder = runItem.Order;
-                    bestName += " · đã đạt mục tiêu hiệu suất";
-                    earlyStop = true;
-                }
-                if (outcome.Interrupted) earlyStop = true;
-            }
-        });
-
-        if (best != null && !best.Interrupted && !IsStopped(opt, sw) && result.Unplaced.Count == 0 &&
-            !GoalReached(best, fullSheetArea, target))
-        {
-            var rng = new Random(12345);
-            const int searchIterations = 6;
-            for (int it = 0; it < searchIterations && !IsStopped(opt, sw); it++)
-            {
-                var candidate = new List<(int Type, int Inst)>(bestOrder);
-                int moves = rng.Next(1, 4);
-                for (int m = 0; m < moves && candidate.Count > 1; m++)
-                {
-                    int i = rng.Next(candidate.Count), j = rng.Next(candidate.Count);
-                    if (rng.Next(2) == 0) (candidate[i], candidate[j]) = (candidate[j], candidate[i]);
-                    else { var item = candidate[i]; candidate.RemoveAt(i); candidate.Insert(j, item); }
-                }
-                var outcome = Pack(candidate, types, sheet, c, s, rows, cols, primaryX, opt, sw,
-                    fraction => opt.ReportProgress?.Invoke(0.9 * (keyRuns.Count + it + fraction) / progressSteps));
-                if (Better(outcome, best, primaryX)) { best = outcome; bestOrder = candidate; bestName = $"tìm kiếm thứ tự (lượt {it + 1})"; }
-                double utilization = OccupiedArea(outcome) / (fullSheetArea * Math.Max(1, outcome.Sheets.Count)) * 100;
-                opt.Report?.Invoke($"Tìm kiếm {it + 1}/{searchIterations}: {outcome.Sheets.Count} tấm, hiệu suất {utilization:0.0}% (mục tiêu {target:0.#}%).");
-                opt.ReportProgress?.Invoke(0.9 * (keyRuns.Count + it + 1) / progressSteps);
-                if (result.Unplaced.Count == 0 && GoalReached(outcome, fullSheetArea, target))
-                {
-                    best = outcome; bestOrder = candidate; bestName = $"đã đạt mục tiêu hiệu suất ở lượt {it + 1}";
-                    break;
-                }
-                if (outcome.Interrupted) break;
-            }
+            layout = SearchLayouts(types, all, sheet, c, s, rows, cols, primaryX, target, fullSheetArea,
+                opt, sw, layout.Best, layout.BestOrder, layout.BestName, 1, 2,
+                runOrderHeuristics: true, runLocalSearch: true);
         }
 
+        Outcome? best = layout.Best;
+        List<(int Type, int Inst)> bestOrder = layout.BestOrder;
+        string bestName = layout.BestName;
         if (best == null)
         {
             best = new Outcome { Interrupted = true, Unplaced = all.Count };
@@ -293,7 +253,7 @@ internal static class RasterNester
         }
         if (sheet.Spacing <= 1e-9)
             foreach (var packedSheet in best.Sheets)
-                CompactZeroSpacing(packedSheet, sheet, opt, sw);
+                CompactZeroSpacing(packedSheet, sheet, opt, sw, opt.Diagnostics);
 
         int idx = 1;
         foreach (var sh in best.Sheets)
@@ -318,6 +278,177 @@ internal static class RasterNester
         return result;
     }
 
+    private static double ChooseCellSize(SheetDefinition sheet, IReadOnlyList<PartType> types)
+    {
+        double sheetScale = Math.Max(1.0,
+            Math.Ceiling(Math.Max(sheet.UsableWidth, sheet.UsableHeight) / 1250.0 * 2) / 2);
+        double minPartDimension = double.PositiveInfinity;
+        double rasterWork = 0;
+        foreach (var type in types)
+        {
+            minPartDimension = Math.Min(minPartDimension, Math.Min(type.W, type.H));
+            int vertices = type.BaseLoops.Loops.Sum(loop => loop.X.Length);
+            int angleCount = type.PrimaryAngles.Count + type.FineAngles.Count;
+            rasterWork += (double)vertices * type.H * angleCount;
+        }
+
+        double featureScale = minPartDimension / 8;
+        double spacingScale = sheet.Spacing > 1e-9 ? sheet.Spacing / 2 : double.PositiveInfinity;
+        // Bound extra grid work unless part features or spacing are small relative to the sheet scale.
+        double maxGridGrowth = minPartDimension < 4 * sheetScale || sheet.Spacing < sheetScale / 2
+            ? MaxAdaptiveGridGrowth
+            : 1.0;
+        double minimumRefinedCell = sheetScale / Math.Sqrt(maxGridGrowth);
+        double desired = Math.Max(minimumRefinedCell,
+            Math.Min(sheetScale, Math.Min(featureScale, spacingScale)));
+        double complexityScale = Math.Min(sheetScale * 2, rasterWork / RasterScanWorkBudget);
+        double resourceScale = Math.Max(
+            Math.Max(sheet.UsableWidth / MaxRasterDimension, sheet.UsableHeight / MaxRasterDimension),
+            Math.Sqrt(sheet.UsableWidth * sheet.UsableHeight / MaxRasterCells));
+        return Math.Max(resourceScale, Math.Max(desired, complexityScale));
+    }
+
+    private static List<double> RequestedAngles(double step, bool canRotate)
+    {
+        var angles = new List<double> { 0 };
+        if (canRotate)
+            for (double angle = step; angle < 360 - 1e-9; angle += step)
+                angles.Add(angle);
+        return angles;
+    }
+
+    private static bool IsOrthogonal(double angle)
+    {
+        double nearestQuarterTurn = Math.Round(angle / 90) * 90;
+        return Math.Abs(angle - nearestQuarterTurn) < 1e-9;
+    }
+
+    private static bool BuildVariants(IReadOnlyList<PartType> types, SheetDefinition sheet,
+        double cellSize, int spacingCells, int cols, int rows, bool primaryAngles, NestOptions opt, Stopwatch sw)
+    {
+        foreach (var type in types)
+        {
+            var angles = primaryAngles ? type.PrimaryAngles : type.FineAngles;
+            foreach (double angle in angles)
+            {
+                if (IsStopped(opt, sw)) return false;
+                var variant = BuildVariant(type, angle, cellSize, spacingCells, opt, sw, opt.Diagnostics);
+                if (variant == null) continue;
+                variant.HasContour = type.HasShape;
+                if (variant.Wc > cols || variant.Hc > rows ||
+                    variant.W > sheet.UsableWidth + 1e-6 || variant.H > sheet.UsableHeight + 1e-6)
+                    continue;
+                if (type.MaskKeys.Add(MaskKey(variant)))
+                {
+                    type.Variants.Add(variant);
+                    opt.Diagnostics?.RecordVariantBuilt(primaryAngles);
+                }
+            }
+        }
+        return !IsStopped(opt, sw);
+    }
+
+    private static LayoutSearchResult SearchLayouts(List<PartType> types, List<(int Type, int Inst)> all,
+        SheetDefinition sheet, double cellSize, int spacingCells, int rows, int cols, bool primaryX,
+        double target, double fullSheetArea, NestOptions opt, Stopwatch sw, Outcome? incumbent,
+        List<(int Type, int Inst)> incumbentOrder, string incumbentName, int phaseIndex, int phaseCount,
+        bool runOrderHeuristics, bool runLocalSearch)
+    {
+        var keys = new (string Name, Func<PartType, double> Key)[]
+        {
+            ("diện tích hình thật", type => type.Area),
+            ("cạnh dài", type => Math.Max(type.W, type.H)),
+            ("cạnh ngắn", type => Math.Min(type.W, type.H)),
+            ("chu vi", type => type.W + type.H),
+        };
+        List<(string Name, List<(int Type, int Inst)> Order)> keyRuns = runOrderHeuristics
+            ? keys.Select(key => (
+                key.Name,
+                Order: all.OrderByDescending(item => key.Key(types[item.Type]))
+                    .ThenBy(item => item.Type).ThenBy(item => item.Inst).ToList()
+            )).ToList()
+            : [("thứ tự tốt nhất hiện tại", incumbentOrder)];
+
+        Outcome? best = incumbent;
+        List<(int Type, int Inst)> bestOrder = incumbentOrder;
+        string bestName = incumbentName;
+        var syncLock = new object();
+        bool earlyStop = false;
+        int completedLayouts = 0;
+        int progressSteps = Math.Max(1, keyRuns.Count + 6);
+        int totalProgressSteps = progressSteps * phaseCount;
+
+        Parallel.ForEach(keyRuns, runItem =>
+        {
+            if (earlyStop || IsStopped(opt, sw)) return;
+            var outcome = Pack(runItem.Order, types, sheet, cellSize, spacingCells, rows, cols, primaryX, opt, sw,
+                fraction => opt.ReportProgress?.Invoke(
+                    0.9 * (phaseIndex * progressSteps + Volatile.Read(ref completedLayouts) + fraction) / totalProgressSteps));
+            lock (syncLock)
+            {
+                if (best == null || Better(outcome, best, primaryX))
+                {
+                    best = outcome;
+                    bestOrder = runItem.Order;
+                    bestName = $"sắp theo {runItem.Name}";
+                }
+                opt.Report?.Invoke($"Lấp {(opt.Direction == NestDirection.FillWidth ? "theo chiều rộng" : "theo chiều dài")}: {outcome.Sheets.Count} tấm, còn {outcome.Unplaced} chi tiết chưa đặt.");
+                Interlocked.Increment(ref completedLayouts);
+                opt.ReportProgress?.Invoke(
+                    0.9 * (phaseIndex * progressSteps + completedLayouts) / totalProgressSteps);
+                if (GoalReached(outcome, fullSheetArea, target))
+                {
+                    best = outcome;
+                    bestOrder = runItem.Order;
+                    bestName += " · đã đạt mục tiêu hiệu suất";
+                    earlyStop = true;
+                }
+                if (outcome.Interrupted) earlyStop = true;
+            }
+        });
+
+        if (runLocalSearch && best != null && (!best.Interrupted || phaseIndex > 0) && !IsStopped(opt, sw) &&
+            !GoalReached(best, fullSheetArea, target))
+        {
+            var rng = new Random(12345);
+            const int searchIterations = 6;
+            for (int iteration = 0; iteration < searchIterations && !IsStopped(opt, sw); iteration++)
+            {
+                var candidate = new List<(int Type, int Inst)>(bestOrder);
+                int moves = rng.Next(1, 4);
+                for (int move = 0; move < moves && candidate.Count > 1; move++)
+                {
+                    int i = rng.Next(candidate.Count), j = rng.Next(candidate.Count);
+                    if (rng.Next(2) == 0) (candidate[i], candidate[j]) = (candidate[j], candidate[i]);
+                    else { var item = candidate[i]; candidate.RemoveAt(i); candidate.Insert(j, item); }
+                }
+                var outcome = Pack(candidate, types, sheet, cellSize, spacingCells, rows, cols, primaryX, opt, sw,
+                    fraction => opt.ReportProgress?.Invoke(
+                        0.9 * (phaseIndex * progressSteps + keyRuns.Count + iteration + fraction) / totalProgressSteps));
+                if (Better(outcome, best, primaryX))
+                {
+                    best = outcome;
+                    bestOrder = candidate;
+                    bestName = $"tìm kiếm thứ tự (lượt {iteration + 1})";
+                }
+                double utilization = OccupiedArea(outcome) / (fullSheetArea * Math.Max(1, outcome.Sheets.Count)) * 100;
+                opt.Report?.Invoke($"Tìm kiếm {iteration + 1}/{searchIterations}: {outcome.Sheets.Count} tấm, hiệu suất {utilization:0.0}% (mục tiêu {target:0.#}%).");
+                opt.ReportProgress?.Invoke(
+                    0.9 * (phaseIndex * progressSteps + keyRuns.Count + iteration + 1) / totalProgressSteps);
+                if (GoalReached(outcome, fullSheetArea, target))
+                {
+                    best = outcome;
+                    bestOrder = candidate;
+                    bestName = $"đã đạt mục tiêu hiệu suất ở lượt {iteration + 1}";
+                    break;
+                }
+                if (outcome.Interrupted) break;
+            }
+        }
+
+        return new LayoutSearchResult(best, bestOrder, bestName);
+    }
+
     // ---------- Mặt nạ ----------
 
     private static string MaskKey(Variant v)
@@ -332,14 +463,31 @@ internal static class RasterNester
         return h.ToHashCode().ToString();
     }
 
-    private static Variant? BuildVariant(PartType t, double angle, double c, int s, NestOptions opt, Stopwatch sw)
+    private static Variant? BuildVariant(PartType t, double angle, double c, int s, NestOptions opt, Stopwatch sw,
+        NestDiagnostics? diagnostics)
     {
+        long geometryStart = diagnostics == null ? 0 : Stopwatch.GetTimestamp();
         var shape = ShapeOps.Rotate(t.Base, angle);
         var loops = ShapeOps.Build(shape);
+        if (diagnostics != null)
+            diagnostics.AddVariantGeometryTicks(Stopwatch.GetTimestamp() - geometryStart);
         if (IsStopped(opt, sw)) return null;
         if (!loops.Reliable || loops.Area <= 0) return null;
-        var verify = loops;
+        long rasterizationStart = diagnostics == null ? 0 : Stopwatch.GetTimestamp();
+        try
+        {
+            return BuildVariantMask(shape, loops, angle, c, s, opt, sw);
+        }
+        finally
+        {
+            if (diagnostics != null)
+                diagnostics.AddVariantRasterizationTicks(Stopwatch.GetTimestamp() - rasterizationStart);
+        }
+    }
 
+    private static Variant? BuildVariantMask(DxfShape shape, LoopSet verify, double angle, double c, int s,
+        NestOptions opt, Stopwatch sw)
+    {
         double w = shape.Width, h = shape.Height;
         double wcValue = Math.Ceiling(w / c - 1e-9);
         double hcValue = Math.Ceiling(h / c - 1e-9);
@@ -552,7 +700,23 @@ internal static class RasterNester
         foreach (var v in t.Variants)
         {
             if (IsStopped(opt, sw)) break;
-            if (!Search(sh, v, sheet, c, primaryX, opt, sw, feasible, out int x, out int y)) continue;
+            int x, y;
+            bool found;
+            if (opt.Diagnostics is { } diagnostics)
+            {
+                long searchStart = Stopwatch.GetTimestamp();
+                try
+                {
+                    found = Search(sh, v, sheet, c, primaryX, opt, sw, feasible, diagnostics, out x, out y);
+                }
+                finally
+                {
+                    diagnostics.AddSearchTicks(Stopwatch.GetTimestamp() - searchStart);
+                }
+            }
+            else
+                found = Search(sh, v, sheet, c, primaryX, opt, sw, feasible, null, out x, out y);
+            if (!found) continue;
             int primary = primaryX ? x + v.Wc : y + v.Hc;
             int secondary = primaryX ? y + v.Hc : x + v.Wc;
             if (primary < bestPrimary || (primary == bestPrimary && secondary < bestSecondary))
@@ -564,13 +728,13 @@ internal static class RasterNester
 
         if (bestV == null) return false;
         Stamp(sh, bestV, bestX, bestY);
-        sh.Items.Add(new Placed(ti, inst, bestV, sheet.Margin + bestX * c, sheet.Margin + bestY * c));
+        sh.Add(new Placed(ti, inst, bestV, sheet.Margin + bestX * c, sheet.Margin + bestY * c));
         return true;
     }
 
     /// <summary>Tìm vị trí hợp lệ theo trục ưu tiên: X trước hoặc Y trước.</summary>
     private static bool Search(Sheet sh, Variant v, SheetDefinition sheet, double c, bool primaryX,
-        NestOptions opt, Stopwatch sw, ulong[] feasible, out int ox, out int oy)
+        NestOptions opt, Stopwatch sw, ulong[] feasible, NestDiagnostics? diagnostics, out int ox, out int oy)
     {
         ox = oy = 0;
         int maxX = Math.Min(sh.Cols - v.Wc, (int)Math.Floor((sheet.UsableWidth - v.W + 1e-6) / c));
@@ -618,7 +782,7 @@ internal static class RasterNester
                     word &= word - 1;
                     int x = wi * 64 + tz;
                     if (primaryX && x >= bestX) break; // row đang đi lên; cùng X không thể thắng Y đã có
-                    if (Verify(sh, v, sheet, c, x, y))
+                    if (Verify(sh, v, sheet, c, x, y, diagnostics))
                     {
                         if (!primaryX) { ox = x; oy = y; return true; }
                         bestX = x; bestY = y; foundAtRow = true;
@@ -639,28 +803,81 @@ internal static class RasterNester
     }
 
     /// <summary>Xác minh chính xác: trong vùng cho phép và đúng khe hở với mọi chi tiết gần đó.</summary>
-    private static bool Verify(Sheet sh, Variant v, SheetDefinition sheet, double c, int x, int y)
+    private static bool Verify(Sheet sh, Variant v, SheetDefinition sheet, double c, int x, int y,
+        NestDiagnostics? diagnostics)
     {
-        double X = sheet.Margin + x * c, Y = sheet.Margin + y * c;
-        if (X + v.W > sheet.Width - sheet.Margin + 1e-6 || Y + v.H > sheet.Height - sheet.Margin + 1e-6) return false;
-
-        double gap = Math.Max(0, sheet.Spacing - GapTol);
-        foreach (var p in sh.Items)
+        long verifyStart = diagnostics == null ? 0 : Stopwatch.GetTimestamp();
+        try
         {
-            if (X >= p.X + p.V.W + sheet.Spacing || p.X >= X + v.W + sheet.Spacing ||
-                Y >= p.Y + p.V.H + sheet.Spacing || p.Y >= Y + v.H + sheet.Spacing) continue;
-            if (ShapeOps.Conflict(v.Loops, X, Y, p.V.Loops, p.X, p.Y, gap)) return false;
+            double X = sheet.Margin + x * c, Y = sheet.Margin + y * c;
+            if (X + v.W > sheet.Width - sheet.Margin + 1e-6 || Y + v.H > sheet.Height - sheet.Margin + 1e-6) return false;
+
+            double contourGap = Math.Max(0, sheet.Spacing - GapTol);
+            double minX = X - sh.MaxPlacedWidth - sheet.Spacing;
+            double maxX = X + v.W + sheet.Spacing;
+            int start = LowerBoundByX(sh.ItemsByX, minX);
+            int end = LowerBoundByX(sh.ItemsByX, maxX);
+            diagnostics?.RecordVerifyIndexRange(sh.Items.Count, end - start);
+            for (int i = start; i < end; i++)
+            {
+                var p = sh.ItemsByX[i];
+                diagnostics?.RecordVerifyPlacementCheck();
+                bool separatedBySpacing =
+                    X >= p.X + p.V.W + sheet.Spacing || p.X >= X + v.W + sheet.Spacing ||
+                    Y >= p.Y + p.V.H + sheet.Spacing || p.Y >= Y + v.H + sheet.Spacing;
+                if (separatedBySpacing)
+                {
+                    diagnostics?.RecordVerifyBoundsRejected();
+                    continue;
+                }
+                if (!v.HasContour && !p.V.HasContour) return false;
+                if (MeasuredConflict(v.Loops, X, Y, p.V.Loops, p.X, p.Y, contourGap, diagnostics)) return false;
+            }
+            return true;
         }
-        return true;
+        finally
+        {
+            if (diagnostics != null)
+                diagnostics.AddVerifyTicks(Stopwatch.GetTimestamp() - verifyStart);
+        }
     }
 
-    private static void CompactZeroSpacing(Sheet sh, SheetDefinition sheet, NestOptions opt, Stopwatch sw)
+    private static int LowerBoundByX(List<Placed> items, double x)
+    {
+        int low = 0, high = items.Count;
+        while (low < high)
+        {
+            int middle = low + (high - low) / 2;
+            if (items[middle].X < x) low = middle + 1;
+            else high = middle;
+        }
+        return low;
+    }
+
+    private static bool MeasuredConflict(LoopSet a, double ax, double ay, LoopSet b, double bx, double by,
+        double minGap, NestDiagnostics? diagnostics)
+    {
+        if (diagnostics == null) return ShapeOps.Conflict(a, ax, ay, b, bx, by, minGap);
+
+        long conflictStart = Stopwatch.GetTimestamp();
+        try
+        {
+            return ShapeOps.Conflict(a, ax, ay, b, bx, by, minGap);
+        }
+        finally
+        {
+            diagnostics.RecordConflict(Stopwatch.GetTimestamp() - conflictStart);
+        }
+    }
+
+    private static void CompactZeroSpacing(Sheet sh, SheetDefinition sheet, NestOptions opt, Stopwatch sw,
+        NestDiagnostics? diagnostics)
     {
         for (int i = 0; i < sh.Items.Count && !IsStopped(opt, sw); i++)
         {
             var item = sh.Items[i];
             double leftTravel = Math.Max(0, item.X - sheet.Margin);
-            double leftMove = FindSafeTravel(sh, i, item, -leftTravel, 0, sheet, opt, sw);
+            double leftMove = FindSafeTravel(sh, i, item, -leftTravel, 0, sheet, opt, sw, diagnostics);
             if (leftMove > 1e-7)
             {
                 item = item with { X = item.X - leftMove };
@@ -668,14 +885,14 @@ internal static class RasterNester
             }
 
             double downTravel = Math.Max(0, item.Y - sheet.Margin);
-            double downMove = FindSafeTravel(sh, i, item, 0, -downTravel, sheet, opt, sw);
+            double downMove = FindSafeTravel(sh, i, item, 0, -downTravel, sheet, opt, sw, diagnostics);
             if (downMove > 1e-7)
                 sh.Items[i] = item with { Y = item.Y - downMove };
         }
     }
 
     private static double FindSafeTravel(Sheet sh, int movingIndex, Placed moving, double dx, double dy,
-        SheetDefinition sheet, NestOptions opt, Stopwatch sw)
+        SheetDefinition sheet, NestOptions opt, Stopwatch sw, NestDiagnostics? diagnostics)
     {
         double maxTravel = Math.Sqrt(dx * dx + dy * dy);
         if (maxTravel <= 1e-7) return 0;
@@ -721,7 +938,7 @@ internal static class RasterNester
                 if (x >= other.X + other.V.W || other.X >= x + moving.V.W ||
                     y >= other.Y + other.V.H || other.Y >= y + moving.V.H)
                     continue;
-                if (ShapeOps.Conflict(moving.V.Loops, x, y, other.V.Loops, other.X, other.Y, 0))
+                if (MeasuredConflict(moving.V.Loops, x, y, other.V.Loops, other.X, other.Y, 0, diagnostics))
                     return false;
             }
             return true;

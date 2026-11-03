@@ -162,10 +162,13 @@ internal static class RasterNester
 
             var t = new PartType
             {
-                Name = p.Name, Quantity = p.Quantity, HasShape = p.Shape != null,
+                Name = p.Name,
+                Quantity = p.Quantity,
+                HasShape = p.Shape != null,
                 CanRotate = opt.AllowRotation && p.CanRotate,
                 Base = p.Shape ?? ShapeOps.RectShape(p.Name, p.Width, p.Height),
-                W = p.Width, H = p.Height
+                W = p.Width,
+                H = p.Height
             };
             var baseLoops = ShapeOps.Build(t.Base);
             if (!baseLoops.Reliable)
@@ -570,8 +573,16 @@ internal static class RasterNester
 
         return new Variant
         {
-            Angle = angle, Shape = shape, Loops = verify, W = w, H = h, Wc = wc, Hc = hc, S = s,
-            Cover = cover, Dil = dil
+            Angle = angle,
+            Shape = shape,
+            Loops = verify,
+            W = w,
+            H = h,
+            Wc = wc,
+            Hc = hc,
+            S = s,
+            Cover = cover,
+            Dil = dil
         };
     }
 

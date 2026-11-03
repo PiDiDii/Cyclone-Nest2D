@@ -7,6 +7,9 @@ internal sealed record BenchmarkRun
     public string Workload { get; init; } = "";
     public string Description { get; init; } = "";
     public string Profile { get; init; } = "";
+    public string Strategy { get; init; } = "";
+    public string CompletionStatus { get; init; } = "";
+    public string StopReason { get; init; } = "";
     public int Repetition { get; init; }
     public int PartTypes { get; init; }
     public int RequestedInstances { get; init; }
@@ -129,7 +132,8 @@ internal static class CsvReport
 {
     private static readonly string[] Columns =
     [
-        "Workload", "Description", "Profile", "Repetition", "PartTypes", "RequestedInstances",
+        "Workload", "Description", "Profile", "Strategy", "CompletionStatus", "StopReason",
+        "Repetition", "PartTypes", "RequestedInstances",
         "SheetWidth", "SheetHeight", "Margin", "Spacing", "RotationStep", "TargetUtilizationPercent",
         "TimeBudgetSeconds", "DiagnosticsEnabled", "VariantGeometryMilliseconds", "VariantRasterizationMilliseconds",
         "RasterCellSizeMillimeters", "PrimaryVariantsBuilt", "FineVariantsBuilt",
@@ -149,7 +153,8 @@ internal static class CsvReport
         {
             string[] values =
             [
-                run.Workload, run.Description, run.Profile, run.Repetition.ToString(CultureInfo.InvariantCulture),
+                run.Workload, run.Description, run.Profile, run.Strategy, run.CompletionStatus, run.StopReason,
+                run.Repetition.ToString(CultureInfo.InvariantCulture),
                 run.PartTypes.ToString(CultureInfo.InvariantCulture), run.RequestedInstances.ToString(CultureInfo.InvariantCulture),
                 Number(run.SheetWidth), Number(run.SheetHeight), Number(run.Margin), Number(run.Spacing),
                 Number(run.RotationStep), Number(run.TargetUtilizationPercent), Number(run.TimeBudgetSeconds),

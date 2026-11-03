@@ -452,7 +452,7 @@ public sealed class CoreRegressionTests
             foreach (var s in r.Sheets)
             {
                 string file = Path.Combine(tmp, $"out_{s.Index}.dxf");
-                DxfWriter.Write(s, sheet, file);
+                DxfWriter.Write(s, sheet, file, new DxfExportOptions { EnableMicroJoints = false });
 
                 var raw = DxfReader.ReadRaw(file);
                 var partGeometry = raw.Shapes.Where(x =>
@@ -483,7 +483,7 @@ public sealed class CoreRegressionTests
             True(pl.IsRotated, "phải xoay");
 
             var file = Path.Combine(tmp, "slot_out.dxf");
-            DxfWriter.Write(r.Sheets[0], sheet, file);
+            DxfWriter.Write(r.Sheets[0], sheet, file, new DxfExportOptions { EnableMicroJoints = false });
             var bb = Bbox.Empty;
             foreach (var s in DxfReader.ReadRaw(file).Shapes.Where(x => x.Layer == "IV_OUTER_PROFILE")) s.Extend(ref bb);
             Near(pl.X, bb.MinX, 1e-6, "MinX"); Near(pl.Y, bb.MinY, 1e-6, "MinY");
@@ -768,12 +768,196 @@ public sealed class CoreRegressionTests
             {
                 OutputSheets = false,
                 AddPartLabels = false,
+                EnableMicroJoints = true,
                 MicroJointWidthMm = 4,
                 MicroJointCount = 2
             });
             var lines = File.ReadAllLines(path);
             int lineEntities = Enumerable.Range(0, lines.Length - 1).Count(i => lines[i].Trim() == "0" && lines[i + 1].Trim() == "LINE");
             True(lineEntities == 6, $"hai khe chia hai cạnh ngoài thành 6 đoạn LINE (thực tế {lineEntities})");
+        });
+
+        Test("Micro-joints thông minh bỏ contour nhỏ và áp cầu cho contour vừa, lớn", () =>
+        {
+            var sheet = new SheetResult { Index = 1, Width = 1000, Height = 700, Material = "SS400", Thickness = 1 };
+            sheet.Placements.Add(new Placement("Small", 1, 0, 0, 40, 40, false));
+            sheet.Placements.Add(new Placement("Medium", 1, 100, 0, 100, 40, false));
+            sheet.Placements.Add(new Placement("Large", 1, 300, 0, 600, 600, false));
+            string path = Path.Combine(tmp, "smart-micro-joints.dxf");
+            DxfExportWriter.Write(new[] { sheet }, path, new DxfExportOptions
+            {
+                OutputSheets = false,
+                EnableMicroJoints = true,
+                MicroJointWidthMm = 0.4,
+                MicroJointCount = 1,
+                MicroJointSmallMaxLengthMm = 50,
+                MicroJointSmallMaxWidthMm = 50,
+                MicroJointLargeMinLengthMm = 500,
+                MicroJointLargeMinWidthMm = 500
+            });
+
+            var lines = File.ReadAllLines(path);
+            int lineEntities = Enumerable.Range(0, lines.Length - 1)
+                .Count(i => lines[i].Trim() == "0" && lines[i + 1].Trim() == "LINE");
+            True(lineEntities == 14, $"part nhỏ giữ 4 cạnh; mỗi part vừa/lớn có một cầu (thực tế {lineEntities} LINE)");
+        });
+
+        Test("Micro-joints thông minh áp cầu cho cả đường bao lỗ đủ kích thước", () =>
+        {
+            var segments = new Seg[]
+            {
+                new LineSeg(0, 0, 100, 0, "OUTER"),
+                new LineSeg(100, 0, 100, 100, "OUTER"),
+                new LineSeg(100, 100, 0, 100, "OUTER"),
+                new LineSeg(0, 100, 0, 0, "OUTER"),
+                new LineSeg(20, 20, 80, 20, "INNER"),
+                new LineSeg(80, 20, 80, 80, "INNER"),
+                new LineSeg(80, 80, 20, 80, "INNER"),
+                new LineSeg(20, 80, 20, 20, "INNER")
+            };
+            var shape = new DxfShape("Frame", segments, 1,
+                new Dictionary<string, int> { ["OUTER"] = 4, ["INNER"] = 4 }, Array.Empty<string>(), 0);
+            var sheet = new SheetResult { Index = 1, Width = 120, Height = 120 };
+            sheet.Placements.Add(new Placement("Frame", 1, 0, 0, 100, 100, false, shape));
+            string path = Path.Combine(tmp, "micro-joints-inner-contour.dxf");
+            DxfExportWriter.Write(new[] { sheet }, path, new DxfExportOptions
+            {
+                OutputSheets = false,
+                EnableMicroJoints = true,
+                MicroJointWidthMm = 1,
+                MicroJointCount = 4,
+                MicroJointSmallMaxLengthMm = 50,
+                MicroJointSmallMaxWidthMm = 50,
+                MicroJointLargeMinLengthMm = 500,
+                MicroJointLargeMinWidthMm = 500
+            });
+
+            var lines = File.ReadAllLines(path);
+            int lineEntities = Enumerable.Range(0, lines.Length - 1)
+                .Count(i => lines[i].Trim() == "0" && lines[i + 1].Trim() == "LINE");
+            True(lineEntities == 12, $"4 cầu phân bổ trên cả hai contour tạo 12 đoạn LINE (thực tế {lineEntities})");
+        });
+
+        Test("Micro-joints bỏ qua contour lỗ nhỏ dù contour ngoài đủ kích thước", () =>
+        {
+            var segments = new Seg[]
+            {
+                new LineSeg(0, 0, 100, 0, "OUTER"),
+                new LineSeg(100, 0, 100, 100, "OUTER"),
+                new LineSeg(100, 100, 0, 100, "OUTER"),
+                new LineSeg(0, 100, 0, 0, "OUTER"),
+                new LineSeg(40, 40, 60, 40, "INNER"),
+                new LineSeg(60, 40, 60, 60, "INNER"),
+                new LineSeg(60, 60, 40, 60, "INNER"),
+                new LineSeg(40, 60, 40, 40, "INNER")
+            };
+            var shape = new DxfShape("SmallHole", segments, 1,
+                new Dictionary<string, int> { ["OUTER"] = 4, ["INNER"] = 4 }, Array.Empty<string>(), 0);
+            var sheet = new SheetResult { Index = 1, Width = 120, Height = 120 };
+            sheet.Placements.Add(new Placement("SmallHole", 1, 0, 0, 100, 100, false, shape));
+            string path = Path.Combine(tmp, "micro-joints-small-inner-contour.dxf");
+            DxfExportWriter.Write(new[] { sheet }, path, new DxfExportOptions
+            {
+                OutputSheets = false,
+                EnableMicroJoints = true,
+                MicroJointWidthMm = 1,
+                MicroJointCount = 2,
+                MicroJointSmallMaxLengthMm = 50,
+                MicroJointSmallMaxWidthMm = 50,
+                MicroJointLargeMinLengthMm = 500,
+                MicroJointLargeMinWidthMm = 500
+            });
+
+            var lines = File.ReadAllLines(path);
+            int lineEntities = Enumerable.Range(0, lines.Length - 1)
+                .Count(i => lines[i].Trim() == "0" && lines[i + 1].Trim() == "LINE");
+            True(lineEntities == 10, $"2 cầu chỉ ngắt contour ngoài; contour lỗ nhỏ còn đủ 4 cạnh (thực tế {lineEntities} LINE)");
+        });
+
+        Test("Xóa cạnh chung loại bỏ cạnh trùng toàn phần giữa hai layer", () =>
+        {
+            DxfShape Rectangle(string layer) => new(layer, new Seg[]
+            {
+                new LineSeg(0, 0, 20, 0, layer),
+                new LineSeg(20, 0, 20, 10, layer),
+                new LineSeg(20, 10, 0, 10, layer),
+                new LineSeg(0, 10, 0, 0, layer)
+            }, 1, new Dictionary<string, int> { [layer] = 4 }, Array.Empty<string>(), 0);
+
+            var sheet = new SheetResult { Index = 1, Width = 50, Height = 20 };
+            sheet.Placements.Add(new Placement("A", 1, 0, 0, 20, 10, false, Rectangle("LAYER_A")));
+            sheet.Placements.Add(new Placement("B", 1, 20, 0, 20, 10, false, Rectangle("LAYER_B")));
+            string path = Path.Combine(tmp, "remove-common-edges.dxf");
+            DxfExportWriter.Write(new[] { sheet }, path, new DxfExportOptions
+            {
+                OutputSheets = false,
+                EnableMicroJoints = false,
+                RemoveCommonEdges = true
+            });
+
+            var lines = File.ReadAllLines(path);
+            int lineEntities = Enumerable.Range(0, lines.Length - 1)
+                .Count(i => lines[i].Trim() == "0" && lines[i + 1].Trim() == "LINE");
+            var emitted = DxfReader.ReadRaw(path).Shapes.OfType<LineShape>()
+                .Select(line => $"({line.X1},{line.Y1})-({line.X2},{line.Y2})");
+            True(lineEntities == 7, $"cạnh chung chỉ xuất một lần dù layer khác nhau (thực tế {lineEntities} LINE): {string.Join("; ", emitted)}");
+        });
+
+        Test("Xóa cạnh chung xử lý được đoạn cạnh trùng một phần", () =>
+        {
+            var firstShape = new DxfShape("A", new Seg[]
+            {
+                new LineSeg(0, 0, 20, 0, "A"),
+                new LineSeg(20, 0, 20, 10, "A"),
+                new LineSeg(20, 10, 0, 10, "A"),
+                new LineSeg(0, 10, 0, 0, "A")
+            }, 1, new Dictionary<string, int> { ["A"] = 4 }, Array.Empty<string>(), 0);
+            var secondShape = new DxfShape("B", new Seg[]
+            {
+                new LineSeg(0, 0, 20, 0, "B"),
+                new LineSeg(20, 0, 20, 4, "B"),
+                new LineSeg(20, 4, 0, 4, "B"),
+                new LineSeg(0, 4, 0, 0, "B")
+            }, 1, new Dictionary<string, int> { ["B"] = 4 }, Array.Empty<string>(), 0);
+            var sheet = new SheetResult { Index = 1, Width = 50, Height = 20 };
+            sheet.Placements.Add(new Placement("A", 1, 0, 0, 20, 10, false, firstShape));
+            sheet.Placements.Add(new Placement("B", 1, 20, 8, 20, 4, false, secondShape));
+            string path = Path.Combine(tmp, "remove-partial-common-edges.dxf");
+            DxfExportWriter.Write(new[] { sheet }, path, new DxfExportOptions
+            {
+                OutputSheets = false,
+                EnableMicroJoints = false,
+                RemoveCommonEdges = true
+            });
+
+            var lines = File.ReadAllLines(path);
+            int lineEntities = Enumerable.Range(0, lines.Length - 1)
+                .Count(i => lines[i].Trim() == "0" && lines[i + 1].Trim() == "LINE");
+            True(lineEntities == 8, $"đoạn trùng bị khử, phần cạnh không trùng vẫn được giữ (thực tế {lineEntities} LINE)");
+        });
+
+        Test("Micro-joints mặc định bật với bộ thông số trong giao diện", () =>
+        {
+            var options = new DxfExportOptions();
+            True(options.EnableMicroJoints, "micro-joints bật mặc định");
+            True(options.MicroJointWidthMm == 0.4 && options.MicroJointCount == 6, "độ rộng 0,4 mm và 6 cầu");
+            True(options.MicroJointSmallMaxLengthMm == 50 && options.MicroJointSmallMaxWidthMm == 50,
+                "ngưỡng contour nhỏ 50 × 50 mm");
+            True(options.MicroJointLargeMinLengthMm == 500 && options.MicroJointLargeMinWidthMm == 500,
+                "ngưỡng contour lớn 500 × 500 mm");
+        });
+
+        Test("Micro-joints từ chối ngưỡng phân loại không hợp lệ", () =>
+        {
+            var sheet = new SheetResult { Index = 1, Width = 100, Height = 100 };
+            sheet.Placements.Add(new Placement("Small", 1, 0, 0, 40, 40, false));
+            Assert.Throws<ArgumentOutOfRangeException>(() => DxfExportWriter.Write(new[] { sheet },
+                Path.Combine(tmp, "invalid-smart-micro-joints.dxf"), new DxfExportOptions
+                {
+                    EnableMicroJoints = true,
+                    MicroJointSmallMaxLengthMm = 100,
+                    MicroJointLargeMinLengthMm = 50
+                }));
         });
 
         Test("GapTol arc/circle: chấp nhận thiếu khe trong dung sai và từ chối khi vượt ngưỡng", () =>

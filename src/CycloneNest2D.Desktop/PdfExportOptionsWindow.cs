@@ -6,16 +6,14 @@ using System.Windows.Media;
 namespace CycloneNest2D.Desktop;
 
 internal sealed record PdfExportSelection(
-    ReportExportScope Scope, ReportPageSelection PageSelection, int FromPage, int ToPage);
+    ReportPageSelection PageSelection, int FromPage, int ToPage);
 
 internal sealed class PdfExportOptionsWindow : Window
 {
     private readonly NestingReportDocument _report;
-    private readonly NestingReportType _currentType;
     private readonly NestingPageOrientation _orientation;
     private readonly NestingPageLayout _layout;
     private readonly ReportPreviewPreferences _preferences;
-    private readonly ComboBox _scopeBox;
     private readonly ComboBox _selectionBox;
     private readonly TextBox _fromBox;
     private readonly TextBox _toBox;
@@ -25,20 +23,19 @@ internal sealed class PdfExportOptionsWindow : Window
 
     public PdfExportSelection? Selection { get; private set; }
 
-    public PdfExportOptionsWindow(NestingReportDocument report, NestingReportType currentType,
-        NestingPageOrientation orientation, NestingPageLayout layout, ReportPreviewPreferences preferences)
+    public PdfExportOptionsWindow(NestingReportDocument report, NestingPageOrientation orientation, NestingPageLayout layout,
+        ReportPreviewPreferences preferences)
     {
         _report = report;
-        _currentType = currentType;
         _orientation = orientation;
         _layout = layout;
         _preferences = preferences;
 
         Title = "Tùy chọn xuất PDF";
         Width = 570;
-        Height = 430;
+        Height = 390;
         MinWidth = 540;
-        MinHeight = 400;
+        MinHeight = 360;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.CanResize;
         Background = Brush("#F3F6FA");
@@ -49,25 +46,18 @@ internal sealed class PdfExportOptionsWindow : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var heading = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
         heading.Children.Add(new TextBlock { Text = "XUẤT BÁO CÁO PDF", FontSize = 17, FontWeight = FontWeights.SemiBold, Foreground = Brush("#172B4D") });
-        heading.Children.Add(new TextBlock { Text = "Chọn loại báo cáo và các trang cần đưa vào tệp PDF.", FontSize = 11, Foreground = Brush("#66758A"), Margin = new Thickness(0, 4, 0, 0) });
+        heading.Children.Add(new TextBlock { Text = "Báo cáo thông số và danh mục chi tiết theo từng tấm nesting.", FontSize = 11, Foreground = Brush("#66758A"), Margin = new Thickness(0, 4, 0, 0) });
         root.Children.Add(heading);
 
         var body = new StackPanel { VerticalAlignment = VerticalAlignment.Top };
-        _scopeBox = MakeCombo(new[]
-        {
-            ($"Chỉ báo cáo hiện tại — {ReportName(currentType)}", ReportExportScope.CurrentReport),
-            ("Cả hai báo cáo — thông số tấm + danh mục chi tiết", ReportExportScope.BothReports)
-        }, 480);
+        _pageCountText = new TextBlock { FontSize = 11, Foreground = Brush("#40536B"), Margin = new Thickness(1, 0, 0, 13) };
+        body.Children.Add(_pageCountText);
         _selectionBox = MakeCombo(new[]
         {
             ("Tất cả trang", ReportPageSelection.AllPages),
             ("Chỉ trang lẻ (1, 3, 5, …)", ReportPageSelection.OddPages),
             ("Từ trang này đến trang kia", ReportPageSelection.PageRange)
         }, 260);
-
-        body.Children.Add(Field("Nội dung xuất", _scopeBox));
-        _pageCountText = new TextBlock { FontSize = 11, Foreground = Brush("#40536B"), Margin = new Thickness(1, 0, 0, 13) };
-        body.Children.Add(_pageCountText);
         body.Children.Add(Field("Phạm vi trang", _selectionBox));
 
         _rangePanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10), VerticalAlignment = VerticalAlignment.Center };
@@ -81,8 +71,11 @@ internal sealed class PdfExportOptionsWindow : Window
         body.Children.Add(_rangePanel);
         body.Children.Add(new TextBlock
         {
-            Text = "Khi xuất cả hai báo cáo, số trang được tính liên tục: báo cáo thông số trước, danh mục chi tiết sau.",
-            FontSize = 10, Foreground = Brush("#66758A"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(1, 3, 0, 0)
+            Text = "Mỗi báo cáo ghép thông số, sơ đồ và danh mục chi tiết của đúng tấm nest.",
+            FontSize = 11,
+            Foreground = Brush("#66758A"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(1, 3, 0, 0)
         });
         Grid.SetRow(body, 1);
         root.Children.Add(body);
@@ -99,10 +92,7 @@ internal sealed class PdfExportOptionsWindow : Window
         root.Children.Add(buttons);
         Content = root;
 
-        _scopeBox.SelectionChanged += (_, _) => UpdatePageCount();
         _selectionBox.SelectionChanged += (_, _) => UpdateRangeVisibility();
-        _scopeBox.SelectedValue = preferences.ExportScope;
-        if (_scopeBox.SelectedValue is not ReportExportScope) _scopeBox.SelectedIndex = 0;
         _selectionBox.SelectedValue = preferences.PageSelection;
         if (_selectionBox.SelectedValue is not ReportPageSelection) _selectionBox.SelectedIndex = 0;
         UpdatePageCount();
@@ -111,9 +101,7 @@ internal sealed class PdfExportOptionsWindow : Window
 
     private void UpdatePageCount()
     {
-        if (_scopeBox.SelectedValue is not ReportExportScope scope) return;
-        var plan = NestingReportPagePlan.Build(_report, _currentType, _orientation, _layout, scope);
-        _pageCount = plan.Count;
+        _pageCount = NestingReportPagePlan.Build(_report, _orientation, _layout).Count;
         _pageCountText.Text = $"Tổng số trang cho lựa chọn này: {_pageCount}";
         if (int.TryParse(_fromBox.Text, out int from) && from > _pageCount) _fromBox.Text = _pageCount.ToString(CultureInfo.InvariantCulture);
         if (int.TryParse(_toBox.Text, out int to) && to > _pageCount) _toBox.Text = _pageCount.ToString(CultureInfo.InvariantCulture);
@@ -127,23 +115,19 @@ internal sealed class PdfExportOptionsWindow : Window
 
     private void Confirm_Click(object sender, RoutedEventArgs e)
     {
-        if (_scopeBox.SelectedValue is not ReportExportScope scope || _selectionBox.SelectedValue is not ReportPageSelection pageSelection)
-            return;
+        if (_selectionBox.SelectedValue is not ReportPageSelection pageSelection) return;
         int from = 1, to = _pageCount;
-        if (pageSelection == ReportPageSelection.PageRange)
+        if (pageSelection == ReportPageSelection.PageRange &&
+            (!int.TryParse(_fromBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out from) ||
+             !int.TryParse(_toBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out to) ||
+             from < 1 || to < from || to > _pageCount))
         {
-            if (!int.TryParse(_fromBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out from) ||
-                !int.TryParse(_toBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out to) ||
-                from < 1 || to < from || to > _pageCount)
-            {
-                MessageBox.Show(this, $"Nhập khoảng trang hợp lệ từ 1 đến {_pageCount}; trang bắt đầu phải nhỏ hơn hoặc bằng trang kết thúc.",
-                    "Khoảng trang không hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+            MessageBox.Show(this, $"Nhập khoảng trang hợp lệ từ 1 đến {_pageCount}; trang bắt đầu phải nhỏ hơn hoặc bằng trang kết thúc.",
+                "Khoảng trang không hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
         }
 
-        Selection = new PdfExportSelection(scope, pageSelection, from, to);
-        _preferences.ExportScope = scope;
+        Selection = new PdfExportSelection(pageSelection, from, to);
         _preferences.PageSelection = pageSelection;
         _preferences.FromPage = from;
         _preferences.ToPage = to;
@@ -169,9 +153,13 @@ internal sealed class PdfExportOptionsWindow : Window
 
     private static TextBox NumberBox(int value) => new()
     {
-        Text = Math.Max(1, value).ToString(CultureInfo.InvariantCulture), Width = 58, Height = 28,
-        VerticalContentAlignment = VerticalAlignment.Center, HorizontalContentAlignment = HorizontalAlignment.Center,
-        Padding = new Thickness(4), Margin = new Thickness(0, 1, 0, 1)
+        Text = Math.Max(1, value).ToString(CultureInfo.InvariantCulture),
+        Width = 58,
+        Height = 28,
+        VerticalContentAlignment = VerticalAlignment.Center,
+        HorizontalContentAlignment = HorizontalAlignment.Center,
+        Padding = new Thickness(4),
+        Margin = new Thickness(0, 1, 0, 1)
     };
 
     private static Button MakeButton(string text, bool primary)
@@ -180,8 +168,6 @@ internal sealed class PdfExportOptionsWindow : Window
         if (primary) { button.Background = Brush("#1769AA"); button.Foreground = Brushes.White; button.BorderBrush = Brush("#1769AA"); }
         return button;
     }
-
-    private static string ReportName(NestingReportType type) => type == NestingReportType.SheetParameters ? "Thông số từng tấm" : "Danh mục chi tiết";
 
     private static Brush Brush(string value) => (Brush)new BrushConverter().ConvertFromString(value)!;
 }

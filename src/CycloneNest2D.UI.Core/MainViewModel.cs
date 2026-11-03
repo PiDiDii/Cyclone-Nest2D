@@ -787,8 +787,12 @@ public sealed class MainViewModel : ObservableObject
                     {
                         var output = new SheetResult
                         {
-                            Index = nextSheetIndex++, Width = srcSheet.Width, Height = srcSheet.Height,
-                            Material = materialLabel, Thickness = thickness, StockName = bestPreset.Name
+                            Index = nextSheetIndex++,
+                            Width = srcSheet.Width,
+                            Height = srcSheet.Height,
+                            Material = materialLabel,
+                            Thickness = thickness,
+                            StockName = bestPreset.Name
                         };
                         foreach (var placement in srcSheet.Placements)
                         {
@@ -1024,7 +1028,10 @@ public sealed class MainViewModel : ObservableObject
         var sheet = new SheetResult
         {
             Index = (Result?.Sheets.Count ?? 0) + 1,
-            Width = width, Height = height, Material = material, Thickness = thickness,
+            Width = width,
+            Height = height,
+            Material = material,
+            Thickness = thickness,
             StockName = preset?.Name ?? "Đặt thủ công"
         };
         if (Result == null)

@@ -824,7 +824,7 @@ public sealed class UiCoreRegressionTests
             catch (InvalidDataException) { indexRejected = true; }
             Check(indexRejected, "file chỉ mục version mới hơn bị từ chối rõ ràng");
         });
-        Test("Thông số: kiểm tra hợp lệ và lưu/nạp JSON (file hỏng thì giữ mặc định)", () =>
+        Test("Thông số: kiểm tra hợp lệ và lưu/nạp JSON (file hỏng được báo lỗi)", () =>
         {
             var s = new NestSettings();
             Check(s.Validate() == null, "mặc định hợp lệ");
@@ -836,8 +836,12 @@ public sealed class UiCoreRegressionTests
             var t = new NestSettings(); t.LoadFrom(p);
             Check(t.RotationStep == 45 && t.Direction == NestDirection.FillLength && t.Margin == 12 && t.MaxSeconds == 42 && t.TargetUtilizationPercent == 91, "round-trip");
             Check(t.SheetPresets.Single(profile => profile.Material == "SS400").Note == "Mặt phẳng", "ghi chú profile được lưu/nạp");
-            File.WriteAllText(p, "rac"); var u = new NestSettings(); u.LoadFrom(p);
-            Check(u.Validate() == null && u.SheetWidth == 2500, "file hỏng -> mặc định");
+            File.WriteAllText(p, "rac"); var u = new NestSettings();
+            bool loadFailureReported = false;
+            try { u.LoadFrom(p); }
+            catch (System.Text.Json.JsonException) { loadFailureReported = true; }
+            Check(loadFailureReported && u.Validate() == null && u.SheetWidth == 2500,
+                "file hỏng được báo và không làm thay đổi thiết lập mặc định");
             bool saveFailureReported = false;
             try { u.SaveTo("bad\0path"); }
             catch (ArgumentException) { saveFailureReported = true; }

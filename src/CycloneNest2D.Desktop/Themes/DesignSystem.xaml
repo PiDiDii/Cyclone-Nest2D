@@ -12,7 +12,7 @@
   <Color x:Key="BorderHoverColor">#C5D0DA</Color>
   <Color x:Key="TextPrimaryColor">#17283D</Color>
   <Color x:Key="TextSecondaryColor">#506278</Color>
-  <Color x:Key="TextMutedColor">#708096</Color>
+  <Color x:Key="TextMutedColor">#66758A</Color>
   <Color x:Key="SidebarBgColor">#FFFFFF</Color>
   <Color x:Key="SidebarActiveBgColor">#E5F4F3</Color>
   <Color x:Key="DangerColor">#C93232</Color>
@@ -96,15 +96,18 @@
                               RecognizesAccessKey="True"/>
           </Border>
           <ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsMouseOver" Value="True"/>
+                <Condition Property="IsEnabled" Value="True"/>
+              </MultiTrigger.Conditions>
               <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource PrimaryLightBrush}"/>
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentTintAltBrush}"/>
-            </Trigger>
-            <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="Bd" Property="Opacity" Value="0.85"/>
-            </Trigger>
+            </MultiTrigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter TargetName="Bd" Property="Opacity" Value="0.65"/>
+              <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardBgAltBrush}"/>
+              <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+              <Setter Property="Cursor" Value="Arrow"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -115,8 +118,8 @@
     <Setter Property="HorizontalContentAlignment" Value="Left"/>
     <Setter Property="VerticalContentAlignment" Value="Center"/>
     <Setter Property="Background" Value="{DynamicResource CardBgAltBrush}"/>
-    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
-    <Setter Property="FontSize" Value="11.5"/>
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+    <Setter Property="FontSize" Value="12"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="BorderThickness" Value="0,0,0,1"/>
@@ -163,9 +166,20 @@
     <Setter Property="FontWeight" Value="SemiBold"/>
     <Setter Property="Padding" Value="16,8"/>
     <Style.Triggers>
-      <Trigger Property="IsMouseOver" Value="True">
+      <MultiTrigger>
+        <MultiTrigger.Conditions>
+          <Condition Property="IsMouseOver" Value="True"/>
+          <Condition Property="IsEnabled" Value="True"/>
+        </MultiTrigger.Conditions>
         <Setter Property="Background" Value="{DynamicResource PrimaryDarkBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource PrimaryDarkBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource OnPrimaryBrush}"/>
+      </MultiTrigger>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Background" Value="{DynamicResource CardBgAltBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        <Setter Property="Cursor" Value="Arrow"/>
       </Trigger>
     </Style.Triggers>
   </Style>

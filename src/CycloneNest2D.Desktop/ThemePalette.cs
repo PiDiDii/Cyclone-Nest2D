@@ -9,6 +9,12 @@ namespace CycloneNest2D.Desktop;
 /// </summary>
 internal static class ThemePalette
 {
+    public static FontFamily AppFontFamily =>
+        Application.Current?.TryFindResource("AppFont") as FontFamily ?? SystemFonts.MessageFontFamily;
+
+    public static Typeface AppTypeface =>
+        new(AppFontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+
     public static Brush Brush(string key, Color fallback)
     {
         if (Application.Current?.TryFindResource(key) is Brush b) return b;

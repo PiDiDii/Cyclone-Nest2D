@@ -120,23 +120,23 @@ public static class ShapeOps
             switch (seg)
             {
                 case LineSeg l:
-                {
-                    var p = R(l.X1, l.Y1); var q = R(l.X2, l.Y2);
-                    rotated.Add(new LineSeg(p.X, p.Y, q.X, q.Y, l.Layer));
-                    break;
-                }
+                    {
+                        var p = R(l.X1, l.Y1); var q = R(l.X2, l.Y2);
+                        rotated.Add(new LineSeg(p.X, p.Y, q.X, q.Y, l.Layer));
+                        break;
+                    }
                 case CircleSeg ci:
-                {
-                    var p = R(ci.Cx, ci.Cy);
-                    rotated.Add(new CircleSeg(p.X, p.Y, ci.R, ci.Layer));
-                    break;
-                }
+                    {
+                        var p = R(ci.Cx, ci.Cy);
+                        rotated.Add(new CircleSeg(p.X, p.Y, ci.R, ci.Layer));
+                        break;
+                    }
                 case ArcSeg ar:
-                {
-                    var p = R(ar.Cx, ar.Cy);
-                    rotated.Add(new ArcSeg(p.X, p.Y, ar.R, ar.StartRad + rad, ar.SweepRad, ar.Layer));
-                    break;
-                }
+                    {
+                        var p = R(ar.Cx, ar.Cy);
+                        rotated.Add(new ArcSeg(p.X, p.Y, ar.R, ar.StartRad + rad, ar.SweepRad, ar.Layer));
+                        break;
+                    }
             }
         }
 
@@ -239,12 +239,12 @@ public static class ShapeOps
         {
             long gx = (long)Math.Floor(x / JoinTol), gy = (long)Math.Floor(y / JoinTol);
             for (long ix = gx - 1; ix <= gx + 1; ix++)
-            for (long iy = gy - 1; iy <= gy + 1; iy++)
-            {
-                if (!grid.TryGetValue((ix, iy), out var lst)) continue;
-                foreach (int id in lst)
-                    if (Math.Abs(nodes[id].X - x) <= JoinTol && Math.Abs(nodes[id].Y - y) <= JoinTol) return id;
-            }
+                for (long iy = gy - 1; iy <= gy + 1; iy++)
+                {
+                    if (!grid.TryGetValue((ix, iy), out var lst)) continue;
+                    foreach (int id in lst)
+                        if (Math.Abs(nodes[id].X - x) <= JoinTol && Math.Abs(nodes[id].Y - y) <= JoinTol) return id;
+                }
             int nid = nodes.Count;
             nodes.Add((x, y));
             if (!grid.TryGetValue((gx, gy), out var list)) grid[(gx, gy)] = list = new List<int>();
@@ -257,56 +257,58 @@ public static class ShapeOps
             switch (seg)
             {
                 case LineSeg l:
-                {
-                    if (Math.Abs(l.X1 - l.X2) < JoinTol && Math.Abs(l.Y1 - l.Y2) < JoinTol) break; // đoạn suy biến
-                    edges.Add(new Edge
                     {
-                        Px = new[] { l.X1, l.X2 }, Py = new[] { l.Y1, l.Y2 },
-                        N0 = NodeId(l.X1, l.Y1), N1 = NodeId(l.X2, l.Y2)
-                    });
-                    break;
-                }
-                case CircleSeg c:
-                {
-                    int n = Math.Max(8, ArcSteps(c.R, 2 * Math.PI));
-                    var xs = new double[n]; var ys = new double[n];
-                    for (int i = 0; i < n; i++)
-                    {
-                        double t = 2 * Math.PI * i / n;
-                        xs[i] = c.Cx + c.R * Math.Cos(t);
-                        ys[i] = c.Cy + c.R * Math.Sin(t);
+                        if (Math.Abs(l.X1 - l.X2) < JoinTol && Math.Abs(l.Y1 - l.Y2) < JoinTol) break; // đoạn suy biến
+                        edges.Add(new Edge
+                        {
+                            Px = new[] { l.X1, l.X2 },
+                            Py = new[] { l.Y1, l.Y2 },
+                            N0 = NodeId(l.X1, l.Y1),
+                            N1 = NodeId(l.X2, l.Y2)
+                        });
+                        break;
                     }
-                    result.Loops.Add((xs, ys));
-                    break;
-                }
-                case ArcSeg a:
-                {
-                    double sweep = a.SweepRad;
-                    if (Math.Abs(sweep) >= 2 * Math.PI - 1e-9)
+                case CircleSeg c:
                     {
-                        int n = Math.Max(8, ArcSteps(a.R, 2 * Math.PI));
+                        int n = Math.Max(8, ArcSteps(c.R, 2 * Math.PI));
                         var xs = new double[n]; var ys = new double[n];
                         for (int i = 0; i < n; i++)
                         {
-                            double t = a.StartRad + 2 * Math.PI * i / n * Math.Sign(sweep);
-                            xs[i] = a.Cx + a.R * Math.Cos(t);
-                            ys[i] = a.Cy + a.R * Math.Sin(t);
+                            double t = 2 * Math.PI * i / n;
+                            xs[i] = c.Cx + c.R * Math.Cos(t);
+                            ys[i] = c.Cy + c.R * Math.Sin(t);
                         }
                         result.Loops.Add((xs, ys));
                         break;
                     }
-                    int steps = ArcSteps(a.R, Math.Abs(sweep));
-                    var px = new double[steps + 1]; var py = new double[steps + 1];
-                    for (int i = 0; i <= steps; i++)
+                case ArcSeg a:
                     {
-                        double t = a.StartRad + sweep * i / steps;
-                        px[i] = a.Cx + a.R * Math.Cos(t);
-                        py[i] = a.Cy + a.R * Math.Sin(t);
+                        double sweep = a.SweepRad;
+                        if (Math.Abs(sweep) >= 2 * Math.PI - 1e-9)
+                        {
+                            int n = Math.Max(8, ArcSteps(a.R, 2 * Math.PI));
+                            var xs = new double[n]; var ys = new double[n];
+                            for (int i = 0; i < n; i++)
+                            {
+                                double t = a.StartRad + 2 * Math.PI * i / n * Math.Sign(sweep);
+                                xs[i] = a.Cx + a.R * Math.Cos(t);
+                                ys[i] = a.Cy + a.R * Math.Sin(t);
+                            }
+                            result.Loops.Add((xs, ys));
+                            break;
+                        }
+                        int steps = ArcSteps(a.R, Math.Abs(sweep));
+                        var px = new double[steps + 1]; var py = new double[steps + 1];
+                        for (int i = 0; i <= steps; i++)
+                        {
+                            double t = a.StartRad + sweep * i / steps;
+                            px[i] = a.Cx + a.R * Math.Cos(t);
+                            py[i] = a.Cy + a.R * Math.Sin(t);
+                        }
+                        int n0 = NodeId(px[0], py[0]), n1 = NodeId(px[steps], py[steps]);
+                        edges.Add(new Edge { Px = px, Py = py, N0 = n0, N1 = n1 });
+                        break;
                     }
-                    int n0 = NodeId(px[0], py[0]), n1 = NodeId(px[steps], py[steps]);
-                    edges.Add(new Edge { Px = px, Py = py, N0 = n0, N1 = n1 });
-                    break;
-                }
             }
         }
 

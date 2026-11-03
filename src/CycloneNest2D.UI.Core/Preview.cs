@@ -64,7 +64,10 @@ public sealed class PreviewScene
 
     public static PreviewScene Empty(SheetDefinition def) => new()
     {
-        SheetWidth = def.Width, SheetHeight = def.Height, Margin = def.Margin, Spacing = def.Spacing,
+        SheetWidth = def.Width,
+        SheetHeight = def.Height,
+        Margin = def.Margin,
+        Spacing = def.Spacing,
     };
 }
 
@@ -92,16 +95,27 @@ public static class PreviewBuilder
             var loops = ls.Loops.Select(l => Enumerable.Range(0, l.X.Length).Select(k => (l.X[k], l.Y[k])).ToArray()).ToList();
             parts.Add(new PreviewPart
             {
-                Index = i, Name = p.PartName, Label = $"{p.PartName} #{p.Instance}",
-                X = p.X, Y = p.Y, Width = p.Width, Height = p.Height,
-                ColorIndex = ci, IsRotated = p.IsRotated,
-                Loops = loops, HasShape = shaped, MaterialTest = ls,
+                Index = i,
+                Name = p.PartName,
+                Label = $"{p.PartName} #{p.Instance}",
+                X = p.X,
+                Y = p.Y,
+                Width = p.Width,
+                Height = p.Height,
+                ColorIndex = ci,
+                IsRotated = p.IsRotated,
+                Loops = loops,
+                HasShape = shaped,
+                MaterialTest = ls,
             });
         }
 
         return new PreviewScene
         {
-            SheetWidth = def.Width, SheetHeight = def.Height, Margin = def.Margin, Spacing = def.Spacing,
+            SheetWidth = def.Width,
+            SheetHeight = def.Height,
+            Margin = def.Margin,
+            Spacing = def.Spacing,
             Parts = parts,
             Title = $"Tấm {sheet.Index}: {sheet.Placements.Count} chi tiết, hiệu suất {sheet.Utilization:P1}",
         };

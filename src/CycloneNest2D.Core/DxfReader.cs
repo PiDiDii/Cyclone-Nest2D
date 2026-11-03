@@ -402,19 +402,19 @@ public static class DxfReader
                     break;
                 case "ENDBLK": block = null; poly = null; break;
                 case "LAYER" when section == "TABLES":
-                {
-                    string? name = r.Str(2);
-                    if (name != null)
                     {
-                        int aci = r.Int(62, 7);
-                        if (aci < 0 && aci != int.MinValue) aci = -aci;
-                        if (aci is < 1 or > 255) aci = 7;
-                        int trueColor = r.Int(420, -1);
-                        doc.LayerColors[name] = new DxfLayerColor((short)aci,
-                            trueColor is >= 0 and <= 0xFFFFFF ? trueColor : null);
+                        string? name = r.Str(2);
+                        if (name != null)
+                        {
+                            int aci = r.Int(62, 7);
+                            if (aci < 0 && aci != int.MinValue) aci = -aci;
+                            if (aci is < 1 or > 255) aci = 7;
+                            int trueColor = r.Int(420, -1);
+                            doc.LayerColors[name] = new DxfLayerColor((short)aci,
+                                trueColor is >= 0 and <= 0xFFFFFF ? trueColor : null);
+                        }
+                        break;
                     }
-                    break;
-                }
                 case "EOF": break;
                 default:
                     if (section == "ENTITIES" || (section == "BLOCKS" && block != null))
@@ -474,61 +474,61 @@ public static class DxfReader
                         break;
 
                     case "CIRCLE":
-                    {
-                        var mm = e.NormalZ < 0 ? m * Mat.MirrorX : m;
-                        double r = e.Dbl(40);
-                        if (r > 0) Add(mm.Transform(new CircleShape(layer, e.Dbl(10), e.Dbl(20), r)));
-                        break;
-                    }
-
-                    case "ARC":
-                    {
-                        var mm = e.NormalZ < 0 ? m * Mat.MirrorX : m;
-                        double r = e.Dbl(40);
-                        double st = e.Dbl(50), en = e.Dbl(51);
-                        double sweep = Mat.Norm360(en - st);
-                        if (sweep <= 1e-12) sweep = 360;
-                        if (r > 0) Add(mm.Transform(new ArcShape(layer, e.Dbl(10), e.Dbl(20), r, Mat.Norm360(st), sweep)));
-                        break;
-                    }
-
-                    case "LWPOLYLINE":
-                    {
-                        var mm = e.NormalZ < 0 ? m * Mat.MirrorX : m;
-                        var pts = new List<(double X, double Y, double B)>();
-                        foreach (var (code, val) in e.Data)
                         {
-                            switch (code)
-                            {
-                                case 10: pts.Add((P(val), 0, 0)); break;
-                                case 20: if (pts.Count > 0) pts[^1] = (pts[^1].X, P(val), pts[^1].B); break;
-                                case 42: if (pts.Count > 0) pts[^1] = (pts[^1].X, pts[^1].Y, P(val)); break;
-                            }
-                        }
-                        EmitPolyline(pts, (e.Int(70) & 1) != 0, layer, mm);
-                        break;
-                    }
-
-                    case "POLYLINE":
-                    {
-                        int pf = e.Int(70);
-                        if ((pf & (16 | 64)) != 0)
-                        {
-                            Warnings.Add("Bỏ qua POLYLINE dạng lưới 3D/polyface.");
+                            var mm = e.NormalZ < 0 ? m * Mat.MirrorX : m;
+                            double r = e.Dbl(40);
+                            if (r > 0) Add(mm.Transform(new CircleShape(layer, e.Dbl(10), e.Dbl(20), r)));
                             break;
                         }
-                        var mm = e.NormalZ < 0 ? m * Mat.MirrorX : m;
-                        var pts = new List<(double X, double Y, double B)>();
-                        foreach (var v in e.Vertices)
+
+                    case "ARC":
                         {
-                            int vf = v.Int(70);
-                            if ((vf & 128) != 0) continue;
-                            if ((pf & 4) != 0 && (vf & 16) != 0) continue; // điểm điều khiển của spline-fit polyline
-                            pts.Add((v.Dbl(10), v.Dbl(20), v.Dbl(42)));
+                            var mm = e.NormalZ < 0 ? m * Mat.MirrorX : m;
+                            double r = e.Dbl(40);
+                            double st = e.Dbl(50), en = e.Dbl(51);
+                            double sweep = Mat.Norm360(en - st);
+                            if (sweep <= 1e-12) sweep = 360;
+                            if (r > 0) Add(mm.Transform(new ArcShape(layer, e.Dbl(10), e.Dbl(20), r, Mat.Norm360(st), sweep)));
+                            break;
                         }
-                        EmitPolyline(pts, (pf & 1) != 0, layer, mm);
-                        break;
-                    }
+
+                    case "LWPOLYLINE":
+                        {
+                            var mm = e.NormalZ < 0 ? m * Mat.MirrorX : m;
+                            var pts = new List<(double X, double Y, double B)>();
+                            foreach (var (code, val) in e.Data)
+                            {
+                                switch (code)
+                                {
+                                    case 10: pts.Add((P(val), 0, 0)); break;
+                                    case 20: if (pts.Count > 0) pts[^1] = (pts[^1].X, P(val), pts[^1].B); break;
+                                    case 42: if (pts.Count > 0) pts[^1] = (pts[^1].X, pts[^1].Y, P(val)); break;
+                                }
+                            }
+                            EmitPolyline(pts, (e.Int(70) & 1) != 0, layer, mm);
+                            break;
+                        }
+
+                    case "POLYLINE":
+                        {
+                            int pf = e.Int(70);
+                            if ((pf & (16 | 64)) != 0)
+                            {
+                                Warnings.Add("Bỏ qua POLYLINE dạng lưới 3D/polyface.");
+                                break;
+                            }
+                            var mm = e.NormalZ < 0 ? m * Mat.MirrorX : m;
+                            var pts = new List<(double X, double Y, double B)>();
+                            foreach (var v in e.Vertices)
+                            {
+                                int vf = v.Int(70);
+                                if ((vf & 128) != 0) continue;
+                                if ((pf & 4) != 0 && (vf & 16) != 0) continue; // điểm điều khiển của spline-fit polyline
+                                pts.Add((v.Dbl(10), v.Dbl(20), v.Dbl(42)));
+                            }
+                            EmitPolyline(pts, (pf & 1) != 0, layer, mm);
+                            break;
+                        }
 
                     case "ELLIPSE":
                         EmitEllipse(e, layer, m);
@@ -544,46 +544,46 @@ public static class DxfReader
 
                     case "TEXT":
                     case "MTEXT":
-                    {
-                        var point = m.Apply(e.Dbl(10), e.Dbl(20));
-                        (double X, double Y)? alignment = e.Type == "TEXT" && (e.Str(11) != null || e.Str(21) != null)
-                            ? m.Apply(e.Dbl(11), e.Dbl(21))
-                            : null;
-                        double rotation = e.Dbl(50);
-                        double radians = rotation * Math.PI / 180;
-                        double ux = Math.Cos(radians), uy = Math.Sin(radians);
-                        if (e.Type == "MTEXT" && (e.Str(11) != null || e.Str(21) != null))
                         {
-                            ux = e.Dbl(11, ux);
-                            uy = e.Dbl(21, uy);
+                            var point = m.Apply(e.Dbl(10), e.Dbl(20));
+                            (double X, double Y)? alignment = e.Type == "TEXT" && (e.Str(11) != null || e.Str(21) != null)
+                                ? m.Apply(e.Dbl(11), e.Dbl(21))
+                                : null;
+                            double rotation = e.Dbl(50);
+                            double radians = rotation * Math.PI / 180;
+                            double ux = Math.Cos(radians), uy = Math.Sin(radians);
+                            if (e.Type == "MTEXT" && (e.Str(11) != null || e.Str(21) != null))
+                            {
+                                ux = e.Dbl(11, ux);
+                                uy = e.Dbl(21, uy);
+                            }
+                            double vx = -uy, vy = ux;
+                            double dirX = m.A * ux + m.B * uy;
+                            double dirY = m.C * ux + m.D * uy;
+                            double upX = m.A * vx + m.B * vy;
+                            double upY = m.C * vx + m.D * vy;
+                            string content = string.Concat(e.Data.Where(pair => pair.Code is 1 or 3).Select(pair => pair.Value));
+                            if (content.Length == 0) break;
+                            double width = e.Dbl(41);
+                            double widthScale = Math.Sqrt(dirX * dirX + dirY * dirY);
+                            double heightScale = Math.Sqrt(upX * upX + upY * upY);
+                            Texts.Add(new DxfTextEntity(
+                                e.Type,
+                                layer,
+                                point.X,
+                                point.Y,
+                                content,
+                                e.Dbl(40) * heightScale,
+                                Math.Atan2(dirY, dirX) * 180 / Math.PI,
+                                width * widthScale,
+                                e.Int(71, 1),
+                                e.Str(7) ?? "STANDARD",
+                                alignment?.X,
+                                alignment?.Y,
+                                e.Int(72),
+                                e.Int(73)));
+                            break;
                         }
-                        double vx = -uy, vy = ux;
-                        double dirX = m.A * ux + m.B * uy;
-                        double dirY = m.C * ux + m.D * uy;
-                        double upX = m.A * vx + m.B * vy;
-                        double upY = m.C * vx + m.D * vy;
-                        string content = string.Concat(e.Data.Where(pair => pair.Code is 1 or 3).Select(pair => pair.Value));
-                        if (content.Length == 0) break;
-                        double width = e.Dbl(41);
-                        double widthScale = Math.Sqrt(dirX * dirX + dirY * dirY);
-                        double heightScale = Math.Sqrt(upX * upX + upY * upY);
-                        Texts.Add(new DxfTextEntity(
-                            e.Type,
-                            layer,
-                            point.X,
-                            point.Y,
-                            content,
-                            e.Dbl(40) * heightScale,
-                            Math.Atan2(dirY, dirX) * 180 / Math.PI,
-                            width * widthScale,
-                            e.Int(71, 1),
-                            e.Str(7) ?? "STANDARD",
-                            alignment?.X,
-                            alignment?.Y,
-                            e.Int(72),
-                            e.Int(73)));
-                        break;
-                    }
 
                     default:
                         if (WarnTypes.Contains(e.Type))
@@ -614,12 +614,12 @@ public static class DxfReader
             double cs = e.Dbl(44), rs = e.Dbl(45);
 
             for (int r = 0; r < rows; r++)
-            for (int c = 0; c < cols; c++)
-            {
-                var local = Mat.Translate(ix, iy) * Mat.Rotate(rot) * Mat.Translate(c * cs, r * rs)
-                            * Mat.Scale(sx, sy) * Mat.Translate(-blk.Bx, -blk.By);
-                Walk(blk.Entities, mm * local, layer, depth + 1);
-            }
+                for (int c = 0; c < cols; c++)
+                {
+                    var local = Mat.Translate(ix, iy) * Mat.Rotate(rot) * Mat.Translate(c * cs, r * rs)
+                                * Mat.Scale(sx, sy) * Mat.Translate(-blk.Bx, -blk.By);
+                    Walk(blk.Entities, mm * local, layer, depth + 1);
+                }
         }
 
         private void EmitPolyline(List<(double X, double Y, double B)> pts, bool closed, string layer, Mat m)

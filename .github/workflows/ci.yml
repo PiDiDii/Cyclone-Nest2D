@@ -27,6 +27,9 @@ jobs:
         run: dotnet test tests/CycloneNest2D.Tests/CycloneNest2D.Tests.csproj -c Release
       - name: Test UI Core
         run: dotnet test tests/CycloneNest2D.UI.Tests/CycloneNest2D.UI.Tests.csproj -c Release
+      - name: Test DXF-to-export workflow (Windows)
+        if: matrix.os == 'windows-latest'
+        run: dotnet test tests/CycloneNest2D.UI.Tests/CycloneNest2D.UI.Tests.csproj -c Release --filter "Category=EndToEnd"
 
   desktop-build:
     name: Desktop build (Windows)
@@ -36,6 +39,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - name: Verify .NET formatting
+        run: dotnet format CycloneNest2D.sln --verify-no-changes --no-restore
       - name: Build Desktop
         run: dotnet build src/CycloneNest2D.Desktop/CycloneNest2D.Desktop.csproj -c Release
 
@@ -48,7 +53,7 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - name: Run quick benchmark
-        run: dotnet run --project tests/CycloneNest2D.Performance/CycloneNest2D.Performance.csproj -c Release -- --quick --output artifacts/performance/quick
+        run: dotnet run --project tests/CycloneNest2D.Performance/CycloneNest2D.Performance.csproj -c Release -- --quick --repeat 3 --max-seconds 1.5 --output artifacts/performance/quick
       - name: Upload benchmark reports
         uses: actions/upload-artifact@v4
         with:

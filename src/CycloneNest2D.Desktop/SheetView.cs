@@ -251,7 +251,7 @@ public sealed class SheetView : FrameworkElement
         pen.Freeze();
         double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         FormattedText Text(string value) => new(value, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-            new Typeface("Segoe UI"), 11, ThemePalette.Brush("CanvasTextBrush", Color.FromRgb(0x5F, 0x6D, 0x7E)), dpi);
+            ThemePalette.AppTypeface, 11, ThemePalette.Brush("CanvasTextBrush", Color.FromRgb(0x5F, 0x6D, 0x7E)), dpi);
 
         for (double mm = 0; mm <= scene.SheetWidth + 1e-6; mm += 100)
         {
@@ -340,7 +340,8 @@ public sealed class SheetView : FrameworkElement
             double sw = p.Width * _zoom, sh = p.Height * _zoom;
             if (sw < 70 || sh < 18) continue;
             var ft = new FormattedText(p.Label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                new Typeface("Segoe UI"), 12, ThemePalette.Brush("PartOutlineBrush", Colors.Black), dpi) { MaxTextWidth = Math.Max(10, sw - 6), MaxTextHeight = 16, Trimming = TextTrimming.CharacterEllipsis };
+                ThemePalette.AppTypeface, 12, ThemePalette.Brush("PartOutlineBrush", Colors.Black), dpi)
+            { MaxTextWidth = Math.Max(10, sw - 6), MaxTextHeight = 16, Trimming = TextTrimming.CharacterEllipsis };
             dc.DrawText(ft, new Point(_ox + px * _zoom + 4, _oy + (H - (py + p.Height)) * _zoom + 3));
         }
 
@@ -356,7 +357,7 @@ public sealed class SheetView : FrameworkElement
         if (tip != null)
         {
             var ft = new FormattedText(tip, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                new Typeface("Segoe UI"), 12, Brushes.Black, dpi);
+                ThemePalette.AppTypeface, 12, Brushes.Black, dpi);
             var at = new Point(Math.Min(_mouse.X + 14, Math.Max(0, ActualWidth - ft.Width - 12)),
                                Math.Min(_mouse.Y + 14, Math.Max(0, ActualHeight - ft.Height - 8)));
             dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(0xEE, 0xFF, 0xFF, 0xE0)), new Pen(Brushes.Gray, 1),

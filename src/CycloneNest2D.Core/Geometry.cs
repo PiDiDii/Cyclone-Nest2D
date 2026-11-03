@@ -7,8 +7,10 @@ public struct Bbox
 
     public static Bbox Empty => new()
     {
-        MinX = double.PositiveInfinity, MinY = double.PositiveInfinity,
-        MaxX = double.NegativeInfinity, MaxY = double.NegativeInfinity
+        MinX = double.PositiveInfinity,
+        MinY = double.PositiveInfinity,
+        MaxX = double.NegativeInfinity,
+        MaxY = double.NegativeInfinity
     };
 
     public readonly bool IsEmpty => MinX > MaxX || MinY > MaxY;
@@ -160,37 +162,37 @@ public readonly record struct Mat(double A, double B, double C, double D, double
         switch (s)
         {
             case LineShape l:
-            {
-                var (x1, y1) = Apply(l.X1, l.Y1);
-                var (x2, y2) = Apply(l.X2, l.Y2);
-                return l with { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2 };
-            }
+                {
+                    var (x1, y1) = Apply(l.X1, l.Y1);
+                    var (x2, y2) = Apply(l.X2, l.Y2);
+                    return l with { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2 };
+                }
             case PolyShape p:
-            {
-                var pts = new (double X, double Y)[p.Pts.Length];
-                for (int i = 0; i < pts.Length; i++) pts[i] = Apply(p.Pts[i].X, p.Pts[i].Y);
-                return p with { Pts = pts };
-            }
+                {
+                    var pts = new (double X, double Y)[p.Pts.Length];
+                    for (int i = 0; i < pts.Length; i++) pts[i] = Apply(p.Pts[i].X, p.Pts[i].Y);
+                    return p with { Pts = pts };
+                }
             case CircleShape c:
-            {
-                if (IsSimilarity(out double sc, out _))
                 {
-                    var (cx, cy) = Apply(c.Cx, c.Cy);
-                    return c with { Cx = cx, Cy = cy, R = c.R * sc };
+                    if (IsSimilarity(out double sc, out _))
+                    {
+                        var (cx, cy) = Apply(c.Cx, c.Cy);
+                        return c with { Cx = cx, Cy = cy, R = c.R * sc };
+                    }
+                    var pts = Discretize(c.Cx, c.Cy, c.R, 0, 360);
+                    return new PolyShape(c.Layer, pts[..^1], true);
                 }
-                var pts = Discretize(c.Cx, c.Cy, c.R, 0, 360);
-                return new PolyShape(c.Layer, pts[..^1], true);
-            }
             case ArcShape a:
-            {
-                if (IsSimilarity(out double sc, out double rot))
                 {
-                    var (cx, cy) = Apply(a.Cx, a.Cy);
-                    double start = Det > 0 ? a.StartDeg + rot : rot - (a.StartDeg + a.SweepDeg);
-                    return a with { Cx = cx, Cy = cy, R = a.R * sc, StartDeg = Norm360(start) };
+                    if (IsSimilarity(out double sc, out double rot))
+                    {
+                        var (cx, cy) = Apply(a.Cx, a.Cy);
+                        double start = Det > 0 ? a.StartDeg + rot : rot - (a.StartDeg + a.SweepDeg);
+                        return a with { Cx = cx, Cy = cy, R = a.R * sc, StartDeg = Norm360(start) };
+                    }
+                    return new PolyShape(a.Layer, Discretize(a.Cx, a.Cy, a.R, a.StartDeg, a.SweepDeg), false);
                 }
-                return new PolyShape(a.Layer, Discretize(a.Cx, a.Cy, a.R, a.StartDeg, a.SweepDeg), false);
-            }
             default:
                 return null;
         }

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Globalization;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Markup;
 using System.Windows.Threading;
@@ -24,7 +25,17 @@ public partial class App : Application
 
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             var settings = new NestSettings();
-            settings.LoadFrom(NestSettings.DefaultFilePath);
+            try
+            {
+                settings.LoadFrom(NestSettings.DefaultFilePath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
+            {
+                MessageBox.Show(
+                    $"Không thể nạp thiết lập đã lưu. Ứng dụng sẽ dùng thiết lập mặc định.\n\n{ex.Message}",
+                    "Không thể đọc thiết lập", MessageBoxButton.OK, MessageBoxImage.Warning);
+                settings.ResetDefaults();
+            }
 
             var window = new MainWindow(settings);
             MainWindow = window;

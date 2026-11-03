@@ -7,6 +7,13 @@ using WpfRect = System.Windows.Rect;
 
 namespace CycloneNest2D.Desktop;
 
+public enum PartLabelMode
+{
+    None,
+    IdNumber,
+    PartName
+}
+
 /// <summary>Thumbnail của một tấm đã nest, dùng cùng màu và contour với preview chính.</summary>
 public sealed class SheetThumbnailView : FrameworkElement
 {
@@ -14,9 +21,9 @@ public sealed class SheetThumbnailView : FrameworkElement
         nameof(Sheet), typeof(SheetResult), typeof(SheetThumbnailView),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, OnSheetChanged));
 
-    public static readonly DependencyProperty ShowPartIdsProperty = DependencyProperty.Register(
-        nameof(ShowPartIds), typeof(bool), typeof(SheetThumbnailView),
-        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty LabelModeProperty = DependencyProperty.Register(
+        nameof(LabelMode), typeof(PartLabelMode), typeof(SheetThumbnailView),
+        new FrameworkPropertyMetadata(PartLabelMode.None, FrameworkPropertyMetadataOptions.AffectsRender));
 
     public static readonly DependencyProperty PartIdsProperty = DependencyProperty.Register(
         nameof(PartIds), typeof(IReadOnlyDictionary<string, int>), typeof(SheetThumbnailView),
@@ -24,10 +31,10 @@ public sealed class SheetThumbnailView : FrameworkElement
 
     private PreviewScene? _scene;
 
-    public bool ShowPartIds
+    public PartLabelMode LabelMode
     {
-        get => (bool)GetValue(ShowPartIdsProperty);
-        set => SetValue(ShowPartIdsProperty, value);
+        get => (PartLabelMode)GetValue(LabelModeProperty);
+        set => SetValue(LabelModeProperty, value);
     }
 
     public IReadOnlyDictionary<string, int>? PartIds
@@ -115,22 +122,54 @@ public sealed class SheetThumbnailView : FrameworkElement
             dc.DrawGeometry(fill, pen, geometry);
         }
 
-        if (ShowPartIds && PartIds is { Count: > 0 } ids)
+        if (LabelMode != PartLabelMode.None)
         {
             foreach (var part in scene.Parts)
             {
-                if (!ids.TryGetValue(part.Name, out int id)) continue;
+                string label;
+                if (LabelMode == PartLabelMode.IdNumber)
+                {
+                    if (PartIds is not { Count: > 0 } ids || !ids.TryGetValue(part.Name, out int id)) continue;
+                    label = id.ToString(CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    label = part.Name;
+                }
+
+                double partWidth = part.Width * scale;
+                double partHeight = part.Height * scale;
+                double maxTextWidth = partWidth - 6;
+                double maxTextHeight = partHeight - 4;
+                if (maxTextWidth < 10 || maxTextHeight < 8) continue;
                 Point center = Map(part.X + part.Width / 2, part.Y + part.Height / 2);
-                var text = new FormattedText(id.ToString(CultureInfo.InvariantCulture), CultureInfo.CurrentUICulture,
-                    FlowDirection.LeftToRight, new Typeface("Segoe UI Semibold"), 10, Brushes.White,
-                    VisualTreeHelper.GetDpi(this).PixelsPerDip);
-                double tagWidth = Math.Max(19, text.Width + 8);
-                double tagHeight = 18;
+                double fontSize = LabelMode == PartLabelMode.IdNumber ? 10 : 9;
+                var typeface = new Typeface(ThemePalette.AppFontFamily, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+                FormattedText text = CreateLabel(label, fontSize, typeface);
+                while ((text.Width > maxTextWidth || text.Height > maxTextHeight) && fontSize > 5)
+                {
+                    fontSize -= 0.5;
+                    text = CreateLabel(label, fontSize, typeface);
+                }
+                string displayLabel = label;
+                while ((text.Width > maxTextWidth || text.Height > maxTextHeight) && displayLabel.Length > 2)
+                {
+                    displayLabel = displayLabel[..^2] + "…";
+                    text = CreateLabel(displayLabel, fontSize, typeface);
+                }
+                if (text.Width > maxTextWidth || text.Height > maxTextHeight) continue;
+
+                double tagWidth = Math.Min(partWidth - 2, Math.Max(19, text.Width + 8));
+                double tagHeight = Math.Min(partHeight - 2, Math.Max(16, text.Height + 4));
                 var tagRect = new WpfRect(center.X - tagWidth / 2, center.Y - tagHeight / 2, tagWidth, tagHeight);
                 dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(0xB4, 0x23, 0x18)),
                     new Pen(Brushes.White, 0.8), tagRect, 2, 2);
                 dc.DrawText(text, new Point(center.X - text.Width / 2, center.Y - text.Height / 2));
             }
         }
+
+        FormattedText CreateLabel(string label, double fontSize, Typeface typeface) =>
+            new(label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface, fontSize,
+                Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
     }
 }

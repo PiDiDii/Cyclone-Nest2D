@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -28,6 +29,7 @@ public partial class MainWindow : Window
     public MainWindow(NestSettings settings)
     {
         InitializeComponent();
+        UpdateHeaderLayout(ActualWidth);
         LoadThemePreference();
         _vm = new MainViewModel(new WpfDialogService(this), settings);
         DataContext = _vm;
@@ -351,8 +353,22 @@ public partial class MainWindow : Window
     private void LoadThemePreference()
     {
         bool dark = false;
-        try { dark = System.IO.File.Exists(ThemeFile) && System.IO.File.ReadAllText(ThemeFile).Trim() == "dark"; }
-        catch { }
+        try
+        {
+            if (System.IO.File.Exists(ThemeFile))
+            {
+                string preference = System.IO.File.ReadAllText(ThemeFile).Trim();
+                if (preference.Equals("dark", StringComparison.OrdinalIgnoreCase))
+                    dark = true;
+                else if (!preference.Equals("light", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Giá trị giao diện chỉ có thể là 'light' hoặc 'dark'.");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            MessageBox.Show(this, $"Không thể đọc tùy chọn giao diện. Sẽ dùng giao diện sáng mặc định.\n\n{ex.Message}",
+                "Không thể đọc thiết lập giao diện", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
         ApplyTheme(dark);
     }
 
@@ -397,7 +413,11 @@ public partial class MainWindow : Window
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(ThemeFile)!);
             System.IO.File.WriteAllText(ThemeFile, _isDarkTheme ? "dark" : "light");
         }
-        catch { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, $"Không thể lưu tùy chọn giao diện. Giao diện hiện tại vẫn được áp dụng cho phiên này.\n\n{ex.Message}",
+                "Không thể lưu thiết lập giao diện", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void ToggleShortcutOverlay_Click(object sender, RoutedEventArgs e) => ToggleShortcutOverlay();
@@ -425,6 +445,19 @@ public partial class MainWindow : Window
     }
 
     private void Window_StateChanged(object? sender, EventArgs e) => UpdateWindowStateVisuals();
+
+    private void Window_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateHeaderLayout(e.NewSize.Width);
+
+    private void UpdateHeaderLayout(double width)
+    {
+        if (BrandName == null) return;
+
+        bool compact = width < 1280;
+        BrandName.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        ProjectGroupLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        ProjectTitle.MaxWidth = compact ? 135 : 210;
+        ProjectGroupCombo.Width = compact ? 160 : 210;
+    }
 
     private void UpdateWindowStateVisuals()
     {
@@ -757,15 +790,19 @@ public partial class MainWindow : Window
         var dialog = new Window
         {
             Title = single ? $"Thuộc tính — {selected[0].Name}" : $"Thuộc tính — {selected.Count} dòng Part",
-            Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            ResizeMode = ResizeMode.NoResize, SizeToContent = SizeToContent.WidthAndHeight,
-            Width = 500, Background = System.Windows.Media.Brushes.White
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            Width = 500,
+            Background = System.Windows.Media.Brushes.White
         };
         var panel = new StackPanel { Margin = new Thickness(20), MinWidth = 450 };
         panel.Children.Add(new TextBlock
         {
             Text = single ? "Chỉnh sửa thông tin chi tiết." : $"Đánh dấu thuộc tính muốn áp dụng cho cả {selected.Count} dòng đang chọn. Các thuộc tính không đánh dấu sẽ được giữ nguyên.",
-            TextWrapping = TextWrapping.Wrap, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(82, 101, 122)),
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(82, 101, 122)),
             Margin = new Thickness(0, 0, 0, 10)
         });
 

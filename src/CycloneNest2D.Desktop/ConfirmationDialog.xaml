@@ -39,7 +39,7 @@
                 </Border>
                 <StackPanel VerticalAlignment="Center" Margin="12,0,0,0">
                     <TextBlock Text="CYCLONE NEST2D"
-                               FontSize="10"
+                               FontSize="12"
                                FontWeight="Bold"
                                Foreground="{DynamicResource PrimaryBrush}"/>
                     <TextBlock x:Name="DialogTitle"

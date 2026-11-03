@@ -23,12 +23,14 @@ internal sealed class DxfExportDialog : Window
     private readonly CheckBox _partsAsBlocks;
     private readonly CheckBox _nestsAsBlocks;
     private readonly CheckBox _removeCommonEdges;
-    private readonly ComboBox _outerDirection;
-    private readonly ComboBox _innerDirection;
     private readonly CheckBox _showPreview;
     private readonly CheckBox _microJoints;
     private readonly TextBox _microJointWidth;
     private readonly TextBox _microJointCount;
+    private readonly TextBox _smallMaxLength;
+    private readonly TextBox _smallMaxWidth;
+    private readonly TextBox _largeMinLength;
+    private readonly TextBox _largeMinWidth;
     private int _sheetIndex;
 
     public DxfExportOptions? Options { get; private set; }
@@ -79,23 +81,32 @@ internal sealed class DxfExportDialog : Window
         _partsAsBlocks = new CheckBox { Content = "Xuất Part dạng Block", Margin = new Thickness(4, 3, 4, 3) };
         _nestsAsBlocks = new CheckBox { Content = "Xuất Nest dạng Block", Margin = new Thickness(4, 3, 4, 3) };
         _removeCommonEdges = new CheckBox { Content = "Xóa cạnh chung", Margin = new Thickness(4, 3, 4, 3) };
-        _partsAsBlocks.Checked += (_, _) => _removeCommonEdges.IsEnabled = false;
+        _partsAsBlocks.Checked += (_, _) =>
+        {
+            _removeCommonEdges.IsChecked = false;
+            _removeCommonEdges.IsEnabled = false;
+        };
         _partsAsBlocks.Unchecked += (_, _) => _removeCommonEdges.IsEnabled = true;
         optionsPanel.Children.Add(Group("Tùy chọn tương thích", FieldRow("Kiểu hình học", _geometryStyle), _partsAsBlocks, _nestsAsBlocks, _removeCommonEdges));
 
-        _microJoints = new CheckBox { Content = "Bật micro-joints (cầu giữ part trên tấm)", Margin = new Thickness(4, 4, 4, 6) };
-        _microJointWidth = TextBox("1.0");
-        _microJointCount = TextBox("4");
-        _microJointWidth.IsEnabled = _microJointCount.IsEnabled = false;
-        _microJoints.Checked += (_, _) => _microJointWidth.IsEnabled = _microJointCount.IsEnabled = true;
-        _microJoints.Unchecked += (_, _) => _microJointWidth.IsEnabled = _microJointCount.IsEnabled = false;
-        optionsPanel.Children.Add(Group("Micro-joints · ngắt đường cắt biên ngoài", _microJoints,
-            FieldRow("Độ rộng cầu (mm)", _microJointWidth), FieldRow("Số cầu mỗi part", _microJointCount),
-            new TextBlock { Text = "Các đoạn bị ngắt tạo cầu vật liệu chưa cắt; contour lỗ bên trong không bị thay đổi.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#56677A"), Margin = new Thickness(4, 3, 4, 4), FontSize = 10 }));
-
-        _outerDirection = Combo(new[] { ("Ngược chiều kim đồng hồ", DxfLoopDirection.CounterClockwise), ("Cùng chiều kim đồng hồ", DxfLoopDirection.Clockwise) });
-        _innerDirection = Combo(new[] { ("Ngược chiều kim đồng hồ", DxfLoopDirection.CounterClockwise), ("Cùng chiều kim đồng hồ", DxfLoopDirection.Clockwise) });
-        optionsPanel.Children.Add(Group("Hướng contour", FieldRow("Biên ngoài", _outerDirection), FieldRow("Biên trong", _innerDirection)));
+        _microJoints = new CheckBox { Content = "Bật micro-joints thông minh", IsChecked = true, Margin = new Thickness(4, 4, 4, 6) };
+        _microJointWidth = TextBox("0.4");
+        _microJointCount = TextBox("6");
+        _smallMaxLength = TextBox("50");
+        _smallMaxWidth = TextBox("50");
+        _largeMinLength = TextBox("500");
+        _largeMinWidth = TextBox("500");
+        SetMicroJointFieldsEnabled(true);
+        _microJoints.Checked += (_, _) => SetMicroJointFieldsEnabled(true);
+        _microJoints.Unchecked += (_, _) => SetMicroJointFieldsEnabled(false);
+        optionsPanel.Children.Add(Group("Micro-joints · cầu giữ part trên tấm", _microJoints,
+            FieldRow("Độ rộng cầu (mm)", _microJointWidth), FieldRow("Tổng số cầu mỗi part", _microJointCount),
+            new TextBlock { Text = "Cầu được phân bổ trên các contour đủ kích thước, gồm cả biên ngoài và đường bao lỗ. Contour nhỏ được bỏ qua; tổng số cầu là mục tiêu cho mỗi part.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#56677A"), Margin = new Thickness(4, 3, 4, 4), FontSize = 10 },
+            FieldRow("Nhỏ: chiều dài dưới (mm)", _smallMaxLength),
+            FieldRow("Nhỏ: chiều rộng dưới (mm)", _smallMaxWidth),
+            FieldRow("Lớn: chiều dài trên (mm)", _largeMinLength),
+            FieldRow("Lớn: chiều rộng trên (mm)", _largeMinWidth),
+            new TextBlock { Text = "Contour nhỏ: cả dài và rộng dưới ngưỡng nhỏ. Contour lớn: cả hai vượt ngưỡng lớn. Các contour còn lại được xem là vừa.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#66758A"), Margin = new Thickness(4, 3, 4, 4), FontSize = 9 }));
 
         optionsPanel.Children.Add(Group("Định dạng cố định",
             new TextBlock { Text = "Đơn vị: mm  ·  Phiên bản: AutoCAD R12", Foreground = Brush("#344862"), FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 4, 4, 5) }));
@@ -145,16 +156,28 @@ internal sealed class DxfExportDialog : Window
 
     private void Export_Click(object sender, RoutedEventArgs e)
     {
-        double microWidth = 0;
-        int microCount = 0;
+        double microWidth = 0.4;
+        int microCount = 6;
+        double smallMaxLength = 50;
+        double smallMaxWidth = 50;
+        double largeMinLength = 500;
+        double largeMinWidth = 50;
         if (_microJoints.IsChecked == true)
         {
-            bool widthOk = double.TryParse(_microJointWidth.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out microWidth) ||
-                           double.TryParse(_microJointWidth.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out microWidth);
-            if (!widthOk || !double.IsFinite(microWidth) || microWidth <= 0 ||
-                !int.TryParse(_microJointCount.Text, NumberStyles.Integer, CultureInfo.CurrentCulture, out microCount) || microCount is < 1 or > 1000)
+            bool valid = TryParsePositive(_microJointWidth, out microWidth) &&
+                int.TryParse(_microJointCount.Text, NumberStyles.Integer, CultureInfo.CurrentCulture, out microCount) &&
+                microCount is >= 1 and <= 1000 &&
+                TryParsePositive(_smallMaxLength, out smallMaxLength) &&
+                TryParsePositive(_smallMaxWidth, out smallMaxWidth) &&
+                TryParsePositive(_largeMinLength, out largeMinLength) &&
+                TryParsePositive(_largeMinWidth, out largeMinWidth) &&
+                largeMinLength >= smallMaxLength &&
+                largeMinWidth >= smallMaxWidth;
+            if (!valid)
             {
-                MessageBox.Show(this, "Nhập độ rộng cầu lớn hơn 0 mm và số cầu từ 1 đến 1000.", "Thông số micro-joint không hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this,
+                    "Độ rộng cầu và ngưỡng kích thước phải lớn hơn 0; tổng số cầu từ 1 đến 1000. Ngưỡng contour lớn phải lớn hơn hoặc bằng ngưỡng contour nhỏ.",
+                    "Thông số micro-joint không hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
         }
@@ -182,14 +205,34 @@ internal sealed class DxfExportDialog : Window
             ExportPartsAsBlocks = _partsAsBlocks.IsChecked == true,
             ExportNestsAsBlocks = _nestsAsBlocks.IsChecked == true,
             RemoveCommonEdges = _removeCommonEdges.IsChecked == true,
-            OuterDirection = SelectedValue<DxfLoopDirection>(_outerDirection),
-            InnerDirection = SelectedValue<DxfLoopDirection>(_innerDirection),
+            EnableMicroJoints = _microJoints.IsChecked == true,
             MicroJointWidthMm = microWidth,
             MicroJointCount = microCount,
+            MicroJointSmallMaxLengthMm = smallMaxLength,
+            MicroJointSmallMaxWidthMm = smallMaxWidth,
+            MicroJointLargeMinLengthMm = largeMinLength,
+            MicroJointLargeMinWidthMm = largeMinWidth,
             Units = DxfOutputUnits.Millimeters,
             TargetVersion = DxfTargetVersion.R12
         };
         DialogResult = true;
+    }
+
+    private void SetMicroJointFieldsEnabled(bool enabled)
+    {
+        _microJointWidth.IsEnabled = enabled;
+        _microJointCount.IsEnabled = enabled;
+        _smallMaxLength.IsEnabled = enabled;
+        _smallMaxWidth.IsEnabled = enabled;
+        _largeMinLength.IsEnabled = enabled;
+        _largeMinWidth.IsEnabled = enabled;
+    }
+
+    private static bool TryParsePositive(TextBox textBox, out double value)
+    {
+        bool parsed = double.TryParse(textBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out value) ||
+            double.TryParse(textBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+        return parsed && double.IsFinite(value) && value > 0;
     }
 
     private void SetSheet(int index)
@@ -221,8 +264,13 @@ internal sealed class DxfExportDialog : Window
 
     private static ComboBox Combo<T>(IEnumerable<(string Text, T Value)> values)
     {
-        var combo = new ComboBox { MinWidth = 120, Padding = new Thickness(4, 2, 4, 2), FontSize = 10,
-            SelectedValuePath = nameof(ComboBoxItem.Tag) };
+        var combo = new ComboBox
+        {
+            MinWidth = 120,
+            Padding = new Thickness(4, 2, 4, 2),
+            FontSize = 10,
+            SelectedValuePath = nameof(ComboBoxItem.Tag)
+        };
         foreach (var value in values)
             combo.Items.Add(new ComboBoxItem { Content = value.Text, Tag = value.Value });
         combo.SelectedIndex = 0;
@@ -233,10 +281,14 @@ internal sealed class DxfExportDialog : Window
 
     private static Button Button(string text, bool primary) => new()
     {
-        Content = text, Padding = new Thickness(13, 6, 13, 6), Margin = new Thickness(4, 0, 4, 0), FontSize = 11,
+        Content = text,
+        Padding = new Thickness(13, 6, 13, 6),
+        Margin = new Thickness(4, 0, 4, 0),
+        FontSize = 11,
         Background = primary ? Brush("#11A7A1") : Brushes.White,
         Foreground = primary ? Brushes.White : Brush("#344257"),
-        BorderBrush = primary ? Brush("#11A7A1") : Brush("#DCE4EB"), BorderThickness = new Thickness(1),
+        BorderBrush = primary ? Brush("#11A7A1") : Brush("#DCE4EB"),
+        BorderThickness = new Thickness(1),
         Cursor = System.Windows.Input.Cursors.Hand
     };
 

@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.IO;
 using CycloneNest2D.Core;
-using CycloneNest2D.UI;
 using PdfSharp;
 using PdfSharp.Drawing;
 using PdfSharp.Pdf;
@@ -10,32 +9,32 @@ namespace CycloneNest2D.Desktop;
 
 internal static class PdfReportWriter
 {
-    private const double Margin = 24;
+    private const double DipToPoint = 72d / 96d;
+    private const double ContentMarginRatio = 0.06;
     private static readonly CultureInfo Culture = CultureInfo.CurrentCulture;
 
-    public static void Write(NestingReportDocument report, string path, NestingReportType currentType,
-        NestingPageOrientation orientation, NestingPageLayout layout, ReportExportScope scope,
-        ReportPageSelection pageSelection, int fromPage, int toPage)
+    public static void Write(NestingReportDocument report, string path, NestingPageOrientation orientation,
+        NestingPageLayout layout, PartLabelMode partLabel, ReportPageSelection pageSelection, int fromPage, int toPage)
     {
         bool landscape = orientation == NestingPageOrientation.Landscape;
-        var allPages = NestingReportPagePlan.Build(report, currentType, orientation, layout, scope);
-        var selectedPages = allPages.Where((_, index) => pageSelection switch
-        {
-            ReportPageSelection.AllPages => true,
-            ReportPageSelection.OddPages => (index + 1) % 2 == 1,
-            ReportPageSelection.PageRange => index + 1 >= fromPage && index + 1 <= toPage,
-            _ => false
-        }).ToList();
+        var allPages = NestingReportPagePlan.Build(report, orientation, layout);
+        var selectedPages = allPages.Select((page, index) => (Page: page, PageNumber: index + 1))
+            .Where(item => pageSelection switch
+            {
+                ReportPageSelection.AllPages => true,
+                ReportPageSelection.OddPages => item.PageNumber % 2 == 1,
+                ReportPageSelection.PageRange => item.PageNumber >= fromPage && item.PageNumber <= toPage,
+                _ => false
+            }).ToList();
         if (selectedPages.Count == 0)
             throw new InvalidOperationException("Lựa chọn không bao gồm trang PDF nào.");
 
         var document = new PdfDocument();
-        document.Info.Title = scope == ReportExportScope.BothReports ? "Cyclone Nest2D - Báo cáo" :
-            currentType == NestingReportType.SheetParameters ? "Thông số tấm Nesting 2D" : "Danh mục chi tiết đã nest";
-        document.Info.Subject = "Báo cáo Cyclone Nest2D";
+        document.Info.Title = "Cyclone Nest2D - Báo cáo nesting theo tấm";
+        document.Info.Subject = "Thông số và danh mục chi tiết theo từng tấm nesting";
         document.Info.Creator = "Cyclone Nest2D";
 
-        foreach (var pageRef in selectedPages)
+        foreach (var item in selectedPages)
         {
             var page = document.AddPage();
             page.Size = PageSize.A4;
@@ -44,17 +43,7 @@ internal static class PdfReportWriter
             double pageWidth = page.Width.Point;
             double pageHeight = page.Height.Point;
             gfx.DrawRectangle(XBrushes.White, 0, 0, pageWidth, pageHeight);
-            if (pageRef.Type == NestingReportType.SheetParameters)
-            {
-                int sheetsPerPage = layout == NestingPageLayout.TwoSheetReportsPerPage ? 2 : 1;
-                DrawSheetSummaryPage(gfx, report, pageRef.SectionPageIndex, pageWidth, pageHeight, sheetsPerPage);
-            }
-            else
-            {
-                int rowsPerPage = NestingReportPagePlan.CatalogRowsPerPage(orientation);
-                int catalogPages = NestingReportPagePlan.PageCount(report, NestingReportType.PartCatalog, orientation, layout);
-                DrawCatalogPage(gfx, report, pageRef.SectionPageIndex, catalogPages, pageWidth, pageHeight, rowsPerPage);
-            }
+            DrawSheetReportPage(gfx, report, item.Page, orientation, layout, partLabel, pageWidth, pageHeight);
         }
 
         string? folder = Path.GetDirectoryName(Path.GetFullPath(path));
@@ -66,143 +55,176 @@ internal static class PdfReportWriter
             throw new InvalidDataException("Tệp đã lưu không có chữ ký PDF hợp lệ.");
     }
 
-    private static void DrawSheetSummaryPage(XGraphics gfx, NestingReportDocument report, int pageIndex,
-        double pageWidth, double pageHeight, int sheetsPerPage)
+    private static void DrawSheetReportPage(XGraphics gfx, NestingReportDocument report,
+        NestingReportPage page, NestingPageOrientation orientation, NestingPageLayout layout,
+        PartLabelMode partLabel, double pageWidth, double pageHeight)
     {
-        double cardHeight = pageHeight / sheetsPerPage;
-        for (int slot = 0; slot < sheetsPerPage; slot++)
+        double margin = pageWidth * ContentMarginRatio;
+        double usableHeight = pageHeight - 2 * margin;
+        double cardHeight = usableHeight / page.SlotCount;
+        foreach (var pageRef in page.Reports)
         {
-            int sheetIndex = pageIndex * sheetsPerPage + slot;
-            if (sheetIndex >= report.SheetSummaries.Count) break;
-            if (slot > 0)
-                gfx.DrawLine(new XPen(XColor.FromArgb(203, 213, 224), 0.7), Margin, slot * cardHeight, pageWidth - Margin, slot * cardHeight);
-            DrawSheetSummary(gfx, report, report.SheetSummaries[sheetIndex], Margin, slot * cardHeight + 5,
-                pageWidth - 2 * Margin, cardHeight - 10);
+            double cardTop = margin + pageRef.Slot * cardHeight;
+            DrawSheetReportCard(gfx, report, pageRef, orientation, layout, partLabel,
+                cardTop, cardHeight, margin, pageWidth - 2 * margin);
+        }
+
+    }
+
+    private static void DrawSheetReportCard(XGraphics gfx, NestingReportDocument report, NestingReportPageRef pageRef,
+        NestingPageOrientation orientation, NestingPageLayout layout, PartLabelMode partLabel,
+        double cardTop, double cardHeight, double left, double width)
+    {
+        var model = report.SheetSummaries[pageRef.SheetIndex];
+        bool firstPage = pageRef.PartPageIndex == 0;
+        bool compact = layout == NestingPageLayout.TwoPerPage;
+        double titleTop = cardTop + P(compact ? 4 : 8);
+        var titleFont = new XFont("Arial", compact ? 9.5 : 12.5, XFontStyleEx.Bold);
+        var subtitleFont = new XFont("Arial", compact ? 6.8 : 8.3, XFontStyleEx.Bold);
+        gfx.DrawString(firstPage ? "BÁO CÁO TẤM NESTING 2D" : "DANH MỤC CHI TIẾT · TIẾP THEO",
+            titleFont, Color(23, 43, 77), new XRect(left, titleTop, width, P(compact ? 18 : 24)), XStringFormats.CenterLeft);
+        string line = $"Nest {model.NestNumber} / {model.NestCount} · {model.Sheet.Material} · {model.Sheet.Thickness:0.##} mm · {model.Sheet.Width:0.##} × {model.Sheet.Height:0.##} mm";
+        double subtitleTop = titleTop + P(compact ? 19 : 26);
+        gfx.DrawString(line, FitFont(gfx, line, subtitleFont, width), Color(52, 68, 91),
+            new XRect(left, subtitleTop, width, P(compact ? 16 : 19)), XStringFormats.CenterLeft);
+
+        if (firstPage)
+        {
+            double metricTop = cardTop + P(compact ? 42 : 56);
+            DrawMetrics(gfx, model, left, metricTop, width, compact);
+            double chartTop = cardTop + P(NestingReportPagePlan.FirstChartTopDip(layout));
+            double tableGap = P(NestingReportPagePlan.FirstTableGapDip(layout));
+            double headerHeight = P(NestingReportPagePlan.FirstTableHeaderHeightDip(layout));
+            double rowHeight = P(NestingReportPagePlan.FirstTableRowHeightDip(orientation, layout));
+            int tableRows = Math.Min(NestingReportPagePlan.FirstPageRows(orientation, layout), model.Parts.Count);
+            double cardHeightDip = cardHeight / DipToPoint;
+            double availableChartHeight = Math.Max(0, cardHeightDip -
+                NestingReportPagePlan.FirstChartTopDip(layout) -
+                NestingReportPagePlan.FirstTableGapDip(layout) -
+                NestingReportPagePlan.FirstTableHeaderHeightDip(layout) -
+                tableRows * NestingReportPagePlan.FirstTableRowHeightDip(orientation, layout) -
+                NestingReportPagePlan.FirstPageBottomPaddingDip(layout));
+            double aspectRatio = model.Sheet.Height > 0 ? model.Sheet.Width / model.Sheet.Height : 1;
+            double maxChartWidthDip = width / DipToPoint * 0.68;
+            double chartHeightDip = Math.Min(availableChartHeight, maxChartWidthDip / Math.Max(aspectRatio, 0.01));
+            double chartWidth = chartHeightDip * aspectRatio * DipToPoint;
+            double chartLeft = left + (width - chartWidth) / 2;
+            double chartHeight = P(chartHeightDip);
+            DrawSheet(gfx, report, model.Sheet, new XRect(chartLeft, chartTop, chartWidth, chartHeight), partLabel);
+            double tableTitleTop = chartTop + chartHeight + P(1);
+            gfx.DrawString($"DANH MỤC CHI TIẾT TRONG TẤM NEST {model.NestNumber}",
+                new XFont("Arial", compact ? 6.5 : 8, XFontStyleEx.Bold), Color(23, 43, 77),
+                new XRect(left, tableTitleTop, width, Math.Max(1, tableGap - P(1))), XStringFormats.CenterLeft);
+            double tableTop = chartTop + chartHeight + tableGap;
+            DrawPartTable(gfx, model, pageRef.PartPageIndex, orientation, layout, left, tableTop, width);
+        }
+        else
+        {
+            double tableTitleTop = cardTop + P(NestingReportPagePlan.ContinuationTitleTopDip(layout));
+            gfx.DrawString($"DANH MỤC CHI TIẾT TRONG TẤM NEST {model.NestNumber} · TIẾP THEO",
+                new XFont("Arial", compact ? 6.5 : 8, XFontStyleEx.Bold), Color(23, 43, 77),
+                new XRect(left, tableTitleTop, width, P(compact ? 16 : 20)), XStringFormats.CenterLeft);
+            DrawPartTable(gfx, model, pageRef.PartPageIndex, orientation, layout, left,
+                cardTop + P(NestingReportPagePlan.ContinuationTableTopDip(layout)), width);
         }
     }
 
-    private static void DrawSheetSummary(XGraphics gfx, NestingReportDocument report,
-        NestingSheetSummary model, double left, double top, double width, double height)
+    private static void DrawMetrics(XGraphics gfx, NestingSheetSummary model, double left, double top, double width, bool compact)
     {
-        var title = new XFont("Arial", 14, XFontStyleEx.Bold);
-        var subtitle = new XFont("Arial", 8, XFontStyleEx.Bold);
-        var small = new XFont("Arial", 6.8, XFontStyleEx.Regular);
-        gfx.DrawString("THÔNG SỐ TẤM NESTING 2D", title, Color(23, 43, 77),
-            new XRect(left, top + 5, width, 21), XStringFormats.CenterLeft);
-        string line = $"Nest {model.NestNumber} / {model.NestCount} · {model.Sheet.Material} · {model.Sheet.Thickness:0.##} mm · {model.Sheet.Width:0.##} × {model.Sheet.Height:0.##} mm";
-        gfx.DrawString(line, FitFont(gfx, line, subtitle, width), Color(52, 68, 91),
-            new XRect(left, top + 28, width, 13), XStringFormats.CenterLeft);
-        string completed = report.CompletedAt?.ToString("dd/MM/yyyy HH:mm:ss", Culture) ?? "Không có dữ liệu";
-        gfx.DrawString($"Ngày giờ nesting hoàn tất: {completed}", small, Color(102, 117, 138),
-            new XRect(left, top + 41, width, 11), XStringFormats.CenterLeft);
-
         var metrics = new (string Label, string Value)[]
         {
-            ("STT Nest", $"{model.NestNumber} / {model.NestCount}"),
-            ("Vật liệu", model.Sheet.Material),
-            ("Độ dày", $"{model.Sheet.Thickness:0.##} mm"),
-            ("Khổ tấm", $"{model.Sheet.Width:0.##} × {model.Sheet.Height:0.##} mm"),
             ("Diện tích tấm", $"{NestingReportDocument.SquareMeters(model.SheetArea)} m²"),
-            ("Chiều dài sử dụng", $"{model.UsedLength:0.##} mm"),
-            ("Diện tích Part", $"{NestingReportDocument.SquareMeters(model.UsedPartArea)} m²"),
             ("Hiệu suất Nest", model.NestEfficiency.ToString("P2", Culture)),
             ("Tỷ lệ sử dụng", model.SheetUtilization.ToString("P2", Culture)),
             ("Tỷ lệ hao phí", model.WasteRate.ToString("P2", Culture)),
-            ("Số Part trong nest", $"{model.Sheet.Placements.Count} hình")
+            ("Tổng số chi tiết", model.Sheet.Placements.Count.ToString(Culture)),
+            ("Loại chi tiết", model.Parts.Count.ToString(Culture))
         };
-        double metricsTop = top + 56;
-        double cellWidth = width / 4, cellHeight = 23;
-        var labelFont = new XFont("Arial", 6.1, XFontStyleEx.Regular);
-        var valueFont = new XFont("Arial", 7.2, XFontStyleEx.Bold);
+        int columns = metrics.Length;
+        double cellWidth = width / columns, cellHeight = P(compact ? 16 : 22);
+        var labelFont = new XFont("Arial", compact ? 4.8 : 5.8, XFontStyleEx.Regular);
+        var valueFont = new XFont("Arial", compact ? 5.5 : 7, XFontStyleEx.Bold);
         for (int i = 0; i < metrics.Length; i++)
         {
-            int row = i / 4, col = i % 4;
-            var rect = new XRect(left + col * cellWidth, metricsTop + row * cellHeight, cellWidth, cellHeight);
+            int row = i / columns, column = i % columns;
+            var rect = new XRect(left + column * cellWidth, top + row * cellHeight, cellWidth, cellHeight);
             gfx.DrawRectangle(new XSolidBrush(XColor.FromArgb(248, 250, 252)), rect);
             gfx.DrawRectangle(new XPen(XColor.FromArgb(218, 224, 232), 0.4), rect);
             gfx.DrawString(metrics[i].Label, labelFont, Color(90, 104, 120),
-                new XRect(rect.X + 2, rect.Y + 1, rect.Width - 4, 8), XStringFormats.Center);
+                new XRect(rect.X + 2, rect.Y + 1, rect.Width - 4, P(compact ? 6 : 8)), XStringFormats.Center);
             gfx.DrawString(metrics[i].Value, FitFont(gfx, metrics[i].Value, valueFont, rect.Width - 6), Color(23, 43, 77),
-                new XRect(rect.X + 2, rect.Y + 9, rect.Width - 4, 12), XStringFormats.Center);
+                new XRect(rect.X + 2, rect.Y + P(compact ? 7 : 9), rect.Width - 4, P(compact ? 9 : 12)), XStringFormats.Center);
         }
-
-        double chartTop = top + 132;
-        double chartHeight = Math.Max(40, top + height - chartTop - 14);
-        var chart = new XRect(left, chartTop, width, chartHeight);
-        DrawSheet(gfx, report, model.Sheet, chart);
-        gfx.DrawString("Cyclone Nest2D · Báo cáo thông số tấm", small, Color(128, 144, 161),
-            new XRect(left, top + height - 11, width, 9), XStringFormats.CenterLeft);
     }
 
-    private static void DrawCatalogPage(XGraphics gfx, NestingReportDocument report, int pageIndex, int pageCount,
-        double pageWidth, double pageHeight, int rowsPerPage)
+    private static void DrawPartTable(XGraphics gfx, NestingSheetSummary model, int partPageIndex,
+        NestingPageOrientation orientation, NestingPageLayout layout, double left, double top, double width)
     {
-        double left = Margin, width = pageWidth - Margin * 2;
-        var title = new XFont("Arial", 16, XFontStyleEx.Bold);
-        var subtitle = new XFont("Arial", 7.8, XFontStyleEx.Regular);
-        gfx.DrawString("DANH MỤC CHI TIẾT ĐÃ NEST", title, Color(23, 43, 77),
-            new XRect(left, 20, width, 24), XStringFormats.CenterLeft);
-        string completed = report.CompletedAt?.ToString("dd/MM/yyyy HH:mm:ss", Culture) ?? "Không có dữ liệu";
-        string details = $"Toàn bộ tác vụ · {report.Parts.Count} loại Part · {report.TotalProduced} đã nest / {report.TotalRequired} yêu cầu · {report.SheetSummaries.Count} tấm · Hoàn tất: {completed}";
-        gfx.DrawString(details, FitFont(gfx, details, subtitle, width), Color(82, 101, 122),
-            new XRect(left, 47, width, 15), XStringFormats.CenterLeft);
-        gfx.DrawString($"Trang {pageIndex + 1} / {pageCount}", subtitle, Color(102, 117, 138),
-            new XRect(left, 64, width, 12), XStringFormats.CenterLeft);
-
-        string[] headers = { "ID", "Xem trước", "Tên Part", "Rộng (mm)", "Dài (mm)", "Diện tích (m²)", "Đã nest" };
-        double[] ratios = { .06, .11, .39, .10, .10, .13, .11 };
-        double[] widths = ratios.Select(r => r * width).ToArray();
-        double headerTop = 83, headerHeight = 21, rowHeight = 21, x = left;
-        var headerFont = new XFont("Arial", 6.2, XFontStyleEx.Bold);
-        for (int i = 0; i < headers.Length; i++)
+        bool compact = layout == NestingPageLayout.TwoPerPage;
+        string[] headers = { "ID", "Tên chi tiết", "Kích thước (mm)", "Độ dày (mm)", "Diện tích (m²)", "Số lượng trên tấm" };
+        double[] ratios = { .06, .31, .18, .12, .15, .18 };
+        double[] widths = ratios.Select(ratio => ratio * width).ToArray();
+        double headerHeight = P(partPageIndex == 0
+            ? NestingReportPagePlan.FirstTableHeaderHeightDip(layout)
+            : NestingReportPagePlan.ContinuationTableHeaderHeightDip(layout));
+        double rowHeight = P(partPageIndex == 0
+            ? NestingReportPagePlan.FirstTableRowHeightDip(orientation, layout)
+            : NestingReportPagePlan.ContinuationTableRowHeightDip(orientation, layout));
+        var headerFont = new XFont("Arial", compact ? 5.3 : 6.5, XFontStyleEx.Bold);
+        var normalFont = new XFont("Arial", compact ? 5.4 : 6.7, XFontStyleEx.Regular);
+        var boldFont = new XFont("Arial", compact ? 5.4 : 6.7, XFontStyleEx.Bold);
+        double x = left;
+        for (int column = 0; column < headers.Length; column++)
         {
-            var rect = new XRect(x, headerTop, widths[i], headerHeight);
+            var rect = new XRect(x, top, widths[column], headerHeight);
             gfx.DrawRectangle(new XSolidBrush(XColor.FromArgb(220, 228, 236)), rect);
             gfx.DrawRectangle(new XPen(XColor.FromArgb(135, 148, 161), 0.4), rect);
-            gfx.DrawString(headers[i], FitFont(gfx, headers[i], headerFont, widths[i] - 4), Color(35, 54, 77), rect, XStringFormats.Center);
-            x += widths[i];
+            gfx.DrawString(headers[column], FitFont(gfx, headers[column], headerFont, rect.Width - 4), Color(35, 54, 77),
+                rect, XStringFormats.Center);
+            x += widths[column];
         }
 
-        var normal = new XFont("Arial", 6.6, XFontStyleEx.Regular);
-        var bold = new XFont("Arial", 6.6, XFontStyleEx.Bold);
-        var rows = report.Parts.Skip(pageIndex * rowsPerPage).Take(rowsPerPage).ToList();
-        for (int r = 0; r < rows.Count; r++)
+        int rowsPerPage = partPageIndex == 0
+            ? NestingReportPagePlan.FirstPageRows(orientation, layout)
+            : NestingReportPagePlan.ContinuationPageRows(orientation, layout);
+        int firstRow = partPageIndex == 0 ? 0 :
+            NestingReportPagePlan.FirstPageRows(orientation, layout) +
+            (partPageIndex - 1) * NestingReportPagePlan.ContinuationPageRows(orientation, layout);
+        var rows = model.Parts.Skip(firstRow).Take(rowsPerPage).ToList();
+        for (int row = 0; row < rows.Count; row++)
         {
-            var part = rows[r];
-            double y = headerTop + headerHeight + r * rowHeight;
-            x = left;
+            var part = rows[row];
+            double y = top + headerHeight + row * rowHeight;
             string[] values =
             {
-                part.Id.ToString(CultureInfo.InvariantCulture), "", part.Name,
-                part.Width.ToString("0.##", Culture), part.Height.ToString("0.##", Culture),
+                part.Id.ToString(CultureInfo.InvariantCulture),
+                part.Name,
+                $"{part.Width:0.##} × {part.Height:0.##}",
+                $"{part.Thickness:0.##}",
                 NestingReportDocument.SquareMeters(part.AreaPerPart),
-                $"{part.ProducedInJob}/{part.RequiredInJob}"
+                part.QuantityOnSheet.ToString(Culture)
             };
-            for (int c = 0; c < widths.Length; c++)
+            x = left;
+            for (int column = 0; column < values.Length; column++)
             {
-                var rect = new XRect(x, y, widths[c], rowHeight);
-                bool idColumn = c == 0;
-                if (idColumn) gfx.DrawRectangle(new XSolidBrush(XColor.FromArgb(180, 35, 24)), rect);
-                else gfx.DrawRectangle(new XSolidBrush(r % 2 == 0 ? XColor.FromArgb(255, 255, 255) : XColor.FromArgb(245, 247, 250)), rect);
+                var rect = new XRect(x, y, widths[column], rowHeight);
+                bool idColumn = column == 0;
+                gfx.DrawRectangle(new XSolidBrush(idColumn
+                    ? XColor.FromArgb(180, 35, 24)
+                    : row % 2 == 0 ? XColor.FromArgb(255, 255, 255) : XColor.FromArgb(245, 247, 250)), rect);
                 gfx.DrawRectangle(new XPen(XColor.FromArgb(175, 185, 196), 0.35), rect);
-                if (c == 1) DrawMiniPart(gfx, part, rect);
-                else
-                {
-                    var font = idColumn ? bold : normal;
-                    XBrush brush = idColumn ? XBrushes.White : Color(42, 56, 72);
-                    gfx.DrawString(values[c], FitFont(gfx, values[c], font, widths[c] - 5), brush,
-                        new XRect(rect.X + (c == 2 ? 4 : 2), rect.Y + 1, rect.Width - 4, rect.Height - 2),
-                        c == 2 ? XStringFormats.CenterLeft : XStringFormats.Center);
-                }
-                x += widths[c];
+                var font = idColumn ? boldFont : normalFont;
+                XBrush textBrush = idColumn ? XBrushes.White : Color(42, 56, 72);
+                gfx.DrawString(values[column], FitFont(gfx, values[column], font, rect.Width - 5), textBrush,
+                    new XRect(rect.X + (column == 1 ? 4 : 2), rect.Y + 1, rect.Width - 4, rect.Height - 2),
+                    column == 1 ? XStringFormats.CenterLeft : XStringFormats.Center);
+                x += widths[column];
             }
         }
-        var footerFont = new XFont("Arial", 6.5, XFontStyleEx.Regular);
-        gfx.DrawString("Cyclone Nest2D · Báo cáo danh mục Part", footerFont, Color(128, 144, 161),
-            new XRect(left, pageHeight - 28, width, 12), XStringFormats.CenterLeft);
     }
 
-    private static void DrawSheet(XGraphics gfx, NestingReportDocument report, SheetResult sheet, XRect viewport)
+    private static void DrawSheet(XGraphics gfx, NestingReportDocument report, SheetResult sheet,
+        XRect viewport, PartLabelMode partLabel)
     {
         gfx.DrawRectangle(new XPen(XColor.FromArgb(214, 222, 230), 0.7), XBrushes.White, viewport);
         if (!(sheet.Width > 0 && sheet.Height > 0)) return;
@@ -224,43 +246,45 @@ internal static class PdfReportWriter
                 double y = top + drawnHeight - (placement.Y + placement.Height) * scale;
                 gfx.DrawRectangle(pen, x, y, placement.Width * scale, placement.Height * scale);
             }
+
             else
             {
                 foreach (var segment in placement.Shape.Place(placement.X, placement.Y, placement.Rotated))
                     DrawSegment(gfx, pen, segment, Map);
             }
 
-            if (report.PartIds.TryGetValue(placement.PartName, out int id))
+            string? label = partLabel switch
             {
-                var center = Map(placement.X + placement.Width / 2, placement.Y + placement.Height / 2);
-                var tag = new XRect(center.X - 6.5, center.Y - 4.8, 13, 9.6);
-                gfx.DrawRectangle(new XPen(XColor.FromArgb(255, 255, 255), 0.5), new XSolidBrush(XColor.FromArgb(180, 35, 24)), tag);
-                gfx.DrawString(id.ToString(CultureInfo.InvariantCulture), new XFont("Arial", 5.7, XFontStyleEx.Bold), XBrushes.White, tag, XStringFormats.Center);
-            }
-        }
-        gfx.DrawString($"{sheet.Width:0.##} × {sheet.Height:0.##} mm", new XFont("Arial", 5.6, XFontStyleEx.Regular),
-            Color(92, 106, 122), new XRect(viewport.X + 2, viewport.Bottom - 11, viewport.Width - 4, 9), XStringFormats.CenterRight);
-    }
+                PartLabelMode.None => null,
+                PartLabelMode.IdNumber => report.PartIds.TryGetValue(placement.PartName, out int id)
+                    ? id.ToString(CultureInfo.InvariantCulture)
+                    : null,
+                PartLabelMode.PartName => placement.PartName,
+                _ => null
+            };
+            if (label is null) continue;
 
-    private static void DrawMiniPart(XGraphics gfx, NestingReportPart part, XRect cell)
-    {
-        double scale = Math.Min((cell.Width - 10) / Math.Max(1, part.Width), (cell.Height - 6) / Math.Max(1, part.Height));
-        double drawnWidth = part.Width * scale, drawnHeight = part.Height * scale;
-        double left = cell.X + (cell.Width - drawnWidth) / 2;
-        double top = cell.Y + (cell.Height - drawnHeight) / 2;
-        XColor color = PartColor(part.Name);
-        var pen = new XPen(color, 0.8);
-        var shape = part.SourcePart?.Geometry;
-        if (shape != null)
-        {
-            if (part.SourcePart!.Flip) shape = ShapeOps.MirrorHorizontal(shape);
-            XPoint Map(double x, double y) => new(left + (x - shape.MinX) * scale, top + drawnHeight - (y - shape.MinY) * scale);
-            foreach (var segment in shape.Segments) DrawSegment(gfx, pen, segment, Map);
-        }
-        else
-        {
-            gfx.DrawRectangle(pen, new XSolidBrush(XColor.FromArgb(110, color.R, color.G, color.B)),
-                left, top, Math.Max(1, drawnWidth), Math.Max(1, drawnHeight));
+            double maxWidth = placement.Width * scale - 4;
+            double maxHeight = placement.Height * scale - 3;
+            if (maxWidth < 9 || maxHeight < 8) continue;
+            var font = FitFont(gfx, label,
+                new XFont("Arial", partLabel == PartLabelMode.IdNumber ? 5.7 : 6, XFontStyleEx.Bold),
+                maxWidth - 4);
+            while (gfx.MeasureString(label, font).Width > maxWidth - 4 && label.Length > 1)
+            {
+                label = label[..^1].TrimEnd() + "…";
+                font = FitFont(gfx, label, font, maxWidth - 4);
+            }
+            if (gfx.MeasureString(label, font).Width > maxWidth - 4) continue;
+
+            var center = Map(placement.X + placement.Width / 2, placement.Y + placement.Height / 2);
+            double tagWidth = Math.Min(maxWidth, Math.Max(partLabel == PartLabelMode.IdNumber ? 13 : 0,
+                gfx.MeasureString(label, font).Width + 4));
+            double tagHeight = Math.Min(maxHeight, Math.Max(partLabel == PartLabelMode.IdNumber ? 9.6 : font.Size + 2, 8));
+            var tag = new XRect(center.X - tagWidth / 2, center.Y - tagHeight / 2, tagWidth, tagHeight);
+            gfx.DrawRectangle(new XPen(XColor.FromArgb(255, 255, 255), 0.5),
+                new XSolidBrush(XColor.FromArgb(180, 35, 24)), tag);
+            gfx.DrawString(label, font, XBrushes.White, tag, XStringFormats.Center);
         }
     }
 
@@ -308,9 +332,11 @@ internal static class PdfReportWriter
 
     private static XSolidBrush Color(byte r, byte g, byte b) => new(XColor.FromArgb(r, g, b));
 
+    private static double P(double dip) => dip * DipToPoint;
+
     private static XColor PartColor(string name)
     {
-        string hex = PreviewScene.Palette[PreviewScene.ColorIndexForName(name)];
+        string hex = CycloneNest2D.UI.PreviewScene.Palette[CycloneNest2D.UI.PreviewScene.ColorIndexForName(name)];
         return XColor.FromArgb(Convert.ToByte(hex[1..3], 16), Convert.ToByte(hex[3..5], 16), Convert.ToByte(hex[5..7], 16));
     }
 }

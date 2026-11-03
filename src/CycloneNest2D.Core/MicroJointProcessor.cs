@@ -1,29 +1,42 @@
 namespace CycloneNest2D.Core;
 
-/// <summary>Creates uncut bridges by omitting short intervals from the outer contour during DXF export.</summary>
+/// <summary>Creates uncut bridges by omitting short intervals from eligible contours during DXF export.</summary>
 internal static class MicroJointProcessor
 {
+    private enum ContourSize { Small, Medium, Large }
+
     private sealed record Edge(int Index, double Length, int Capacity);
 
-    public static List<Seg> Apply(Placement placement, IReadOnlyList<Seg> placedSegments, double widthMm, int requestedCount)
+    public static List<Seg> Apply(Placement placement, IReadOnlyList<Seg> placedSegments,
+        double widthMm, int requestedCount, double smallMaxLengthMm, double smallMaxWidthMm,
+        double largeMinLengthMm, double largeMinWidthMm)
     {
         if (widthMm <= 0 || requestedCount <= 0 || !double.IsFinite(widthMm))
             return placedSegments.ToList();
 
         var loops = ShapeOps.Build(placedSegments, placement.Width, placement.Height);
         if (!loops.Reliable || loops.Loops.Count == 0) return placedSegments.ToList();
-        var depths = Enumerable.Range(0, loops.Loops.Count).Select(i => Depth(loops, i)).ToArray();
+        var eligibleLoops = Enumerable.Range(0, loops.Loops.Count).ToDictionary(i => i, i =>
+        {
+            double contourLength = Math.Max(
+                loops.Loops[i].X.Max() - loops.Loops[i].X.Min(),
+                loops.Loops[i].Y.Max() - loops.Loops[i].Y.Min());
+            double contourWidth = Math.Min(
+                loops.Loops[i].X.Max() - loops.Loops[i].X.Min(),
+                loops.Loops[i].Y.Max() - loops.Loops[i].Y.Min());
+            return Classify(contourLength, contourWidth, smallMaxLengthMm, smallMaxWidthMm,
+                largeMinLengthMm, largeMinWidthMm) != ContourSize.Small;
+        });
+
+        if (!eligibleLoops.Values.Any(eligible => eligible)) return placedSegments.ToList();
         var candidates = new List<Edge>();
         for (int i = 0; i < placedSegments.Count; i++)
         {
             var seg = placedSegments[i];
             double length = Length(seg);
             if (length < widthMm * 1.5) continue;
-            if (placement.Shape != null)
-            {
-                int loopIndex = NearestLoop(loops, Midpoint(seg));
-                if (loopIndex < 0 || depths[loopIndex] % 2 != 0) continue;
-            }
+            int loopIndex = NearestLoop(loops, Midpoint(seg));
+            if (loopIndex < 0 || !eligibleLoops.GetValueOrDefault(loopIndex)) continue;
             int capacity = Math.Max(1, (int)Math.Floor(length / (widthMm * 1.5)));
             candidates.Add(new Edge(i, length, capacity));
         }
@@ -63,6 +76,14 @@ internal static class MicroJointProcessor
             else result.AddRange(Split(placedSegments[i], widthMm, count));
         }
         return result;
+    }
+
+    private static ContourSize Classify(double length, double width, double smallMaxLength,
+        double smallMaxWidth, double largeMinLength, double largeMinWidth)
+    {
+        if (length < smallMaxLength && width < smallMaxWidth) return ContourSize.Small;
+        if (length > largeMinLength && width > largeMinWidth) return ContourSize.Large;
+        return ContourSize.Medium;
     }
 
     private static IEnumerable<Seg> Split(Seg seg, double width, int count)

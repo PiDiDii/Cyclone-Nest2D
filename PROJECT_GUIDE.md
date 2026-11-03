@@ -29,7 +29,7 @@ Cyclone Nest2D là ứng dụng desktop Windows dùng WPF để đọc hình h�
 - `NestEngine.cs`: kiểm tra contour trước khi giao việc cho thuật toán raster.
 - `RasterNester.cs`: xếp theo mặt nạ bit bảo thủ, nhiều thứ tự thử và thời hạn/điều kiện dừng.
 - `Validator.cs`: kiểm tra kết quả sau nesting hoặc vị trí kéo/xoay thủ công, độc lập với bộ tìm ứng viên.
-- `Export.cs`, `DxfExportWriter.cs`, `DxfExportOptions.cs`, `MicroJointProcessor.cs`: API/định dạng xuất DXF; micro-joints được tạo bằng cách bỏ các đoạn ngắn trên biên ngoài, không thay đổi contour lỗ.
+- `Export.cs`, `DxfExportWriter.cs`, `DxfExportOptions.cs`, `MicroJointProcessor.cs`: API/định dạng xuất DXF; micro-joints phân bổ khe cầu trên cả contour ngoài và đường bao lỗ đủ kích thước, tự bỏ qua contour nhỏ.
 
 ### Các tệp UI Core quan trọng
 
@@ -37,7 +37,7 @@ Cyclone Nest2D là ứng dụng desktop Windows dùng WPF để đọc hình h�
 - `PartItem.cs`: biểu diễn chi tiết trong UI, gồm nguồn DXF hoặc hình chữ nhật, số lượng, layer được bật, metadata vật liệu/độ dày và tính hợp lệ.
 - `NestSettings.cs`: thiết lập, kiểm tra đầu vào, chuyển sang `SheetDefinition`/`NestOptions`.
 - `NestingService.cs`: chuyển tác vụ Core sang `Task.Run`, sau đó chạy `Validator.Check`.
-- `ProjectStore.cs`: serialize dự án `.nest2d` JSON; đường dẫn DXF ghi tương đối với dự án.
+- `ProjectStore.cs`: serialize dự án `.nest2d` JSON; đường dẫn DXF ghi tương đối với dự án. `ProjectFormatMigrator.cs` nâng dữ liệu workspace v1 và project/workspace v2 lên schema v3 trong bộ nhớ trước khi nạp.
 - `Preview.cs`: dựng scene xem trước và hit-test hình dạng.
 - `ExportService.cs`: điều phối xuất một file hoặc nhiều file và tạo nội dung tóm tắt.
 
@@ -131,7 +131,7 @@ Canvas hỗ trợ chọn đơn, Ctrl-click để cộng/trừ selection và qué
 
 ### 4.7 Xuất DXF/PDF
 
-Lệnh export của UI gọi `ExportService`, sau đó `DxfWriter`/`DxfExportWriter` ghi DXF. Tùy chọn có thể quyết định một file hay mỗi sheet một file, layer, nhãn, block, đơn vị, hướng nest và kiểu geometry. Tùy chọn micro-joints (mặc định tắt) ngắt đường cắt trên biên ngoài; độ rộng nhập theo mm và số lượng là mục tiêu mỗi part. Bộ xử lý giữ nguyên lỗ/contour trong, và giữ nguyên hình học gốc ngoài các khoảng ngắt. Đây là đường cắt bị ngắt chứ không phải đường bù CAM; cần xác minh DXF sau export trên CAM/máy cắt đích. PDF được tạo bởi lớp Desktop dùng PDFsharp; đây là phần Windows UI/report, không phải dịch vụ Core.
+Lệnh export của UI gọi `ExportService`, sau đó `DxfWriter`/`DxfExportWriter` ghi DXF. Tùy chọn có thể quyết định một file hay mỗi sheet một file, layer, nhãn, block, đơn vị, hướng nest và kiểu geometry. Micro-joints thông minh mặc định bật; mặc định tạo tổng cộng 6 cầu rộng 0,4 mm trên mỗi part và phân bổ lên các contour đủ kích thước, bao gồm cả contour ngoài lẫn đường bao lỗ. Từng contour được phân loại theo chiều dài/rộng; contour nhỏ bị bỏ qua. Ngưỡng mặc định theo hộp thoại: contour nhỏ có chiều dài và rộng dưới 50 mm; contour lớn có cả chiều dài và rộng trên 500 mm; các trường hợp còn lại là contour vừa. Có thể chỉnh ngưỡng và thông số cầu. Đây là đường cắt bị ngắt chứ không phải đường bù CAM; cần xác minh DXF sau export trên CAM/máy cắt đích. Tùy chọn xóa cạnh chung khử các đoạn thẳng trùng hoặc chồng lấn, kể cả khi chúng thuộc các layer khác nhau; tính năng không tương thích với xuất Part dạng Block. PDF được tạo bởi lớp Desktop dùng PDFsharp; mỗi tấm nesting có chung một báo cáo gồm thông số, sơ đồ và danh mục chi tiết của chính tấm đó; báo cáo không còn chỉ số chiều dài sử dụng. Preview, in và PDF dùng chung lựa chọn A4 ngang/dọc, một hoặc hai báo cáo mỗi trang, và nhãn chi tiết `None`, `ID Number` hoặc `Part Name`. Bảng danh mục có thêm độ dày; vật liệu, độ dày và khổ tấm chỉ xuất hiện ở phần đầu báo cáo. Bố cục căn theo tỷ lệ tấm, bỏ dòng ngày giờ và giới hạn số dòng theo vùng in được để danh mục không lấn sang báo cáo/trang kế tiếp.
 
 Các kiểm thử lõi có đường đi xuất rồi đọc lại DXF để xác nhận segment/placement. Tuy vậy, kiểm thử round-trip parser không chứng minh file mở hoàn hảo trong AutoCAD, ZWCAD hay Inventor; cần kiểm tra compatibility trên các ứng dụng CAD mục tiêu trước khi phát hành sản xuất.
 
@@ -201,21 +201,20 @@ dotnet run --project tests\CycloneNest2D.Performance -c Release -- --full --dxf 
 1. **Tiếp tục mở rộng test theo domain.** Hai project test đã dùng xUnit với discovery, lọc theo domain và coverage collector. Khi thêm test, đặt chúng trong domain/use-case phù hợp; Performance vẫn chạy riêng để không đặt ngưỡng thời gian tuyệt đối trong unit test.
 2. **Thêm CI đa nền tảng.** Build/test Core và UI Core trên Windows/Linux; build Desktop trên Windows. Lưu artifact/log và kiểm tra format/lint để phát hiện lỗi sớm.
 3. **Đưa cảnh báo compiler và phân tích tĩnh thành cổng chất lượng.** Bật warnings-as-errors có chọn lọc, `dotnet format --verify-no-changes`, analyzer; giải quyết cảnh báo theo nhóm thay vì bật cứng toàn bộ ngay nếu code hiện có chưa sạch.
-4. **Quản lý version dự án `.nest2d`.** DTO có `Version` nhưng loader chưa thể hiện migration theo version. Cần từ chối version tương lai không hỗ trợ, validate schema, migration có test và lưu atomic (ghi file tạm rồi rename) để giảm nguy cơ hỏng file khi crash.
+4. **Quản lý version dự án `.nest2d`.** `ProjectFormatMigrator` hiện nâng workspace v1 và project/workspace v2 lên v3; version tương lai, loại dữ liệu lạ và danh sách chính bị thiếu được từ chối rõ ràng. Khi tăng version, bổ sung migration tuần tự và fixture/test cho cả workspace lẫn project index; chỉ ghi phiên bản mới khi dự án được lưu.
 5. **Quản lý tham chiếu DXF bền vững.** Đường dẫn tương đối tiện cho di chuyển nhưng file nguồn có thể bị mất/thay đổi. Cân nhắc checksum/metadata thời gian sửa, cảnh báo source changed, tùy chọn copy/embed file nguồn hoặc đóng gói dự án.
 7. **Làm rõ tính tất định và song song của heuristic.** `RasterNester` dùng `Parallel.ForEach` cho các thứ tự thử, trong khi giới hạn thời gian và early-stop chung có thể khiến phương án cuối phụ thuộc lịch chạy. Nếu cần tái lập kết quả, ghi seed/cấu hình/phiên bản thuật toán, cân nhắc chạy tuần tự hoặc gom kết quả theo cơ chế determinism rõ ràng; thêm benchmark.
-8. **Thiết lập timeout và cancellation có test biên.** Thời gian được tính trong lõi và lại được phân bổ cho các trial theo nhóm/khổ. Tiếp tục test lượng dữ liệu lớn, cancellation khi đang tạo variant, nhiều vật liệu và trường hợp 0/âm/NaN/infinity; bảo đảm mọi vòng lặp nặng có điểm kiểm tra cancellation.
+8. **Thiết lập timeout và cancellation có test biên.** Thời gian được tính trong lõi và lại được phân bổ cho các trial theo nhóm/khổ. Tiếp tục test lượng dữ liệu lớn, cancellation khi đang tạo variant, nhiều vật liệu và trường hợp 0/âm/NaN/infinity; bảo đảm mọi vòng lặp nặng có điểm kiểm tra cancellation. Benchmark hiện ghi trạng thái hoàn tất/lý do hết ngân sách riêng, không suy luận timeout chỉ từ thời gian chạy gần ngưỡng.
 9. **Kiểm thử DXF interoperability.** Thêm bộ fixture do CAD thực xuất, kiểm tra phiên bản DXF, OCS/extrusion, bulge, SPLINE, blocks/arrays, encoding, layer và round-trip; xác nhận thủ công trên ZWCAD/Inventor/AutoCAD phù hợp phiên bản đích.
 10. **Hiệu năng/bộ nhớ raster.** Đặt giới hạn kích thước lưới/đầu vào, đo benchmark theo sheet/chi tiết/độ phân giải; xử lý file DXF lớn hoặc số lượng cực lớn có tiến độ và giới hạn tài nguyên. Không để input không tin cậy tạo cấp phát bất thường.
-11. **Nợ kiến trúc đang hiện hữu — không mở rộng các lớp trung tâm.** `MainViewModel` đang chứa lifecycle dự án, preflight/nesting đa nhóm, placement thủ công, export và state/preview; `MainWindow.xaml.cs` đồng thời xử lý nhiều trang, nhập liệu, menu, dialog và lifecycle. Test đã có xUnit discovery theo domain, nhưng các case legacy vẫn dùng chung builder lớn; tiếp tục tách test theo domain khi sửa từng use-case. Đây là điểm tập trung rủi ro khi thêm tính năng. Tách theo lát cắt, ưu tiên:
+11. **Nợ kiến trúc đang hiện hữu — không mở rộng các lớp trung tâm.** `MainViewModel` đang chứa lifecycle dự án, preflight/nesting đa nhóm, placement thủ công, export và state/preview; `MainWindow.xaml.cs` đồng thời xử lý nhiều trang, nhập liệu, menu, dialog và lifecycle. `ProjectFormatMigrator` đã tách riêng nâng cấp schema; đây là một lát cắt nhỏ, chưa thay thế việc tách use-case. Test đã có xUnit discovery theo domain, cùng một workflow đầu-cuối qua API nghiệp vụ. Ưu tiên tiếp theo:
    1. `NestingCoordinator` cho preflight, nhóm vật liệu/khổ, tiến độ và ghép kết quả.
-   2. `ProjectSessionService` cho index/workspace, chuyển nhóm, migration và lưu nguyên tử.
-   3. `ManualPlacementService` cho place/move/delete và projection số lượng còn lại.
-   4. Các test theo miền/use-case và UI adapter nhỏ cho bảng Part, Sheet, canvas/dialog.
+   2. `ProjectSessionService` cho index/workspace, chuyển nhóm và lưu nguyên tử.
+   3. Các test theo miền/use-case và UI adapter nhỏ cho bảng Part, Sheet, canvas/dialog.
 
    Giữ `MainViewModel` làm facade điều phối để giảm rủi ro binding; không bắt đầu bằng việc viết lại toàn bộ UI hoặc thay kiến trúc MVVM.
-12. **Gia cố persistence trước tính năng cộng tác/dữ liệu lớn.** Mọi write project/settings phải atomic; loader phải xác thực version/schema trước khi áp dụng dữ liệu; file version tương lai cần lỗi rõ ràng. Bổ sung kiểm thử lỗi ghi, crash/temp-file recovery, path DXF thiếu/đổi và migration.
-13. **Phân loại lỗi thay vì catch tổng quát.** Những ranh giới UI/nhập file có thể bắt lỗi để tiếp tục batch, nhưng nên phân biệt lỗi định dạng/IO/operation cancelled/lỗi lập trình, tránh che lỗi bất ngờ bằng thông báo chung.
+12. **Gia cố persistence trước tính năng cộng tác/dữ liệu lớn.** Workspace/index tiếp tục ghi qua file tạm rồi thay thế; loader đã có migration và kiểm tra loại/danh sách chính. Cần thêm test lỗi ghi thực tế, phục hồi file tạm sau crash, và xác nhận đường dẫn DXF thiếu/đổi; khi thay đổi cơ chế atomic cần bảo toàn file đích nếu ghi thất bại.
+13. **Phân loại lỗi thay vì catch tổng quát.** Tải settings và tùy chọn theme hiện báo lỗi, giữ mặc định hoặc trạng thái phiên hiện tại; `FromJson` từ chối dữ liệu sai mà không áp dụng dở dang. Tiếp tục rà soát các ranh giới khác để phân biệt lỗi định dạng/IO/operation cancelled với lỗi lập trình, tránh thông báo chung che nguyên nhân.
 14. **Tài liệu vận hành và phát hành.** Bổ sung release notes, phiên bản ứng dụng, ma trận Windows/.NET/CAD hỗ trợ, quy trình publish/signing và lưu kết quả kiểm tra CAD.
 
 ### Kiểm tra đã thực hiện cho bản được gửi
@@ -223,6 +222,8 @@ dotnet run --project tests\CycloneNest2D.Performance -c Release -- --full --dxf 
 - Đã kiểm kê mã nguồn, solution, README, project files, thuật toán Core, luồng ViewModel/service/persistence và một phần nội dung tests.
 - ZIP ban đầu chứa artefact Visual Studio và build: khoảng 5.6 MiB tổng; trong đó `bin` khoảng 3.31 MiB, `obj` 1.06 MiB, `.vs` 0.68 MiB. Chúng không phải source và đã được loại khỏi bản làm việc/tài liệu giao.
 - Test Core và UI Core được chạy qua xUnit discovery; các regression test hiện có (kể cả kiểm tra tĩnh XAML/binding/handler) được giữ lại. Kiểm tra tĩnh XAML không thay thế build Desktop hoặc xác minh tương tác WPF thực tế trên Windows.
+- Có test workflow DXF → nesting → chỉnh placement → lưu/mở workspace → xuất/đọc lại DXF; CI chạy riêng test này trên Windows. Đây là kiểm thử pipeline nghiệp vụ, không phải tự động hóa thao tác chuột/bàn phím trên WPF.
+- CI xác minh `dotnet format` và chạy benchmark nhanh với workload cố định, ba lần lặp; báo cáo có chiến lược và trạng thái/lý do dừng.
 - Chưa xác nhận giao diện tương tác trên Windows thật và chưa mở DXF xuất trong CAD mục tiêu.
 
 ## 8. Quy tắc cho AI/nhà phát triển tiếp theo

@@ -156,11 +156,16 @@ internal static class PerformanceProgram
         int requested = workload.Parts.Sum(part => Math.Max(0, part.Quantity));
         int placed = result.Sheets.Sum(sheet => sheet.Placements.Count);
         double utilization = result.Utilization * 100;
+        bool hitTimeBudget = result.Strategy.Equals("Đã dừng do giới hạn thời gian.", StringComparison.Ordinal) ||
+            result.Notes.Any(note => note.Contains("hết thời gian nesting", StringComparison.OrdinalIgnoreCase));
         return new BenchmarkRun
         {
             Workload = workload.Name,
             Description = workload.Description,
             Profile = profile.Name,
+            Strategy = result.Strategy,
+            CompletionStatus = hitTimeBudget ? "time-budget" : placed == requested ? "complete" : "partial",
+            StopReason = hitTimeBudget ? "time budget reached" : placed == requested ? "all instances placed" : "instances unplaced",
             Repetition = repetition,
             PartTypes = workload.Parts.Count,
             RequestedInstances = requested,
@@ -200,7 +205,7 @@ internal static class PerformanceProgram
             UtilizationPercent = utilization,
             CompletionPercent = requested == 0 ? 100 : placed * 100d / requested,
             ValidationErrors = validationErrors.Count,
-            HitTimeBudget = stopwatch.Elapsed.TotalSeconds >= config.MaxSeconds * 0.95,
+            HitTimeBudget = hitTimeBudget,
             ResultSignature = Signature(result)
         };
     }

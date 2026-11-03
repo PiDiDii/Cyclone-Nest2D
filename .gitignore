@@ -21,3 +21,8 @@ Thumbs.db
 [Ee]hthumbs.db
 Desktop.ini
 .DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/

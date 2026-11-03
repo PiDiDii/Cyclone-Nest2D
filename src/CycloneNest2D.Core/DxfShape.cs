@@ -177,24 +177,24 @@ public sealed class DxfShape
             switch (s)
             {
                 case LineSeg l:
-                {
-                    var p1 = T(l.X1, l.Y1);
-                    var p2 = T(l.X2, l.Y2);
-                    yield return new LineSeg(p1.X, p1.Y, p2.X, p2.Y, l.Layer);
-                    break;
-                }
+                    {
+                        var p1 = T(l.X1, l.Y1);
+                        var p2 = T(l.X2, l.Y2);
+                        yield return new LineSeg(p1.X, p1.Y, p2.X, p2.Y, l.Layer);
+                        break;
+                    }
                 case CircleSeg c:
-                {
-                    var p = T(c.Cx, c.Cy);
-                    yield return new CircleSeg(p.X, p.Y, c.R, c.Layer);
-                    break;
-                }
+                    {
+                        var p = T(c.Cx, c.Cy);
+                        yield return new CircleSeg(p.X, p.Y, c.R, c.Layer);
+                        break;
+                    }
                 case ArcSeg a:
-                {
-                    var p = T(a.Cx, a.Cy);
-                    yield return new ArcSeg(p.X, p.Y, a.R, a.StartRad + dAng, a.SweepRad, a.Layer);
-                    break;
-                }
+                    {
+                        var p = T(a.Cx, a.Cy);
+                        yield return new ArcSeg(p.X, p.Y, a.R, a.StartRad + dAng, a.SweepRad, a.Layer);
+                        break;
+                    }
             }
         }
     }

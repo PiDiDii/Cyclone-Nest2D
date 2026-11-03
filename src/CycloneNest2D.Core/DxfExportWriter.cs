@@ -8,8 +8,97 @@ public static class DxfExportWriter
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     private const double SheetGapMm = 500;
+    private const double CommonEdgeToleranceMm = 0.001;
+    private const double CommonEdgeAngleBucket = 0.001;
 
     private sealed record BlockDefinition(string Name, string Contents);
+
+    private sealed class CommonEdgeTracker
+    {
+        private readonly double _tolerance;
+        private readonly Dictionary<(long Angle, long Offset), List<(double X1, double Y1, double X2, double Y2)>> _segments = new();
+
+        public CommonEdgeTracker(double tolerance) => _tolerance = tolerance;
+
+        public IReadOnlyList<(double X1, double Y1, double X2, double Y2)> AddAndGetUncovered(
+            double x1, double y1, double x2, double y2)
+        {
+            double dx = x2 - x1, dy = y2 - y1;
+            double length = Math.Sqrt(dx * dx + dy * dy);
+            if (length <= _tolerance)
+                return Array.Empty<(double, double, double, double)>();
+
+            double ux = dx / length, uy = dy / length;
+            double keyUx = ux, keyUy = uy;
+            if (keyUx < 0 || (Math.Abs(keyUx) <= CommonEdgeAngleBucket && keyUy < 0))
+            {
+                keyUx = -keyUx;
+                keyUy = -keyUy;
+            }
+            double angle = Math.Atan2(keyUy, keyUx);
+            if (angle < 0) angle += Math.PI;
+            double offset = -keyUy * x1 + keyUx * y1;
+            long angleBucket = (long)Math.Round(angle / CommonEdgeAngleBucket);
+            long offsetBucket = (long)Math.Round(offset / _tolerance);
+            var remaining = new List<(double Start, double End)> { (0, length) };
+            for (long angleDelta = -1; angleDelta <= 1; angleDelta++)
+            for (long offsetDelta = -1; offsetDelta <= 1; offsetDelta++)
+            {
+                if (!_segments.TryGetValue((angleBucket + angleDelta, offsetBucket + offsetDelta), out var bucket))
+                    continue;
+                foreach (var existing in bucket)
+                {
+                    double ex = existing.X2 - existing.X1, ey = existing.Y2 - existing.Y1;
+                    double existingLength = Math.Sqrt(ex * ex + ey * ey);
+                    if (existingLength <= _tolerance) continue;
+
+                    double distance1 = Math.Abs((existing.X1 - x1) * uy - (existing.Y1 - y1) * ux);
+                    double distance2 = Math.Abs((existing.X2 - x1) * uy - (existing.Y2 - y1) * ux);
+                    if (distance1 > _tolerance || distance2 > _tolerance)
+                        continue;
+
+                    double t1 = (existing.X1 - x1) * ux + (existing.Y1 - y1) * uy;
+                    double t2 = (existing.X2 - x1) * ux + (existing.Y2 - y1) * uy;
+                    double overlapStart = Math.Max(0, Math.Min(t1, t2));
+                    double overlapEnd = Math.Min(length, Math.Max(t1, t2));
+                    if (overlapEnd - overlapStart <= _tolerance) continue;
+
+                    var next = new List<(double Start, double End)>();
+                    foreach (var interval in remaining)
+                    {
+                        if (overlapEnd <= interval.Start + _tolerance ||
+                            overlapStart >= interval.End - _tolerance)
+                        {
+                            next.Add(interval);
+                            continue;
+                        }
+                        if (overlapStart > interval.Start + _tolerance)
+                            next.Add((interval.Start, overlapStart));
+                        if (overlapEnd < interval.End - _tolerance)
+                            next.Add((overlapEnd, interval.End));
+                    }
+                    remaining = next;
+                    if (remaining.Count == 0) break;
+                }
+                if (remaining.Count == 0) break;
+            }
+
+            if (!_segments.TryGetValue((angleBucket, offsetBucket), out var currentBucket))
+            {
+                currentBucket = new List<(double, double, double, double)>();
+                _segments.Add((angleBucket, offsetBucket), currentBucket);
+            }
+            currentBucket.Add((x1, y1, x2, y2));
+            return remaining
+                .Where(interval => interval.End - interval.Start > _tolerance)
+                .Select(interval =>
+                {
+                    double start = interval.Start / length, end = interval.End / length;
+                    return (x1 + dx * start, y1 + dy * start, x1 + dx * end, y1 + dy * end);
+                })
+                .ToArray();
+        }
+    }
 
     public static void Write(IReadOnlyList<SheetResult> sheets, string path, DxfExportOptions options, double margin = 0)
     {
@@ -17,9 +106,18 @@ public static class DxfExportWriter
         options = options with { NestOrientation = ((options.NestOrientation % 360) + 360) % 360 };
         if (options.NestOrientation is not (0 or 90 or 180 or 270))
             throw new ArgumentOutOfRangeException(nameof(options.NestOrientation), "Hướng nest chỉ hỗ trợ 0°, 90°, 180° hoặc 270°.");
-        if (!double.IsFinite(options.MicroJointWidthMm) || options.MicroJointWidthMm < 0 || options.MicroJointCount < 0 || options.MicroJointCount > 1000 ||
-            (options.MicroJointCount > 0 && options.MicroJointWidthMm <= 0))
-            throw new ArgumentOutOfRangeException(nameof(options.MicroJointWidthMm), "Thông số micro-joint không hợp lệ.");
+        if (options.ExportPartsAsBlocks && options.RemoveCommonEdges)
+            throw new ArgumentException("Không thể vừa xuất Part dạng Block vừa xóa cạnh chung.", nameof(options));
+        if (options.EnableMicroJoints &&
+            (!double.IsFinite(options.MicroJointWidthMm) || options.MicroJointWidthMm <= 0 ||
+             options.MicroJointCount is < 1 or > 1000 ||
+             !double.IsFinite(options.MicroJointSmallMaxLengthMm) || options.MicroJointSmallMaxLengthMm <= 0 ||
+             !double.IsFinite(options.MicroJointSmallMaxWidthMm) || options.MicroJointSmallMaxWidthMm <= 0 ||
+             !double.IsFinite(options.MicroJointLargeMinLengthMm) ||
+             options.MicroJointLargeMinLengthMm < options.MicroJointSmallMaxLengthMm ||
+             !double.IsFinite(options.MicroJointLargeMinWidthMm) ||
+             options.MicroJointLargeMinWidthMm < options.MicroJointSmallMaxWidthMm))
+            throw new ArgumentOutOfRangeException(nameof(options.MicroJointWidthMm), "Thông số micro-joint hoặc ngưỡng phân loại contour không hợp lệ.");
 
         double unit = options.Units == DxfOutputUnits.Inches ? 1d / 25.4d : 1d;
         string acadVersion = VersionCode(options.TargetVersion);
@@ -53,7 +151,7 @@ public static class DxfExportWriter
             var size = OrientedSize(sheet.Width, sheet.Height, options.NestOrientation);
             double modelOffset = options.ExportNestsAsBlocks ? 0 : offsetMm;
             var body = new StringBuilder();
-            var commonLines = new HashSet<string>(StringComparer.Ordinal);
+            var commonLines = new CommonEdgeTracker(CommonEdgeToleranceMm * unit);
 
             if (options.OutputSheets)
                 WriteRectangle(body, sheetLayer, 0, 0, size.Width, size.Height, unit, modelOffset, null);
@@ -63,10 +161,11 @@ public static class DxfExportWriter
                 var placement = sheet.Placements[placementIndex];
                 string layer = options.PartsOnSingleLayer ? partLayer : placement.Shape == null ? rectLayer : "0";
                 var segments = GetPlacedSegments(placement);
-                segments = ApplyLoopDirection(segments, options.OuterDirection, options.InnerDirection);
                 var sourceTexts = placement.Shape?.Texts ?? Array.Empty<DxfTextEntity>();
-                if (options.MicroJointCount > 0 && options.MicroJointWidthMm > 0)
-                    segments = MicroJointProcessor.Apply(placement, segments, options.MicroJointWidthMm, options.MicroJointCount);
+                if (options.EnableMicroJoints)
+                    segments = MicroJointProcessor.Apply(placement, segments, options.MicroJointWidthMm,
+                        options.MicroJointCount, options.MicroJointSmallMaxLengthMm, options.MicroJointSmallMaxWidthMm,
+                        options.MicroJointLargeMinLengthMm, options.MicroJointLargeMinWidthMm);
 
                 if (options.ExportPartsAsBlocks)
                 {
@@ -325,7 +424,7 @@ public static class DxfExportWriter
     }
 
     private static void WriteSegment(StringBuilder sb, string layer, Seg segment, DxfGeometryStyle style,
-        double unit, double offset, HashSet<string>? commonLines)
+        double unit, double offset, CommonEdgeTracker? commonLines)
     {
         switch (segment)
         {
@@ -348,7 +447,7 @@ public static class DxfExportWriter
     }
 
     private static void WriteCurveAsLines(StringBuilder sb, string layer, double cx, double cy, double radius,
-        double start, double sweep, double unit, double offset, HashSet<string>? commonLines)
+        double start, double sweep, double unit, double offset, CommonEdgeTracker? commonLines)
     {
         int count = Math.Clamp((int)Math.Ceiling(Math.Abs(sweep) / (Math.PI / 36)), 8, 360);
         double x0 = cx + radius * Math.Cos(start), y0 = cy + radius * Math.Sin(start);
@@ -372,7 +471,7 @@ public static class DxfExportWriter
     }
 
     private static void WriteRectangle(StringBuilder sb, string layer, double x, double y, double width, double height,
-        double unit, double offset, HashSet<string>? commonLines)
+        double unit, double offset, CommonEdgeTracker? commonLines)
     {
         WriteLine(sb, layer, x, y, x + width, y, unit, offset, commonLines);
         WriteLine(sb, layer, x + width, y, x + width, y + height, unit, offset, commonLines);
@@ -381,15 +480,20 @@ public static class DxfExportWriter
     }
 
     private static void WriteLine(StringBuilder sb, string layer, double x1, double y1, double x2, double y2,
-        double unit, double offset, HashSet<string>? commonLines)
+        double unit, double offset, CommonEdgeTracker? commonLines)
     {
         double ax = (x1 + offset) * unit, ay = y1 * unit, bx = (x2 + offset) * unit, by = y2 * unit;
         if (commonLines != null)
         {
-            string a = $"{ax:0.###},{ay:0.###}", b = $"{bx:0.###},{by:0.###}";
-            string key = layer + "|" + (string.CompareOrdinal(a, b) <= 0 ? a + "|" + b : b + "|" + a);
-            if (!commonLines.Add(key)) return;
+            foreach (var line in commonLines.AddAndGetUncovered(ax, ay, bx, by))
+                WriteLineEntity(sb, layer, line.X1, line.Y1, line.X2, line.Y2);
+            return;
         }
+        WriteLineEntity(sb, layer, ax, ay, bx, by);
+    }
+
+    private static void WriteLineEntity(StringBuilder sb, string layer, double ax, double ay, double bx, double by)
+    {
         Entity(sb, "LINE", layer); Number(sb, 10, ax); Number(sb, 20, ay); Number(sb, 30, 0); Number(sb, 11, bx); Number(sb, 21, by); Number(sb, 31, 0);
     }
 
@@ -542,91 +646,4 @@ public static class DxfExportWriter
         _ => "AC1009"
     };
 
-    private static List<Seg> ApplyLoopDirection(List<Seg> segments, DxfLoopDirection outer, DxfLoopDirection inner)
-    {
-        // Build closed contours from endpoint-connected LINE/ARC entities. Open paths and CIRCLE entities remain unchanged.
-        var remaining = segments.Where(s => s is not CircleSeg).ToList();
-        var output = new List<Seg>();
-        var polygons = new List<(List<Seg> Segments, double Area)>();
-        var open = new List<Seg>();
-        while (remaining.Count > 0)
-        {
-            var chain = new List<Seg> { remaining[0] };
-            remaining.RemoveAt(0);
-            var start = StartPoint(chain[0]);
-            var current = EndPoint(chain[0]);
-            bool closed = false;
-            for (int guard = 0; guard < 10000; guard++)
-            {
-                if (Near(current, start)) { closed = true; break; }
-                int found = remaining.FindIndex(s => Near(StartPoint(s), current) || Near(EndPoint(s), current));
-                if (found < 0) break;
-                var next = remaining[found]; remaining.RemoveAt(found);
-                if (Near(EndPoint(next), current)) next = Reverse(next);
-                chain.Add(next); current = EndPoint(next);
-            }
-            if (closed) polygons.Add((chain, SignedArea(chain)));
-            else open.AddRange(chain);
-        }
-
-        double largest = polygons.Count == 0 ? 0 : polygons.Max(p => Math.Abs(p.Area));
-        foreach (var contour in polygons)
-        {
-            bool isOuter = Math.Abs(contour.Area) >= largest - 1e-6;
-            var desired = isOuter ? outer : inner;
-            bool wantsPositive = desired == DxfLoopDirection.CounterClockwise;
-            if (Math.Abs(contour.Area) > 1e-8 && (contour.Area > 0) != wantsPositive)
-                output.AddRange(contour.Segments.AsEnumerable().Reverse().Select(Reverse));
-            else output.AddRange(contour.Segments);
-        }
-        output.AddRange(open);
-        output.AddRange(segments.OfType<CircleSeg>());
-        return output;
-    }
-
-    private static (double X, double Y) StartPoint(Seg s) => s switch
-    {
-        LineSeg l => (l.X1, l.Y1),
-        ArcSeg a => (a.Cx + a.R * Math.Cos(a.StartRad), a.Cy + a.R * Math.Sin(a.StartRad)),
-        _ => (0, 0)
-    };
-    private static (double X, double Y) EndPoint(Seg s) => s switch
-    {
-        LineSeg l => (l.X2, l.Y2),
-        ArcSeg a => (a.Cx + a.R * Math.Cos(a.StartRad + a.SweepRad), a.Cy + a.R * Math.Sin(a.StartRad + a.SweepRad)),
-        _ => (0, 0)
-    };
-    private static bool Near((double X, double Y) a, (double X, double Y) b) => Math.Abs(a.X - b.X) < 0.02 && Math.Abs(a.Y - b.Y) < 0.02;
-    private static Seg Reverse(Seg s) => s switch
-    {
-        LineSeg l => new LineSeg(l.X2, l.Y2, l.X1, l.Y1, l.Layer),
-        ArcSeg a => new ArcSeg(a.Cx, a.Cy, a.R, a.StartRad + a.SweepRad, -a.SweepRad, a.Layer),
-        _ => s
-    };
-
-    private static double SignedArea(List<Seg> segments)
-    {
-        var points = new List<(double X, double Y)>();
-        foreach (var s in segments)
-        {
-            if (s is LineSeg l) points.Add((l.X1, l.Y1));
-            else if (s is ArcSeg a)
-            {
-                int n = Math.Clamp((int)Math.Ceiling(Math.Abs(a.SweepRad) / (Math.PI / 24)), 2, 180);
-                for (int i = 0; i < n; i++)
-                {
-                    double t = a.StartRad + a.SweepRad * i / n;
-                    points.Add((a.Cx + a.R * Math.Cos(t), a.Cy + a.R * Math.Sin(t)));
-                }
-            }
-        }
-        if (points.Count < 3) return 0;
-        double sum = 0;
-        for (int i = 0; i < points.Count; i++)
-        {
-            var a = points[i]; var b = points[(i + 1) % points.Count];
-            sum += a.X * b.Y - b.X * a.Y;
-        }
-        return sum / 2;
-    }
 }

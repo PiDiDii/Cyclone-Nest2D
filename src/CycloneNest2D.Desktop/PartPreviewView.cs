@@ -125,18 +125,18 @@ public sealed class PartPreviewView : FrameworkElement
                     dc.DrawEllipse(null, pen, Map(circle.Cx, circle.Cy), circle.R * scale, circle.R * scale);
                     break;
                 case ArcSeg arc:
-                {
-                    int steps = Math.Clamp((int)Math.Ceiling(Math.Abs(arc.SweepRad) * Math.Max(arc.R * scale, 1) / 3), 8, 240);
-                    Point previous = Map(arc.Cx + arc.R * Math.Cos(arc.StartRad), arc.Cy + arc.R * Math.Sin(arc.StartRad));
-                    for (int i = 1; i <= steps; i++)
                     {
-                        double a = arc.StartRad + arc.SweepRad * i / steps;
-                        Point current = Map(arc.Cx + arc.R * Math.Cos(a), arc.Cy + arc.R * Math.Sin(a));
-                        dc.DrawLine(pen, previous, current);
-                        previous = current;
+                        int steps = Math.Clamp((int)Math.Ceiling(Math.Abs(arc.SweepRad) * Math.Max(arc.R * scale, 1) / 3), 8, 240);
+                        Point previous = Map(arc.Cx + arc.R * Math.Cos(arc.StartRad), arc.Cy + arc.R * Math.Sin(arc.StartRad));
+                        for (int i = 1; i <= steps; i++)
+                        {
+                            double a = arc.StartRad + arc.SweepRad * i / steps;
+                            Point current = Map(arc.Cx + arc.R * Math.Cos(a), arc.Cy + arc.R * Math.Sin(a));
+                            dc.DrawLine(pen, previous, current);
+                            previous = current;
+                        }
+                        break;
                     }
-                    break;
-                }
             }
         }
         if (ActualWidth >= 140 && ActualHeight >= 80) DrawDimension(dc, part, ox, oy, drawW, drawH);
@@ -151,7 +151,7 @@ public sealed class PartPreviewView : FrameworkElement
 
         double fontSize = Math.Clamp(Math.Abs(entity.Height * scale), 5, 48);
         var formatted = new FormattedText(content, System.Globalization.CultureInfo.CurrentCulture,
-            FlowDirection.LeftToRight, new Typeface("Segoe UI"), fontSize,
+            FlowDirection.LeftToRight, ThemePalette.AppTypeface, fontSize,
             ThemePalette.Brush("TextPrimaryBrush", Color.FromRgb(37, 52, 69)),
             VisualTreeHelper.GetDpi(this).PixelsPerDip);
         if (entity.Type == "MTEXT" && entity.Width > 0)
@@ -220,14 +220,14 @@ public sealed class PartPreviewView : FrameworkElement
     {
         var text = new FormattedText($"{part.Width:0.##} × {part.Height:0.##} mm",
             System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-            new Typeface("Segoe UI"), 12, ThemePalette.Brush("TextSecondaryBrush", Color.FromRgb(82, 101, 122)), VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            ThemePalette.AppTypeface, 12, ThemePalette.Brush("TextSecondaryBrush", Color.FromRgb(82, 101, 122)), VisualTreeHelper.GetDpi(this).PixelsPerDip);
         dc.DrawText(text, new Point(Math.Max(4, (ActualWidth - text.Width) / 2), Math.Max(3, ActualHeight - text.Height - 4)));
     }
 
     private void DrawHint(DrawingContext dc, string message)
     {
         var text = new FormattedText(message, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-            new Typeface("Segoe UI"), 12.5, ThemePalette.Brush("TextMutedBrush", Color.FromRgb(120, 144, 168)), VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            ThemePalette.AppTypeface, 12.5, ThemePalette.Brush("TextMutedBrush", Color.FromRgb(120, 144, 168)), VisualTreeHelper.GetDpi(this).PixelsPerDip);
         dc.DrawText(text, new Point(Math.Max(8, (ActualWidth - text.Width) / 2), Math.Max(8, (ActualHeight - text.Height) / 2)));
     }
 }

@@ -9,7 +9,7 @@
         WindowStyle="None" ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource BgBrush}" FontFamily="{StaticResource AppFont}" FontSize="13.5"
- Foreground="{DynamicResource TextPrimaryBrush}" StateChanged="Window_StateChanged"
+ Foreground="{DynamicResource TextPrimaryBrush}" StateChanged="Window_StateChanged" SizeChanged="Window_SizeChanged"
         AllowDrop="True"
         PreviewDragOver="Window_PreviewDragOver"
         PreviewDrop="Window_PreviewDrop"
@@ -29,7 +29,13 @@
     </Window.InputBindings>
 
     <Window.Resources>
-        <DataTemplate x:Key="LayerTemplate"><CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}" Margin="3,2"><TextBlock><Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold"/><Run Text="  "/><Run Text="{Binding Note, Mode=OneWay}" Foreground="Gray"/></TextBlock></CheckBox></DataTemplate>
+        <DataTemplate x:Key="LayerTemplate"><CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}" Margin="3,2"><TextBlock><Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold"/><Run Text="  "/><Run Text="{Binding Note, Mode=OneWay}" Foreground="{DynamicResource TextMutedBrush}"/></TextBlock></CheckBox></DataTemplate>
+        <Style x:Key="ValidationMessage" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,0,0,7"/>
+        </Style>
     <Style x:Key="PartTableHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource ModernTableHeader}">
         <Setter Property="FontSize" Value="14.5"/>
         <Setter Property="FontWeight" Value="Bold"/>
@@ -78,7 +84,7 @@
  <Border Width="34" Height="34" CornerRadius="9" Background="{DynamicResource PrimaryBrush}" Margin="0,0,11,0">
  <Path Data="{StaticResource IcNesting}" Style="{StaticResource Ico}" Stroke="{DynamicResource OnPrimaryBrush}" Width="18" Height="18"/>
  </Border>
- <TextBlock Text="CYCLONE NEST2D" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+ <TextBlock x:Name="BrandName" Text="CYCLONE NEST2D" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
  </StackPanel>
 
  <Border Grid.Column="1" Background="{DynamicResource AccentTintBrush}" BorderBrush="{DynamicResource PrimaryLightBrush}" BorderThickness="1" CornerRadius="8" Padding="9,5" VerticalAlignment="Center" ToolTip="{Binding ProjectPath, TargetNullValue='Dự án hiện tại'}">
@@ -86,7 +92,7 @@
  <Border Width="26" Height="26" CornerRadius="7" Background="{DynamicResource PrimaryBrush}" Margin="0,0,8,0">
  <Path Data="{StaticResource IcFolderOpen}" Style="{StaticResource Ico}" Stroke="{DynamicResource OnPrimaryBrush}" Width="15" Height="15" HorizontalAlignment="Center" VerticalAlignment="Center"/>
  </Border>
- <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" MaxWidth="210" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+ <TextBlock x:Name="ProjectTitle" Text="{Binding Title}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" MaxWidth="210" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
  <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningBrush}" Margin="8,0,0,0" ToolTip="Có thay đổi chưa lưu trong dự án" Visibility="{Binding IsProjectDirty, Converter={StaticResource B2V}}"/>
  </StackPanel>
  </Border>
@@ -95,8 +101,8 @@
  <Button Style="{StaticResource ToolbarButton}" Command="{Binding NewProjectCommand}" Padding="5" Margin="0,0,3,0" ToolTip="Dự án mới" AutomationProperties.Name="Dự án mới" shell:WindowChrome.IsHitTestVisibleInChrome="True"><Border Background="{DynamicResource AccentTintBrush}" CornerRadius="6" Padding="5"><Path Data="{StaticResource IcNewProject}" Style="{StaticResource Ico}" Stroke="{DynamicResource PrimaryDarkBrush}" Width="18" Height="18"/></Border></Button>
  <Button Style="{StaticResource ToolbarButton}" Command="{Binding OpenProjectCommand}" Padding="5" Margin="0,0,3,0" ToolTip="Mở dự án" AutomationProperties.Name="Mở dự án" shell:WindowChrome.IsHitTestVisibleInChrome="True"><Border Background="{DynamicResource AccentTintBrush}" CornerRadius="6" Padding="5"><Path Data="{StaticResource IcOpenProject}" Style="{StaticResource Ico}" Stroke="{DynamicResource PrimaryDarkBrush}" Width="18" Height="18"/></Border></Button>
  <Button Style="{StaticResource ToolbarButton}" Command="{Binding SaveProjectCommand}" Padding="5" Margin="0,0,10,0" ToolTip="Lưu dự án" AutomationProperties.Name="Lưu dự án" shell:WindowChrome.IsHitTestVisibleInChrome="True"><Border Background="{DynamicResource AccentTintBrush}" CornerRadius="6" Padding="5"><Path Data="{StaticResource IcSave}" Style="{StaticResource Ico}" Stroke="{DynamicResource PrimaryDarkBrush}" Width="18" Height="18"/></Border></Button>
- <TextBlock Text="Nhóm:" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,7,0"/>
- <ComboBox ItemsSource="{Binding ProjectGroups}" SelectedItem="{Binding SelectedProjectGroup, Mode=TwoWay}" DisplayMemberPath="Name" Width="210" ToolTip="Chuyển nhóm vật liệu" shell:WindowChrome.IsHitTestVisibleInChrome="True"/>
+ <TextBlock x:Name="ProjectGroupLabel" Text="Nhóm:" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,7,0"/>
+ <ComboBox x:Name="ProjectGroupCombo" ItemsSource="{Binding ProjectGroups}" SelectedItem="{Binding SelectedProjectGroup, Mode=TwoWay}" DisplayMemberPath="Name" Width="210" ToolTip="Chuyển nhóm vật liệu" shell:WindowChrome.IsHitTestVisibleInChrome="True"/>
  </StackPanel>
 
  <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,0">
@@ -213,13 +219,13 @@
                         </Border>
                         <UniformGrid Columns="3" Margin="0,0,0,22">
                             <Border Style="{StaticResource CardFlat}" Padding="18" Margin="0,0,10,0">
-                                <StackPanel><TextBlock Text="NHÓM VẬT LIỆU" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal" Margin="0,8,0,0"><TextBlock Text="{Binding ProjectGroupCount}" FontSize="26" FontWeight="Bold"/><TextBlock Text=" nhóm" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="8,0,0,4"/></StackPanel></StackPanel>
+                                <StackPanel><TextBlock Text="NHÓM VẬT LIỆU" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal" Margin="0,8,0,0"><TextBlock Text="{Binding ProjectGroupCount}" FontSize="26" FontWeight="Bold"/><TextBlock Text=" nhóm" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="8,0,0,4"/></StackPanel></StackPanel>
                             </Border>
                             <Border Style="{StaticResource CardFlat}" Padding="18" Margin="5,0">
-                                <StackPanel><TextBlock Text="CHI TIẾT TRONG DỰ ÁN" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal" Margin="0,8,0,0"><TextBlock Text="{Binding ProjectPartCount}" FontSize="26" FontWeight="Bold"/><TextBlock Text=" dòng" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="8,0,0,4"/></StackPanel></StackPanel>
+                                <StackPanel><TextBlock Text="CHI TIẾT TRONG DỰ ÁN" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal" Margin="0,8,0,0"><TextBlock Text="{Binding ProjectPartCount}" FontSize="26" FontWeight="Bold"/><TextBlock Text=" dòng" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="8,0,0,4"/></StackPanel></StackPanel>
                             </Border>
                             <Border Style="{StaticResource CardFlat}" Padding="18" Margin="10,0,0,0">
-                                <StackPanel><TextBlock Text="TẤM ĐÃ NESTING" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal" Margin="0,8,0,0"><TextBlock Text="{Binding ProjectSheetCount}" FontSize="26" FontWeight="Bold"/><TextBlock Text=" tấm" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="8,0,0,4"/></StackPanel></StackPanel>
+                                <StackPanel><TextBlock Text="TẤM ĐÃ NESTING" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal" Margin="0,8,0,0"><TextBlock Text="{Binding ProjectSheetCount}" FontSize="26" FontWeight="Bold"/><TextBlock Text=" tấm" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="8,0,0,4"/></StackPanel></StackPanel>
                             </Border>
                         </UniformGrid>
                         <Grid Margin="0,0,0,12">
@@ -257,10 +263,10 @@
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="100"/><ColumnDefinition Width="90"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <StackPanel VerticalAlignment="Center">
                                             <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                            <TextBlock Text="{Binding Path}" FontSize="11.5" Foreground="{DynamicResource TextMutedBrush}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding Path}" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding PartCount}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><TextBlock Text="chi tiết" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/></StackPanel>
-                                        <StackPanel Grid.Column="2" VerticalAlignment="Center"><TextBlock Text="{Binding SheetCount}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><TextBlock Text="tấm" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/></StackPanel>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding PartCount}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><TextBlock Text="chi tiết" FontSize="12" Foreground="{DynamicResource TextMutedBrush}"/></StackPanel>
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center"><TextBlock Text="{Binding SheetCount}" FontSize="12" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="tấm" FontSize="12" Foreground="{DynamicResource TextMutedBrush}"/></StackPanel>
                                         <Button Grid.Column="3" Content="Mở nhóm" Tag="{Binding}" Click="OpenProjectGroup_Click" VerticalAlignment="Center" Margin="12,0,0,0"/>
                                     </Grid>
                                 </DataTemplate>
@@ -295,11 +301,11 @@
                             <Button Content="Thêm DXF" Command="{Binding AddDxfCommand}" Style="{StaticResource PrimaryButton}" Margin="0" ToolTip="Ctrl+D"/>
                         </WrapPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,0">
-                            <StackPanel Margin="0,0,18,0"><TextBlock Text="MÃ CHI TIẾT" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal"><TextBlock Text="{Binding Parts.Count}" FontSize="17" FontWeight="Bold"/><TextBlock Text=" dòng" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="5,0,0,2"/></StackPanel></StackPanel>
+                            <StackPanel Margin="0,0,18,0"><TextBlock Text="MÃ CHI TIẾT" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal"><TextBlock Text="{Binding Parts.Count}" FontSize="17" FontWeight="Bold"/><TextBlock Text=" dòng" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="5,0,0,2"/></StackPanel></StackPanel>
                             <Border Width="1" Height="30" Background="{DynamicResource AppBorderBrush}" Margin="0,0,18,0"/>
-                            <StackPanel Margin="0,0,18,0"><TextBlock Text="TỔNG SỐ LƯỢNG" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal"><TextBlock Text="{Binding RequiredCount}" FontSize="17" FontWeight="Bold"/><TextBlock Text=" chi tiết" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="5,0,0,2"/></StackPanel></StackPanel>
+                            <StackPanel Margin="0,0,18,0"><TextBlock Text="TỔNG SỐ LƯỢNG" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><StackPanel Orientation="Horizontal"><TextBlock Text="{Binding RequiredCount}" FontSize="17" FontWeight="Bold"/><TextBlock Text=" chi tiết" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="5,0,0,2"/></StackPanel></StackPanel>
                             <Border Width="1" Height="30" Background="{DynamicResource AppBorderBrush}" Margin="0,0,18,0"/>
-                            <StackPanel MaxWidth="170"><TextBlock Text="NHÓM ĐANG LÀM VIỆC" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding SelectedProjectGroup.Name, TargetNullValue='Chưa chọn nhóm'}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/></StackPanel>
+                            <StackPanel MaxWidth="170"><TextBlock Text="NHÓM ĐANG LÀM VIỆC" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding SelectedProjectGroup.Name, TargetNullValue='Chưa chọn nhóm'}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/></StackPanel>
                         </StackPanel>
                     </Grid>
                     <Grid Grid.Row="1">
@@ -419,14 +425,68 @@
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="STT" Binding="{Binding Sequence, Mode=OneWay}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" IsReadOnly="True" Width="42"/>
                                     <DataGridTextColumn Header="Tên vật liệu" Binding="{Binding Material, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="138"/>
-                                    <DataGridTextColumn Header="Dài (mm)" Binding="{Binding Width, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat='{}{0:0.##}'}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="112"/>
-                                    <DataGridTextColumn Header="Rộng (mm)" Binding="{Binding Height, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat='{}{0:0.##}'}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="116"/>
-                                    <DataGridTextColumn Header="Độ dày (mm)" Binding="{Binding Thickness, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat='{}{0:0.##}'}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="124"/>
+                                    <DataGridTextColumn Header="Dài (mm)" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="112">
+                                        <DataGridTextColumn.Binding>
+                                            <Binding Path="Width" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" StringFormat="{}{0:0.##}">
+                                                <Binding.ValidationRules><local:NumericRangeValidationRule Minimum="0.000001" ErrorMessage="Chiều dài phải lớn hơn 0."/></Binding.ValidationRules>
+                                            </Binding>
+                                        </DataGridTextColumn.Binding>
+                                    </DataGridTextColumn>
+                                    <DataGridTextColumn Header="Rộng (mm)" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="116">
+                                        <DataGridTextColumn.Binding>
+                                            <Binding Path="Height" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" StringFormat="{}{0:0.##}">
+                                                <Binding.ValidationRules><local:NumericRangeValidationRule Minimum="0.000001" ErrorMessage="Chiều rộng phải lớn hơn 0."/></Binding.ValidationRules>
+                                            </Binding>
+                                        </DataGridTextColumn.Binding>
+                                    </DataGridTextColumn>
+                                    <DataGridTextColumn Header="Độ dày (mm)" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="124">
+                                        <DataGridTextColumn.Binding>
+                                            <Binding Path="Thickness" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" StringFormat="{}{0:0.##}">
+                                                <Binding.ValidationRules><local:NumericRangeValidationRule Minimum="0.000001" ErrorMessage="Độ dày phải lớn hơn 0."/></Binding.ValidationRules>
+                                            </Binding>
+                                        </DataGridTextColumn.Binding>
+                                    </DataGridTextColumn>
                                     <DataGridTextColumn Header="Ghi chú" Binding="{Binding Note, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="230"/>
                                 </DataGrid.Columns>
                             </DataGrid>
                         </DockPanel></Border>
-                        <Border Grid.Column="2" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="18"><StackPanel><TextBlock Text="VẬT LIỆU · ĐỘ DÀY · KHỔ TẤM" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding SelectedPreset.Material, TargetNullValue=Chưa chọn vật liệu}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,8,0,3"/><StackPanel Orientation="Horizontal" Margin="0,2,0,4"><TextBlock Text="{Binding SelectedPreset.Thickness, StringFormat='{}{0:0.##}'}" Foreground="{DynamicResource TextSecondaryBrush}"/><TextBlock Text=" mm" Foreground="{DynamicResource TextSecondaryBrush}"/></StackPanel><StackPanel Orientation="Horizontal" Margin="0,0,0,12"><TextBlock Text="{Binding SelectedPreset.Width, StringFormat='{}{0:0.##}'}" Foreground="{DynamicResource TextSecondaryBrush}"/><TextBlock Text=" × " Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding SelectedPreset.Height, StringFormat='{}{0:0.##}'}" Foreground="{DynamicResource TextSecondaryBrush}"/><TextBlock Text=" mm" Foreground="{DynamicResource TextSecondaryBrush}"/></StackPanel><Separator/><TextBlock Text="Thông số dùng chung" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,12,0,6"/><TextBlock Text="Lề an toàn (mm)" Style="{StaticResource Label}"/><TextBox Style="{StaticResource Field}" Text="{Binding Settings.Margin, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/><TextBlock Text="Khe hở chi tiết (mm)" Style="{StaticResource Label}"/><TextBox Style="{StaticResource Field}" Text="{Binding Settings.Spacing, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/><TextBlock Text="Danh sách vật liệu, độ dày và khổ được lưu trong cấu hình/dự án." Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,16,0,0"/></StackPanel></Border>
+                        <Border Grid.Column="2" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="18">
+                            <StackPanel>
+                                <TextBlock Text="VẬT LIỆU · ĐỘ DÀY · KHỔ TẤM" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                                <TextBlock Text="{Binding SelectedPreset.Material, TargetNullValue=Chưa chọn vật liệu}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,8,0,3"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
+                                    <TextBlock Text="{Binding SelectedPreset.Thickness, StringFormat='{}{0:0.##}'}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <TextBlock Text=" mm" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                    <TextBlock Text="{Binding SelectedPreset.Width, StringFormat='{}{0:0.##}'}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <TextBlock Text=" × " Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <TextBlock Text="{Binding SelectedPreset.Height, StringFormat='{}{0:0.##}'}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <TextBlock Text=" mm" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                                <Separator/>
+                                <TextBlock Text="Thông số dùng chung" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,12,0,6"/>
+                                <TextBlock Text="Lề an toàn (mm)" Style="{StaticResource Label}"/>
+                                <TextBox x:Name="SheetMarginBox" Style="{StaticResource Field}" Margin="0,0,0,3">
+                                    <TextBox.Text>
+                                        <Binding Path="Settings.Margin" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" ValidatesOnExceptions="True">
+                                            <Binding.ValidationRules><local:NumericRangeValidationRule Minimum="0" ErrorMessage="Khoảng cách không được âm."/></Binding.ValidationRules>
+                                        </Binding>
+                                    </TextBox.Text>
+                                </TextBox>
+                                <TextBlock Style="{StaticResource ValidationMessage}" Text="{Binding ElementName=SheetMarginBox, Path=(Validation.Errors)[0].ErrorContent}" Visibility="{Binding ElementName=SheetMarginBox, Path=(Validation.HasError), Converter={StaticResource B2V}}"/>
+                                <TextBlock Text="Khe hở chi tiết (mm)" Style="{StaticResource Label}"/>
+                                <TextBox x:Name="SheetSpacingBox" Style="{StaticResource Field}" Margin="0,0,0,3">
+                                    <TextBox.Text>
+                                        <Binding Path="Settings.Spacing" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" ValidatesOnExceptions="True">
+                                            <Binding.ValidationRules><local:NumericRangeValidationRule Minimum="0" ErrorMessage="Khoảng cách không được âm."/></Binding.ValidationRules>
+                                        </Binding>
+                                    </TextBox.Text>
+                                </TextBox>
+                                <TextBlock Style="{StaticResource ValidationMessage}" Text="{Binding ElementName=SheetSpacingBox, Path=(Validation.Errors)[0].ErrorContent}" Visibility="{Binding ElementName=SheetSpacingBox, Path=(Validation.HasError), Converter={StaticResource B2V}}"/>
+                                <TextBlock Text="Danh sách vật liệu, độ dày và khổ được lưu trong cấu hình/dự án." Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,16,0,0"/>
+                            </StackPanel>
+                        </Border>
                     </Grid>
                 </Grid>
             </TabItem>
@@ -440,10 +500,10 @@
  <TextBlock Text="Sắp xếp chi tiết trên tấm · Chỉnh tay trực tiếp trên vùng bố trí." Foreground="{DynamicResource TextSecondaryBrush}"/>
  </StackPanel>
  <UniformGrid Grid.Column="1" Columns="4" VerticalAlignment="Center" Margin="12,0">
- <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="CHI TIẾT ĐÃ XẾP" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><TextBlock Text="{Binding PlacedCount}" FontSize="17" FontWeight="Bold"/><TextBlock Text="/" Foreground="{DynamicResource TextMutedBrush}" Margin="5,0"/><TextBlock Text="{Binding RequiredCount}" FontSize="14" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="0,0,0,2"/></StackPanel></StackPanel>
- <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="TẤM ĐÃ DÙNG" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><TextBlock Text="{Binding Sheets.Count}" FontSize="17" FontWeight="Bold"/><TextBlock Text=" tấm" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="5,0,0,2"/></StackPanel></StackPanel>
- <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="HIỆU SUẤT TẤM" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><TextBlock Text="{Binding SelectedSheet.Sheet.Utilization, StringFormat='{}{0:P1}', TargetNullValue='—'}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PrimaryDarkBrush}" HorizontalAlignment="Center"/></StackPanel>
- <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="THỜI GIAN TÍNH" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><TextBlock Text="{Binding LastNestDuration.TotalSeconds, StringFormat='{}{0:0.0} giây'}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center"/></StackPanel>
+ <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="CHI TIẾT ĐÃ XẾP" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><TextBlock Text="{Binding PlacedCount}" FontSize="17" FontWeight="Bold"/><TextBlock Text="/" Foreground="{DynamicResource TextMutedBrush}" Margin="5,0"/><TextBlock Text="{Binding RequiredCount}" FontSize="14" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="0,0,0,2"/></StackPanel></StackPanel>
+ <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="TẤM ĐÃ DÙNG" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><TextBlock Text="{Binding Sheets.Count}" FontSize="17" FontWeight="Bold"/><TextBlock Text=" tấm" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="5,0,0,2"/></StackPanel></StackPanel>
+ <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="HIỆU SUẤT TẤM" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><TextBlock Text="{Binding SelectedSheet.Sheet.Utilization, StringFormat='{}{0:P1}', TargetNullValue='—'}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PrimaryDarkBrush}" HorizontalAlignment="Center"/></StackPanel>
+ <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="THỜI GIAN TÍNH" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><TextBlock Text="{Binding LastNestDuration.TotalSeconds, StringFormat='{}{0:0.0} giây'}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center"/></StackPanel>
  </UniformGrid>
  <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="12,0,0,0">
  <Button Style="{StaticResource PrimaryButton}" Command="{Binding RunCommand}" Padding="18,8" Margin="0,0,8,0" MinWidth="148" ToolTip="Chạy nesting (F5)">
@@ -697,16 +757,44 @@
                                 <TextBlock Text="Bước xoay chi tiết (độ)" Style="{StaticResource Label}"/>
                                 <ComboBox ItemsSource="{x:Static ui:NestSettings.RotationSteps}" SelectedItem="{Binding Settings.RotationStep, Mode=TwoWay}" Padding="7,5" Margin="0,0,0,10"/>
                                 <TextBlock Text="Giới hạn thời gian nesting (giây)" Style="{StaticResource Label}"/>
-                                <TextBox Style="{StaticResource Field}" Text="{Binding Settings.MaxSeconds, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Margin="0,0,0,10"/>
+                                <TextBox x:Name="MaxSecondsBox" Style="{StaticResource Field}" Margin="0,0,0,3">
+                                    <TextBox.Text>
+                                        <Binding Path="Settings.MaxSeconds" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" ValidatesOnExceptions="True">
+                                            <Binding.ValidationRules><local:NumericRangeValidationRule Minimum="0.5" Maximum="3600" ErrorMessage="Nhập từ 0,5 đến 3600 giây."/></Binding.ValidationRules>
+                                        </Binding>
+                                    </TextBox.Text>
+                                </TextBox>
+                                <TextBlock Style="{StaticResource ValidationMessage}" Text="{Binding ElementName=MaxSecondsBox, Path=(Validation.Errors)[0].ErrorContent}" Visibility="{Binding ElementName=MaxSecondsBox, Path=(Validation.HasError), Converter={StaticResource B2V}}"/>
                                 <TextBlock Text="Mục tiêu hiệu suất (%)" Style="{StaticResource Label}"/>
-                                <TextBox Style="{StaticResource Field}" Text="{Binding Settings.TargetUtilizationPercent, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Margin="0,0,0,4"/>
+                                <TextBox x:Name="TargetUtilizationBox" Style="{StaticResource Field}" Margin="0,0,0,3">
+                                    <TextBox.Text>
+                                        <Binding Path="Settings.TargetUtilizationPercent" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" ValidatesOnExceptions="True">
+                                            <Binding.ValidationRules><local:NumericRangeValidationRule Minimum="0" Maximum="100" ErrorMessage="Nhập từ 0 đến 100%."/></Binding.ValidationRules>
+                                        </Binding>
+                                    </TextBox.Text>
+                                </TextBox>
+                                <TextBlock Style="{StaticResource ValidationMessage}" Text="{Binding ElementName=TargetUtilizationBox, Path=(Validation.Errors)[0].ErrorContent}" Visibility="{Binding ElementName=TargetUtilizationBox, Path=(Validation.HasError), Converter={StaticResource B2V}}"/>
                                 <TextBlock Text="Đặt mục tiêu hiệu suất bằng 0 để tắt dừng sớm theo mục tiêu; giới hạn thời gian vẫn luôn có hiệu lực." Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,3,0,14"/>
                                 <Separator Margin="0,2,0,12"/>
                                 <TextBlock Text="Khoảng cách an toàn (mm)" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8"/>
                                 <TextBlock Text="Lề từ chi tiết đến mép tấm" Style="{StaticResource Label}"/>
-                                <TextBox Style="{StaticResource Field}" Text="{Binding Settings.Margin, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Margin="0,0,0,10"/>
+                                <TextBox x:Name="MarginBox" Style="{StaticResource Field}" Margin="0,0,0,3">
+                                    <TextBox.Text>
+                                        <Binding Path="Settings.Margin" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" ValidatesOnExceptions="True">
+                                            <Binding.ValidationRules><local:NumericRangeValidationRule Minimum="0" ErrorMessage="Khoảng cách không được âm."/></Binding.ValidationRules>
+                                        </Binding>
+                                    </TextBox.Text>
+                                </TextBox>
+                                <TextBlock Style="{StaticResource ValidationMessage}" Text="{Binding ElementName=MarginBox, Path=(Validation.Errors)[0].ErrorContent}" Visibility="{Binding ElementName=MarginBox, Path=(Validation.HasError), Converter={StaticResource B2V}}"/>
                                 <TextBlock Text="Khoảng cách giữa các chi tiết" Style="{StaticResource Label}"/>
-                                <TextBox Style="{StaticResource Field}" Text="{Binding Settings.Spacing, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox x:Name="SpacingBox" Style="{StaticResource Field}" Margin="0,0,0,3">
+                                    <TextBox.Text>
+                                        <Binding Path="Settings.Spacing" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" ValidatesOnExceptions="True">
+                                            <Binding.ValidationRules><local:NumericRangeValidationRule Minimum="0" ErrorMessage="Khoảng cách không được âm."/></Binding.ValidationRules>
+                                        </Binding>
+                                    </TextBox.Text>
+                                </TextBox>
+                                <TextBlock Style="{StaticResource ValidationMessage}" Text="{Binding ElementName=SpacingBox, Path=(Validation.Errors)[0].ErrorContent}" Visibility="{Binding ElementName=SpacingBox, Path=(Validation.HasError), Converter={StaticResource B2V}}"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

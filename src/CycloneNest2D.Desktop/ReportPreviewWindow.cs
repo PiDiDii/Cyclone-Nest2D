@@ -19,14 +19,15 @@ internal sealed class ReportPreviewWindow : Window
     private readonly TextBlock _pageText;
     private readonly Button _previous;
     private readonly Button _next;
-    private readonly ComboBox _reportTypeBox;
     private readonly ComboBox _orientationBox;
     private readonly ComboBox _layoutBox;
+    private readonly ComboBox _partLabelBox;
     private readonly ReportPreviewPreferences _preferences;
     private Canvas? _pageCanvas;
-    private NestingReportType _reportType;
     private NestingPageOrientation _orientation;
     private NestingPageLayout _layout;
+    private PartLabelMode _partLabel;
+    private IReadOnlyList<NestingReportPage> _pages = [];
     private double _zoomPercent;
     private int _pageIndex;
     private int _pageCount;
@@ -39,6 +40,8 @@ internal sealed class ReportPreviewWindow : Window
         _report = report;
         _preferences = ReportPreviewPreferences.Load();
         _zoomPercent = _preferences.ZoomPercent;
+        _layout = _preferences.Layout;
+        _partLabel = _preferences.PartLabel;
         Title = "Xem trước báo cáo PDF";
         Width = 1480;
         Height = 960;
@@ -58,39 +61,40 @@ internal sealed class ReportPreviewWindow : Window
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var heading = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         heading.Children.Add(new TextBlock { Text = "XEM TRƯỚC BÁO CÁO PDF", FontSize = 16, FontWeight = FontWeights.SemiBold, Foreground = Brush("#172B4D") });
-        heading.Children.Add(new TextBlock { Text = "Chọn báo cáo, hướng giấy và bố cục; duyệt từng trang trước khi xuất hoặc in.", FontSize = 11, Foreground = Brush("#66758A"), Margin = new Thickness(0, 4, 0, 0) });
+        heading.Children.Add(new TextBlock { Text = "Chọn hướng giấy, số báo cáo mỗi trang và nhãn chi tiết.", FontSize = 11, Foreground = Brush("#66758A"), Margin = new Thickness(0, 4, 0, 0) });
         headerGrid.Children.Add(heading);
 
         var controls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        _reportTypeBox = ComboBox(new[]
-        {
-            ("Thông số từng tấm", NestingReportType.SheetParameters),
-            ("Danh mục chi tiết đã nest", NestingReportType.PartCatalog)
-        }, 230);
         _orientationBox = ComboBox(new[]
         {
             ("A4 ngang", NestingPageOrientation.Landscape),
             ("A4 dọc", NestingPageOrientation.Portrait)
         }, 125);
+        _orientationBox.SelectedValue = _preferences.Orientation;
+        if (_orientationBox.SelectedValue is not NestingPageOrientation) _orientationBox.SelectedIndex = 0;
+        _orientation = (NestingPageOrientation)_orientationBox.SelectedValue;
+
         _layoutBox = ComboBox(new[]
         {
-            ("1 báo cáo thông số / trang", NestingPageLayout.OnePerPage),
-            ("2 báo cáo thông số / trang", NestingPageLayout.TwoSheetReportsPerPage)
-        }, 220);
-        _reportTypeBox.SelectedValue = _preferences.ReportType;
-        _orientationBox.SelectedValue = _preferences.Orientation;
-        _layoutBox.SelectedValue = _preferences.Layout;
-        if (_reportTypeBox.SelectedValue is not NestingReportType) _reportTypeBox.SelectedIndex = 0;
-        if (_orientationBox.SelectedValue is not NestingPageOrientation) _orientationBox.SelectedIndex = 0;
+            ("1 báo cáo / trang", NestingPageLayout.OnePerPage),
+            ("2 báo cáo / trang", NestingPageLayout.TwoPerPage)
+        }, 155);
+        _layoutBox.SelectedValue = _layout;
         if (_layoutBox.SelectedValue is not NestingPageLayout) _layoutBox.SelectedIndex = 0;
-        _reportType = (NestingReportType)_reportTypeBox.SelectedValue;
-        _orientation = (NestingPageOrientation)_orientationBox.SelectedValue;
         _layout = (NestingPageLayout)_layoutBox.SelectedValue;
-        _layoutBox.IsEnabled = _reportType == NestingReportType.SheetParameters;
+        _partLabelBox = ComboBox(new[]
+        {
+            ("None", PartLabelMode.None),
+            ("ID Number", PartLabelMode.IdNumber),
+            ("Part Name", PartLabelMode.PartName)
+        }, 125);
+        _partLabelBox.SelectedValue = _partLabel;
+        if (_partLabelBox.SelectedValue is not PartLabelMode) _partLabelBox.SelectedIndex = 1;
+        _partLabel = (PartLabelMode)_partLabelBox.SelectedValue;
 
-        controls.Children.Add(LabeledControl("Báo cáo", _reportTypeBox));
         controls.Children.Add(LabeledControl("Hướng giấy", _orientationBox));
         controls.Children.Add(LabeledControl("Bố cục", _layoutBox));
+        controls.Children.Add(LabeledControl("Part Label", _partLabelBox));
         var zoomTools = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         var zoomOut = Button("−", false); zoomOut.Width = 34; zoomOut.Click += (_, _) => SetZoom(_zoomPercent - 10);
         var zoomIn = Button("+", false); zoomIn.Width = 34; zoomIn.Click += (_, _) => SetZoom(_zoomPercent + 10);
@@ -145,39 +149,40 @@ internal sealed class ReportPreviewWindow : Window
         root.Children.Add(footer);
         Content = root;
 
-        _reportTypeBox.SelectionChanged += ReportSettings_Changed;
         _orientationBox.SelectionChanged += ReportSettings_Changed;
         _layoutBox.SelectionChanged += ReportSettings_Changed;
+        _partLabelBox.SelectionChanged += ReportSettings_Changed;
         RefreshPages();
     }
 
     private void ReportSettings_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (_reportTypeBox.SelectedValue is not NestingReportType type ||
-            _orientationBox.SelectedValue is not NestingPageOrientation orientation ||
-            _layoutBox.SelectedValue is not NestingPageLayout layout) return;
-        _reportType = type;
+        if (_orientationBox.SelectedValue is not NestingPageOrientation orientation ||
+            _layoutBox.SelectedValue is not NestingPageLayout layout ||
+            _partLabelBox.SelectedValue is not PartLabelMode partLabel) return;
         _orientation = orientation;
         _layout = layout;
-        _layoutBox.IsEnabled = _reportType == NestingReportType.SheetParameters;
-        _preferences.ReportType = type;
+        _partLabel = partLabel;
         _preferences.Orientation = orientation;
         _preferences.Layout = layout;
+        _preferences.PartLabel = partLabel;
         _preferences.Save();
         RefreshPages();
     }
 
     private void RefreshPages()
     {
-        _pageCount = NestingReportPagePlan.PageCount(_report, _reportType, _orientation, _layout);
+        _pages = NestingReportPagePlan.Build(_report, _orientation, _layout);
+        _pageCount = _pages.Count;
         _pageIndex = Math.Clamp(_pageIndex, 0, _pageCount - 1);
         ShowPage(_pageIndex);
     }
 
-    private int SheetsPerPage => _layout == NestingPageLayout.TwoSheetReportsPerPage ? 2 : 1;
-    private int CatalogRowsPerPage => NestingReportPagePlan.CatalogRowsPerPage(_orientation);
-    private double PageWidth => _orientation == NestingPageOrientation.Landscape ? 1122 : 794;
-    private double PageHeight => _orientation == NestingPageOrientation.Landscape ? 794 : 1122;
+    private int FirstPageRows => NestingReportPagePlan.FirstPageRows(_orientation, _layout);
+    private int ContinuationPageRows => NestingReportPagePlan.ContinuationPageRows(_orientation, _layout);
+    private double PageWidth => NestingReportPagePlan.PageWidthDip(_orientation);
+    private double PageHeight => NestingReportPagePlan.PageHeightDip(_orientation);
+    private double ContentMargin => NestingReportPagePlan.ContentMarginDip(_orientation);
 
     private void ShowPage(int index)
     {
@@ -193,94 +198,124 @@ internal sealed class ReportPreviewWindow : Window
     private Canvas BuildPage(int pageIndex)
     {
         var canvas = new Canvas { Width = PageWidth, Height = PageHeight, Background = Brushes.White, ClipToBounds = true };
-        if (_reportType == NestingReportType.SheetParameters)
-        {
-            int perPage = SheetsPerPage;
-            double cardHeight = PageHeight / perPage;
-            for (int slot = 0; slot < perPage; slot++)
-            {
-                int sheetIndex = pageIndex * perPage + slot;
-                if (sheetIndex >= _report.SheetSummaries.Count) break;
-                DrawSheetSummary(canvas, _report.SheetSummaries[sheetIndex], slot * cardHeight, cardHeight);
-                if (slot > 0)
-                {
-                    var line = new Border { Width = PageWidth - 64, Height = 1, Background = Brush("#CBD5E0") };
-                    Canvas.SetLeft(line, 32); Canvas.SetTop(line, slot * cardHeight); canvas.Children.Add(line);
-                }
-            }
-        }
-        else DrawCatalogPage(canvas, pageIndex);
+        DrawSheetReportPage(canvas, _pages[pageIndex], pageIndex);
         return canvas;
     }
 
-    private void DrawSheetSummary(Canvas canvas, NestingSheetSummary model, double top, double height)
+    private void DrawSheetReportPage(Canvas canvas, NestingReportPage page, int pageIndex)
     {
-        double left = 32, width = PageWidth - 64;
-        AddText(canvas, "THÔNG SỐ TẤM NESTING 2D", left, top + 15, width, 28, 18, true, "#172B4D");
-        AddText(canvas, $"Nest {model.NestNumber} / {model.NestCount}  ·  {model.Sheet.Material}  ·  {model.Sheet.Thickness:0.##} mm  ·  {model.Sheet.Width:0.##} × {model.Sheet.Height:0.##} mm",
-            left, top + 47, width, 22, 12, true, "#344862");
-        string completed = _report.CompletedAt?.ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.CurrentCulture) ?? "Không có dữ liệu";
-        AddText(canvas, $"Ngày giờ nesting hoàn tất: {completed}", left, top + 70, width, 16, 9, false, "#66758A");
-
-        var metrics = new (string Label, string Value)[]
+        double cardHeight = NestingReportPagePlan.CardHeightDip(_orientation, page.SlotCount);
+        bool compact = _layout == NestingPageLayout.TwoPerPage;
+        foreach (var reportPage in page.Reports)
         {
-            ("STT Nest", $"{model.NestNumber} / {model.NestCount}"),
-            ("Vật liệu", model.Sheet.Material),
-            ("Độ dày", $"{model.Sheet.Thickness:0.##} mm"),
-            ("Khổ tấm", $"{model.Sheet.Width:0.##} × {model.Sheet.Height:0.##} mm"),
-            ("Diện tích tấm", $"{NestingReportDocument.SquareMeters(model.SheetArea)} m²"),
-            ("Chiều dài sử dụng", $"{model.UsedLength:0.##} mm"),
-            ("Diện tích Part", $"{NestingReportDocument.SquareMeters(model.UsedPartArea)} m²"),
-            ("Hiệu suất Nest", model.NestEfficiency.ToString("P2", CultureInfo.CurrentCulture)),
-            ("Tỷ lệ sử dụng", model.SheetUtilization.ToString("P2", CultureInfo.CurrentCulture)),
-            ("Tỷ lệ hao phí", model.WasteRate.ToString("P2", CultureInfo.CurrentCulture)),
-            ("Số Part trong nest", $"{model.Sheet.Placements.Count} hình")
-        };
-        double cellWidth = width / 4, cellHeight = 27, metricTop = top + 91;
-        for (int i = 0; i < metrics.Length; i++)
-        {
-            int row = i / 4, col = i % 4;
-            var border = new Border { Width = cellWidth, Height = cellHeight, Background = Brush("#F8FAFC"), BorderBrush = Brush("#D8E0E8"), BorderThickness = new Thickness(0.55) };
-            var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(3, 1, 3, 1) };
-            stack.Children.Add(new TextBlock { Text = metrics[i].Label, FontSize = 8, Foreground = Brush("#5A6878"), TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
-            stack.Children.Add(new TextBlock { Text = metrics[i].Value, FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = Brush("#172B4D"), TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
-            border.Child = stack;
-            Canvas.SetLeft(border, left + col * cellWidth); Canvas.SetTop(border, metricTop + row * cellHeight); canvas.Children.Add(border);
+            double cardTop = ContentMargin + reportPage.Slot * cardHeight;
+            DrawSheetReportCard(canvas, reportPage, pageIndex, cardTop, cardHeight, compact);
         }
-
-        double previewTop = top + 181, previewHeight = Math.Max(80, height - 195);
-        var frame = new Border { Width = width, Height = previewHeight, Background = Brushes.White, BorderBrush = Brush("#D6DEE6"), BorderThickness = new Thickness(1), Padding = new Thickness(4) };
-        var sheetView = new SheetThumbnailView
-        {
-            Sheet = model.Sheet, PartIds = _report.PartIds, ShowPartIds = true,
-            Width = width - 10, Height = previewHeight - 10, IsHitTestVisible = false
-        };
-        frame.Child = sheetView;
-        Canvas.SetLeft(frame, left); Canvas.SetTop(frame, previewTop); canvas.Children.Add(frame);
-        AddText(canvas, "Cyclone Nest2D · Báo cáo thông số tấm", left, top + height - 18, width, 12, 8, false, "#8090A1");
     }
 
-    private void DrawCatalogPage(Canvas canvas, int pageIndex)
+    private void DrawSheetReportCard(Canvas canvas, NestingReportPageRef page, int pageIndex,
+        double cardTop, double cardHeight, bool compact)
     {
-        double left = 32, width = PageWidth - 64;
-        AddText(canvas, "DANH MỤC CHI TIẾT ĐÃ NEST", left, 24, width, 30, 20, true, "#172B4D");
-        string completed = _report.CompletedAt?.ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.CurrentCulture) ?? "Không có dữ liệu";
-        AddText(canvas, $"Toàn bộ tác vụ  ·  {_report.Parts.Count} loại Part  ·  {_report.TotalProduced}/{_report.TotalRequired} đã nest  ·  {_report.SheetSummaries.Count} tấm  ·  Hoàn tất: {completed}",
-            left, 58, width, 20, 10, false, "#52657A");
-        AddText(canvas, $"Trang {pageIndex + 1} / {_pageCount}", left, 81, width, 16, 9, false, "#66758A");
+        var model = _report.SheetSummaries[page.SheetIndex];
+        bool firstPage = page.PartPageIndex == 0;
+        double left = ContentMargin, width = PageWidth - 2 * ContentMargin;
+        double titleTop = cardTop + (compact ? 4 : 8);
+        AddText(canvas, firstPage ? "BÁO CÁO TẤM NESTING 2D" : "DANH MỤC CHI TIẾT · TIẾP THEO",
+            left, titleTop, width, compact ? 18 : 24, compact ? 13 : 17, true, "#172B4D");
+        AddText(canvas, $"Nest {model.NestNumber} / {model.NestCount}  ·  {model.Sheet.Material}  ·  {model.Sheet.Thickness:0.##} mm  ·  {model.Sheet.Width:0.##} × {model.Sheet.Height:0.##} mm",
+            left, titleTop + (compact ? 19 : 26), width, compact ? 16 : 19, compact ? 9 : 11, true, "#344862");
 
-        string[] headers = { "ID", "Xem trước", "Tên Part", "Rộng (mm)", "Dài (mm)", "Diện tích (m²)", "Đã nest" };
-        double[] ratios = { .06, .11, .39, .10, .10, .13, .11 };
-        double[] widths = ratios.Select(r => r * width).ToArray();
-        const double tableTop = 112, headerHeight = 30, rowHeight = 29;
+        if (firstPage)
+        {
+            var metrics = new (string Label, string Value)[]
+            {
+                ("Diện tích tấm", $"{NestingReportDocument.SquareMeters(model.SheetArea)} m²"),
+                ("Hiệu suất Nest", model.NestEfficiency.ToString("P2", CultureInfo.CurrentCulture)),
+                ("Tỷ lệ sử dụng", model.SheetUtilization.ToString("P2", CultureInfo.CurrentCulture)),
+                ("Tỷ lệ hao phí", model.WasteRate.ToString("P2", CultureInfo.CurrentCulture)),
+                ("Số chi tiết", $"{model.Sheet.Placements.Count}"),
+                ("Loại chi tiết", $"{model.Parts.Count}")
+            };
+            int columns = metrics.Length;
+            double cellWidth = width / columns;
+            double cellHeight = compact ? 16 : 22;
+            double metricTop = cardTop + (compact ? 42 : 56);
+            for (int i = 0; i < metrics.Length; i++)
+            {
+                int row = i / columns, col = i % columns;
+                var border = new Border { Width = cellWidth, Height = cellHeight, Background = Brush("#F8FAFC"), BorderBrush = Brush("#D8E0E8"), BorderThickness = new Thickness(0.55) };
+                var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(2, 0, 2, 0) };
+                stack.Children.Add(new TextBlock { Text = metrics[i].Label, FontSize = compact ? 5.8 : 7, Foreground = Brush("#5A6878"), TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+                stack.Children.Add(new TextBlock { Text = metrics[i].Value, FontSize = compact ? 6.5 : 8.5, FontWeight = FontWeights.SemiBold, Foreground = Brush("#172B4D"), TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+                border.Child = stack;
+                Canvas.SetLeft(border, left + col * cellWidth); Canvas.SetTop(border, metricTop + row * cellHeight); canvas.Children.Add(border);
+            }
+        }
+
+        double tableTop;
+        if (firstPage)
+        {
+            double previewTop = cardTop + NestingReportPagePlan.FirstChartTopDip(_layout);
+            double tableGap = NestingReportPagePlan.FirstTableGapDip(_layout);
+            double headerHeight = NestingReportPagePlan.FirstTableHeaderHeightDip(_layout);
+            double rowHeight = NestingReportPagePlan.FirstTableRowHeightDip(_orientation, _layout);
+            int tableRows = Math.Min(FirstPageRows, model.Parts.Count);
+            double bottomPadding = NestingReportPagePlan.FirstPageBottomPaddingDip(_layout);
+            double availableChartHeight = Math.Max(0, cardHeight - previewTop + cardTop - tableGap -
+                headerHeight - tableRows * rowHeight - bottomPadding);
+            double maxPreviewWidth = width * 0.68;
+            double aspectRatio = model.Sheet.Height > 0 ? model.Sheet.Width / model.Sheet.Height : 1;
+            double previewHeight = Math.Min(availableChartHeight, maxPreviewWidth / Math.Max(aspectRatio, 0.01));
+            double previewWidth = Math.Min(maxPreviewWidth, previewHeight * aspectRatio);
+            double previewLeft = left + (width - previewWidth) / 2;
+            var frame = new Border { Width = previewWidth, Height = previewHeight, Background = Brushes.White, BorderBrush = Brush("#D6DEE6"), BorderThickness = new Thickness(1), Padding = new Thickness(4) };
+            frame.Child = new SheetThumbnailView
+            {
+                Sheet = model.Sheet,
+                PartIds = _report.PartIds,
+                LabelMode = _partLabel,
+                Width = previewWidth - 10,
+                Height = previewHeight - 10,
+                IsHitTestVisible = false
+            };
+            Canvas.SetLeft(frame, previewLeft); Canvas.SetTop(frame, previewTop); canvas.Children.Add(frame);
+            AddText(canvas, $"DANH MỤC CHI TIẾT TRONG TẤM NEST {model.NestNumber}", left,
+                previewTop + previewHeight + 1, width, tableGap - 1, compact ? 8 : 10, true, "#172B4D");
+            tableTop = previewTop + previewHeight + tableGap;
+        }
+        else
+        {
+            double tableTitleTop = cardTop + NestingReportPagePlan.ContinuationTitleTopDip(_layout);
+            AddText(canvas, $"DANH MỤC CHI TIẾT TRONG TẤM NEST {model.NestNumber} · TIẾP THEO",
+                left, tableTitleTop, width, compact ? 16 : 20, compact ? 9 : 11, true, "#172B4D");
+            tableTop = cardTop + NestingReportPagePlan.ContinuationTableTopDip(_layout);
+        }
+
+        DrawPartTable(canvas, model, page.PartPageIndex, tableTop, compact);
+    }
+
+    private void DrawPartTable(Canvas canvas, NestingSheetSummary model, int partPageIndex, double tableTop, bool compact)
+    {
+        double left = ContentMargin, width = PageWidth - 2 * ContentMargin;
+        string[] headers = { "ID", "Tên chi tiết", "Kích thước (mm)", "Độ dày (mm)", "Diện tích (m²)", "Số lượng trên tấm" };
+        double[] ratios = { .06, .31, .18, .12, .15, .18 };
+        double[] widths = ratios.Select(ratio => ratio * width).ToArray();
+        double headerHeight = partPageIndex == 0
+            ? NestingReportPagePlan.FirstTableHeaderHeightDip(_layout)
+            : NestingReportPagePlan.ContinuationTableHeaderHeightDip(_layout);
+        double rowHeight = partPageIndex == 0
+            ? NestingReportPagePlan.FirstTableRowHeightDip(_orientation, _layout)
+            : NestingReportPagePlan.ContinuationTableRowHeightDip(_orientation, _layout);
+        double fontSize = compact ? 7 : 8.5;
         double x = left;
         for (int i = 0; i < headers.Length; i++)
         {
-            AddCell(canvas, headers[i], x, tableTop, widths[i], headerHeight, "#DCE4EC", true, true, 9);
+            AddCell(canvas, headers[i], x, tableTop, widths[i], headerHeight, "#DCE4EC", true, true, compact ? 7.5 : 9);
             x += widths[i];
         }
-        int first = pageIndex * CatalogRowsPerPage;
-        var rows = _report.Parts.Skip(first).Take(CatalogRowsPerPage).ToList();
+        int rowsPerPage = partPageIndex == 0 ? FirstPageRows : ContinuationPageRows;
+        int firstRow = partPageIndex == 0 ? 0 : FirstPageRows + (partPageIndex - 1) * ContinuationPageRows;
+        var rows = model.Parts.Skip(firstRow).Take(rowsPerPage).ToList();
         for (int r = 0; r < rows.Count; r++)
         {
             var part = rows[r];
@@ -288,30 +323,24 @@ internal sealed class ReportPreviewWindow : Window
             x = left;
             string[] values =
             {
-                part.Id.ToString(CultureInfo.InvariantCulture), "", part.Name,
-                part.Width.ToString("0.##", CultureInfo.CurrentCulture),
-                part.Height.ToString("0.##", CultureInfo.CurrentCulture),
+                part.Id.ToString(CultureInfo.InvariantCulture), part.Name,
+                $"{part.Width:0.##} × {part.Height:0.##}",
+                $"{part.Thickness:0.##}",
                 NestingReportDocument.SquareMeters(part.AreaPerPart),
-                $"{part.ProducedInJob}/{part.RequiredInJob}"
+                part.QuantityOnSheet.ToString(CultureInfo.CurrentCulture)
             };
             for (int c = 0; c < widths.Length; c++)
             {
                 string background = c == 0 ? "#B42318" : r % 2 == 0 ? "#FFFFFF" : "#F5F7FA";
-                AddCell(canvas, values[c], x, y, widths[c], rowHeight, background, c == 0, c != 2, 8.5);
-                if (c == 1 && part.SourcePart != null)
-                {
-                    var preview = new PartPreviewView { Part = part.SourcePart, Width = widths[c] - 8, Height = rowHeight - 4, IsHitTestVisible = false, Focusable = false };
-                    Canvas.SetLeft(preview, x + 4); Canvas.SetTop(preview, y + 2); canvas.Children.Add(preview);
-                }
+                AddCell(canvas, values[c], x, y, widths[c], rowHeight, background, c == 0, c != 1, fontSize);
                 x += widths[c];
             }
         }
-        AddText(canvas, "Cyclone Nest2D · Báo cáo danh mục Part", left, PageHeight - 35, width, 14, 8, false, "#8090A1");
     }
 
     private void SavePdf_Click(object sender, RoutedEventArgs e)
     {
-        var options = new PdfExportOptionsWindow(_report, _reportType, _orientation, _layout, _preferences) { Owner = this };
+        var options = new PdfExportOptionsWindow(_report, _orientation, _layout, _preferences) { Owner = this };
         if (options.ShowDialog() != true || options.Selection is not { } selection) return;
         var dialog = new SaveFileDialog
         {
@@ -319,15 +348,14 @@ internal sealed class ReportPreviewWindow : Window
             Filter = "PDF (*.pdf)|*.pdf",
             DefaultExt = ".pdf",
             AddExtension = true,
-            FileName = selection.Scope == ReportExportScope.BothReports ? "bao_cao_nesting_day_du.pdf" :
-                _reportType == NestingReportType.SheetParameters ? "thong_so_tung_tam.pdf" : "danh_muc_chi_tiet_da_nest.pdf",
+            FileName = "bao_cao_nesting_theo_tam.pdf",
             OverwritePrompt = true
         };
         if (dialog.ShowDialog(this) != true) return;
         try
         {
-            PdfReportWriter.Write(_report, dialog.FileName, _reportType, _orientation, _layout,
-                selection.Scope, selection.PageSelection, selection.FromPage, selection.ToPage);
+            PdfReportWriter.Write(_report, dialog.FileName, _orientation, _layout, _partLabel,
+                selection.PageSelection, selection.FromPage, selection.ToPage);
             ExportedPath = dialog.FileName;
             MessageBox.Show(this, $"Đã tạo PDF hợp lệ:\n{dialog.FileName}", "Xuất PDF thành công", MessageBoxButton.OK, MessageBoxImage.Information);
             DialogResult = true;
@@ -374,7 +402,7 @@ internal sealed class ReportPreviewWindow : Window
                 ((IAddChild)content).AddChild(fixedPage);
                 document.Pages.Add(content);
             }
-            dialog.PrintDocument(document.DocumentPaginator, _reportType == NestingReportType.SheetParameters ? "Cyclone Nest2D - Thông số tấm" : "Cyclone Nest2D - Danh mục Part");
+            dialog.PrintDocument(document.DocumentPaginator, "Cyclone Nest2D - Báo cáo nesting theo tấm");
         }
         catch (Exception ex)
         {
@@ -463,27 +491,45 @@ internal sealed class ReportPreviewWindow : Window
     private static void AddCell(Canvas canvas, string text, double x, double y, double width, double height, string background, bool bold, bool center, double fontSize)
     {
         var border = new Border { Width = width, Height = height, Background = Brush(background), BorderBrush = Brush("#ADB8C4"), BorderThickness = new Thickness(0.45), Padding = new Thickness(center ? 1 : 5, 1, 2, 1) };
-        border.Child = new TextBlock { Text = text, FontSize = fontSize, FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
+        border.Child = new TextBlock
+        {
+            Text = text,
+            FontSize = fontSize,
+            FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
             Foreground = background == "#B42318" ? Brushes.White : Brush("#2A3848"),
-            TextAlignment = center ? TextAlignment.Center : TextAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis };
+            TextAlignment = center ? TextAlignment.Center : TextAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
         Canvas.SetLeft(border, x); Canvas.SetTop(border, y); canvas.Children.Add(border);
     }
 
     private static void AddText(Canvas canvas, string text, double x, double y, double width, double height, double size, bool bold, string color)
     {
-        var block = new TextBlock { Text = text, Width = width, Height = height, FontSize = size,
-            FontWeight = bold ? FontWeights.Bold : FontWeights.Normal, Foreground = Brush(color),
-            VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        var block = new TextBlock
+        {
+            Text = text,
+            Width = width,
+            Height = height,
+            FontSize = size,
+            FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
+            Foreground = Brush(color),
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
         Canvas.SetLeft(block, x); Canvas.SetTop(block, y); canvas.Children.Add(block);
     }
 
     private static Button Button(string text, bool primary) => new()
     {
-        Content = text, Padding = new Thickness(13, 7, 13, 7), Margin = new Thickness(4, 0, 4, 0), FontSize = 11,
+        Content = text,
+        Padding = new Thickness(13, 7, 13, 7),
+        Margin = new Thickness(4, 0, 4, 0),
+        FontSize = 11,
         Background = primary ? Brush("#11A7A1") : Brushes.White,
         Foreground = primary ? Brushes.White : Brush("#344257"),
-        BorderBrush = primary ? Brush("#11A7A1") : Brush("#DCE4EB"), BorderThickness = new Thickness(1),
+        BorderBrush = primary ? Brush("#11A7A1") : Brush("#DCE4EB"),
+        BorderThickness = new Thickness(1),
         Cursor = Cursors.Hand
     };
 

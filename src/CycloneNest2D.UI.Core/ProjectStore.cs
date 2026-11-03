@@ -82,7 +82,7 @@ public static class ProjectStore
                   ?? throw new InvalidDataException("File dự án rỗng.");
         if (dto.Kind != ProjectKind)
             throw new InvalidDataException("File không phải dự án nhiều nhóm.");
-        EnsureSupportedVersion(dto);
+        ProjectFormatMigrator.Upgrade(dto);
         if (dto.Groups.Count == 0)
             throw new InvalidDataException("Dự án chưa có nhóm vật liệu nào.");
         return dto.Groups;
@@ -123,8 +123,12 @@ public static class ProjectStore
         {
             var item = new PartDto
             {
-                Kind = part.Kind.ToString(), Name = part.Name, Material = part.Material,
-                Quantity = part.Quantity, CanRotate = part.CanRotate, Flip = part.Flip,
+                Kind = part.Kind.ToString(),
+                Name = part.Name,
+                Material = part.Material,
+                Quantity = part.Quantity,
+                CanRotate = part.CanRotate,
+                Flip = part.Flip,
                 Thickness = part.Thickness
             };
             if (part.Kind is PartKind.Rect or PartKind.Template)
@@ -150,8 +154,10 @@ public static class ProjectStore
         if (resultSheet != null)
             dto.ResultSheet = new SheetDefinitionDto
             {
-                Width = resultSheet.Width, Height = resultSheet.Height,
-                Margin = resultSheet.Margin, Spacing = resultSheet.Spacing
+                Width = resultSheet.Width,
+                Height = resultSheet.Height,
+                Margin = resultSheet.Margin,
+                Spacing = resultSheet.Spacing
             };
         dto.IsStale = isStale;
         dto.IsEdited = isEdited;
@@ -170,7 +176,7 @@ public static class ProjectStore
                   ?? throw new InvalidDataException("File nhóm rỗng.");
         if (dto.Kind == ProjectKind)
             throw new InvalidDataException("Không thể dùng file dự án tổng làm file nhóm.");
-        EnsureSupportedVersion(dto);
+        ProjectFormatMigrator.Upgrade(dto);
         foreach (var part in dto.Parts.Where(part => part.Path != null))
         {
             string full = Path.GetFullPath(Path.Combine(sourceDirectory, part.Path!));
@@ -188,7 +194,7 @@ public static class ProjectStore
                   ?? throw new InvalidDataException("File dự án rỗng.");
         if (dto.Kind == ProjectKind)
             throw new InvalidDataException("Đây là file dự án tổng; hãy mở dự án tổng để chọn nhóm.");
-        EnsureSupportedVersion(dto);
+        ProjectFormatMigrator.Upgrade(dto);
         if (dto.Settings != null) settings.FromJson(dto.Settings);
 
         var items = new List<PartItem>();
@@ -242,13 +248,6 @@ public static class ProjectStore
         };
     }
 
-    private static void EnsureSupportedVersion(ProjectDto dto)
-    {
-        if (dto.Version < 1 || dto.Version > CurrentFormatVersion)
-            throw new InvalidDataException(
-                $"Phiên bản dữ liệu dự án {dto.Version} không được hỗ trợ (hiện hỗ trợ 1–{CurrentFormatVersion}).");
-    }
-
     private static void WriteAtomically(string path, string contents)
     {
         string fullPath = Path.GetFullPath(path);
@@ -270,13 +269,23 @@ public static class ProjectStore
         Unplaced = result.Unplaced.ToList(),
         Sheets = result.Sheets.Select(sheet => new SheetResultDto
         {
-            Index = sheet.Index, Width = sheet.Width, Height = sheet.Height,
-            Material = sheet.Material, Thickness = sheet.Thickness, StockName = sheet.StockName,
+            Index = sheet.Index,
+            Width = sheet.Width,
+            Height = sheet.Height,
+            Material = sheet.Material,
+            Thickness = sheet.Thickness,
+            StockName = sheet.StockName,
             Placements = sheet.Placements.Select(placement => new PlacementDto
             {
-                PartName = placement.PartName, Instance = placement.Instance,
-                X = placement.X, Y = placement.Y, Width = placement.Width, Height = placement.Height,
-                Rotated = placement.Rotated, AngleDeg = placement.AngleDeg, Area = placement.Area,
+                PartName = placement.PartName,
+                Instance = placement.Instance,
+                X = placement.X,
+                Y = placement.Y,
+                Width = placement.Width,
+                Height = placement.Height,
+                Rotated = placement.Rotated,
+                AngleDeg = placement.AngleDeg,
+                Area = placement.Area,
                 Shape = placement.Shape == null ? null : ToDto(placement.Shape)
             }).ToList()
         }).ToList()
@@ -309,8 +318,12 @@ public static class ProjectStore
         {
             var sheet = new SheetResult
             {
-                Index = savedSheet.Index, Width = savedSheet.Width, Height = savedSheet.Height,
-                Material = savedSheet.Material, Thickness = savedSheet.Thickness, StockName = savedSheet.StockName
+                Index = savedSheet.Index,
+                Width = savedSheet.Width,
+                Height = savedSheet.Height,
+                Material = savedSheet.Material,
+                Thickness = savedSheet.Thickness,
+                StockName = savedSheet.StockName
             };
             foreach (var placement in savedSheet.Placements)
             {

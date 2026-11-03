@@ -130,31 +130,72 @@ public sealed class NestSettings : ObservableObject
         SheetPresets = SheetPresets.ToList(),
     }, Json);
 
-    /// <summary>Nạp JSON cũ được an toàn; Mode/MaxRects và advanced fields cũ bị bỏ qua.</summary>
+    /// <summary>Nạp JSON cũ; Mode/MaxRects và advanced fields cũ bị bỏ qua. JSON hoặc giá trị sai sẽ ném lỗi.</summary>
     public void FromJson(string json)
     {
-        Dto? dto;
-        try { dto = JsonSerializer.Deserialize<Dto>(json); }
-        catch { return; }
-        if (dto == null) return;
+        Dto dto = JsonSerializer.Deserialize<Dto>(json)
+                  ?? throw new InvalidDataException("File thiết lập không có dữ liệu.");
+        if (!Enum.TryParse<NestDirection>(dto.Direction, true, out var direction) || !Enum.IsDefined(direction))
+            throw new InvalidDataException($"Hướng lấp đầy '{dto.Direction}' không hợp lệ.");
 
+        var candidate = new NestSettings
+        {
+            SheetWidth = dto.SheetWidth,
+            SheetHeight = dto.SheetHeight,
+            Margin = dto.Margin,
+            Spacing = dto.Spacing,
+            Direction = direction,
+            AllowRotation = dto.AllowRotation,
+            MaxSeconds = dto.MaxSeconds,
+            TargetUtilizationPercent = dto.TargetUtilizationPercent,
+            RotationStep = dto.RotationStep
+        };
+        string? validationError = candidate.Validate();
+        if (validationError != null)
+            throw new InvalidDataException($"Thiết lập nesting không hợp lệ: {validationError}");
+
+        List<SheetPreset>? validatedPresets = null;
         if (dto.SheetPresets != null)
         {
+            validatedPresets = new List<SheetPreset>(dto.SheetPresets.Count);
+            for (int i = 0; i < dto.SheetPresets.Count; i++)
+            {
+                var preset = dto.SheetPresets[i];
+                if (preset is null)
+                    throw new InvalidDataException($"Khổ tấm thứ {i + 1} không có dữ liệu.");
+                if (string.IsNullOrWhiteSpace(preset.Name))
+                    throw new InvalidDataException($"Khổ tấm thứ {i + 1} thiếu tên.");
+                if (!(preset.Width > 0) || !double.IsFinite(preset.Width) ||
+                    !(preset.Height > 0) || !double.IsFinite(preset.Height))
+                    throw new InvalidDataException($"Khổ tấm thứ {i + 1} phải có chiều dài và chiều rộng lớn hơn 0.");
+                if (preset.Thickness < 0 || !double.IsFinite(preset.Thickness))
+                    throw new InvalidDataException($"Độ dày của khổ tấm thứ {i + 1} không hợp lệ.");
+
+                validatedPresets.Add(preset with
+                {
+                    Name = preset.Name.Trim(),
+                    Material = string.IsNullOrWhiteSpace(preset.Material) ? "Chưa phân loại" : preset.Material.Trim(),
+                    Note = preset.Note?.Trim() ?? ""
+                });
+            }
+        }
+
+        if (validatedPresets != null)
+        {
             SheetPresets.Clear();
-            foreach (var preset in dto.SheetPresets.Where(p => p != null && !string.IsNullOrWhiteSpace(p.Name) && p.Width > 0 && p.Height > 0))
-                SheetPresets.Add(preset with { Material = string.IsNullOrWhiteSpace(preset.Material) ? "Chưa phân loại" : preset.Material.Trim() });
+            foreach (var preset in validatedPresets)
+                SheetPresets.Add(preset);
         }
 
         SheetWidth = dto.SheetWidth;
         SheetHeight = dto.SheetHeight;
         Margin = dto.Margin;
         Spacing = dto.Spacing;
-        Direction = Enum.TryParse<NestDirection>(dto.Direction, true, out var direction) ? direction : NestDirection.FillWidth;
+        Direction = direction;
         AllowRotation = dto.AllowRotation;
         MaxSeconds = dto.MaxSeconds;
         TargetUtilizationPercent = dto.TargetUtilizationPercent;
         RotationStep = dto.RotationStep;
-        if (Validate() != null) ResetDefaults();
     }
 
     public void ResetDefaults() => FromJson(JsonSerializer.Serialize(new Dto(), Json));
@@ -173,7 +214,8 @@ public sealed class NestSettings : ObservableObject
 
     public void LoadFrom(string path)
     {
-        try { if (File.Exists(path)) FromJson(File.ReadAllText(path)); } catch { }
+        if (!File.Exists(path)) return;
+        FromJson(File.ReadAllText(path));
     }
 
     public override string ToString() =>

@@ -148,7 +148,11 @@ public sealed class PartItem : ObservableObject
         new()
         {
             Kind = PartKind.Rect,
-            _name = name, _width = w, _height = h, _quantity = qty, _canRotate = canRotate,
+            _name = name,
+            _width = w,
+            _height = h,
+            _quantity = qty,
+            _canRotate = canRotate,
             _info = "Hình chữ nhật nhập tay"
         };
 

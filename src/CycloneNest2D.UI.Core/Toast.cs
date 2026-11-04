@@ -47,7 +47,7 @@ public sealed class ToastService
 
     public ToastItem Show(ToastKind kind, string title, string text = "", double seconds = 0)
     {
-        if (seconds <= 0) seconds = kind switch { ToastKind.Error => 8, ToastKind.Warning => 6, _ => 4 };
+        if (seconds <= 0) seconds = kind switch { ToastKind.Error => 4, ToastKind.Warning => 2.5, _ => 2 };
         var item = new ToastItem(this, kind, title, text);
         Run(() =>
         {

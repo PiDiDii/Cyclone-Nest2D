@@ -4,12 +4,13 @@ namespace CycloneNest2D.UI;
 
 public sealed class SceneBuilder
 {
-    public PreviewScene Build(SheetResult? currentSheet, SheetDefinition? resultSheet, NestSettings settings)
+    public PreviewScene Build(SheetResult? currentSheet, SheetDefinition? resultSheet, NestSettings settings,
+        IReadOnlyDictionary<int, string>? invalidPlacements = null)
     {
         if (currentSheet == null || resultSheet == null)
             return PreviewScene.Empty(settings.ToSheet());
 
-        return PreviewBuilder.Build(currentSheet, DefinitionFor(currentSheet, resultSheet));
+        return PreviewBuilder.Build(currentSheet, DefinitionFor(currentSheet, resultSheet), invalidPlacements);
     }
 
     public SheetDefinition DefinitionFor(SheetResult sheet, SheetDefinition? resultSheet, NestSettings? settings = null)

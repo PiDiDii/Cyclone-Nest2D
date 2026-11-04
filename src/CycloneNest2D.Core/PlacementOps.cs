@@ -11,12 +11,35 @@ public static class PlacementOps
 
     /// <summary>Xoay thêm 90° ngược chiều kim đồng hồ quanh tâm hộp bao. Kết quả có Shape đã xoay sẵn, Rotated=false.</summary>
     public static Placement Rotated90(Placement p)
+        => Rotated90(p, p.X + p.Width / 2, p.Y + p.Height / 2);
+
+    /// <summary>Rotates 90 degrees while keeping the world point under the cursor fixed.</summary>
+    public static Placement Rotated90(Placement p, double anchorX, double anchorY)
     {
-        var shape = Oriented(p) is { } o ? ShapeOps.Rotate(o, 90) : null;
+        var source = Oriented(p);
+        var shape = source is null ? null : ShapeOps.Rotate(source, 90);
         double w = shape?.Width ?? p.Height;
         double h = shape?.Height ?? p.Width;
-        double cx = p.X + p.Width / 2, cy = p.Y + p.Height / 2;
+        double localX = anchorX - p.X, localY = anchorY - p.Y;
+        double sourceHeight = source?.Height ?? p.Height;
         double angle = Mat.Norm360(p.AngleDeg + (p.Rotated ? 90 : 0) + 90);
-        return p with { Shape = shape, Rotated = false, AngleDeg = angle, Width = w, Height = h, X = cx - w / 2, Y = cy - h / 2 };
+        return p with
+        {
+            Shape = shape,
+            Rotated = false,
+            AngleDeg = angle,
+            Width = w,
+            Height = h,
+            X = anchorX - (sourceHeight - localY),
+            Y = anchorY - localX
+        };
     }
+
+    /// <summary>Mirrors horizontally while keeping the world point under the cursor fixed.</summary>
+    public static Placement Mirrored(Placement p, double anchorX, double anchorY)
+        => p with
+        {
+            Shape = p.Shape == null ? null : ShapeOps.MirrorHorizontal(p.Shape),
+            X = anchorX - (p.Width - (anchorX - p.X))
+        };
 }

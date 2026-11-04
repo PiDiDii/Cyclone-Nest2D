@@ -1,10 +1,12 @@
 using System.Globalization;
+using CycloneNest2D.Core;
 
 internal sealed record BenchmarkConfig
 {
     public bool Full { get; init; }
     public bool ShowHelp { get; init; }
     public bool Diagnostics { get; init; }
+    public NestSearchMode SearchMode { get; init; } = NestSearchMode.Balanced;
     public int Repetitions { get; init; } = 1;
     public double MaxSeconds { get; init; } = 1.5;
     public string? DxfPath { get; init; }
@@ -17,6 +19,7 @@ internal sealed record BenchmarkConfig
     public static BenchmarkConfig Parse(string[] args)
     {
         bool full = false, help = false, diagnostics = false;
+        NestSearchMode searchMode = NestSearchMode.Balanced;
         int? repetitions = null;
         double? maxSeconds = null;
         string? dxf = null, output = null;
@@ -36,6 +39,11 @@ internal sealed record BenchmarkConfig
                 case "--quick": full = false; break;
                 case "--full": full = true; break;
                 case "--diagnostics": diagnostics = true; break;
+                case "--search-mode":
+                    string mode = NextValue();
+                    if (!Enum.TryParse(mode, true, out searchMode) || !Enum.IsDefined(searchMode))
+                        throw new ArgumentException("--search-mode phải là fast, balanced hoặc quality.");
+                    break;
                 case "--help":
                 case "-h": help = true; break;
                 case "--repeat": repetitions = ParseInt(NextValue(), value, 1, 20); break;
@@ -59,6 +67,7 @@ internal sealed record BenchmarkConfig
             Full = full,
             ShowHelp = help,
             Diagnostics = diagnostics,
+            SearchMode = searchMode,
             Repetitions = repetitions ?? (full ? 3 : 1),
             MaxSeconds = maxSeconds ?? (full ? 5 : 1.5),
             DxfPath = dxf,

@@ -5,14 +5,23 @@ using CycloneNest2D.Core;
 
 namespace CycloneNest2D.UI;
 
-public sealed class SheetItem
+public sealed class SheetItem : System.ComponentModel.INotifyPropertyChanged
 {
     public SheetItem(SheetResult sheet) => Sheet = sheet;
     public SheetResult Sheet { get; }
+    public int Revision { get; private set; }
     public string Material => Sheet.Material;
     public double Thickness => Sheet.Thickness;
     public string Text => $"Tấm {Sheet.Index} · {Material} · {Thickness:0.##} mm · {Sheet.Width:0.##} × {Sheet.Height:0.##} mm · {Sheet.Placements.Count} chi tiết · {Sheet.Utilization:P1}";
     public override string ToString() => Text;
+
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+    public void RefreshPreview()
+    {
+        Revision++;
+        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(Revision)));
+    }
 }
 
 /// <summary>Một nhóm chi tiết cùng vật liệu và độ dày cho sidebar Nesting.</summary>
@@ -63,6 +72,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly ProjectLifecycleService _projectLifecycleService = new();
     private readonly NestingOrchestrator _nestingOrchestrator = new();
     private readonly ManualPlacementService _manualPlacementService = new();
+    private readonly Dictionary<SheetResult, Dictionary<int, string>> _manualPlacementErrors = new();
     private readonly PartManagementService _partManagementService = new();
     private readonly SceneBuilder _sceneBuilder = new();
     private readonly ExportCoordinator _exportCoordinator = new();
@@ -698,7 +708,7 @@ public sealed class MainViewModel : ObservableObject
         _estimatedRemainingTime = null;
         OnPropertyChanged(nameof(ElapsedNestTimeText));
         OnPropertyChanged(nameof(EstimatedRemainingTimeText));
-        Status = $"Đang nesting · giới hạn {Settings.MaxSeconds:0.#} giây · mục tiêu {Settings.TargetUtilizationPercent:0.#}%...";
+        Status = $"Đang nesting · giới hạn {Settings.EffectiveMaxSeconds:0.#} giây · mục tiêu {Settings.TargetUtilizationPercent:0.#}%...";
         var wallClock = Stopwatch.StartNew();
         var progressClock = RefreshProgressClockAsync(wallClock);
         try
@@ -715,7 +725,7 @@ public sealed class MainViewModel : ObservableObject
 
             for (int groupIndex = 0; groupIndex < groups.Count; groupIndex++)
             {
-                if (wallClock.Elapsed.TotalSeconds >= Settings.MaxSeconds) { timeLimitReached = true; break; }
+                if (wallClock.Elapsed.TotalSeconds >= Settings.EffectiveMaxSeconds) { timeLimitReached = true; break; }
                 var group = groups[groupIndex];
                 if (_cts.Token.IsCancellationRequested) { cancelled = true; break; }
                 string materialLabel = group.First().Material.Trim();
@@ -742,7 +752,7 @@ public sealed class MainViewModel : ObservableObject
                     for (int sheetIndex = 0; sheetIndex < groupSheets.Count; sheetIndex++)
                     {
                         if (_cts.Token.IsCancellationRequested) { cancelled = true; break; }
-                        double remainingSeconds = Settings.MaxSeconds - wallClock.Elapsed.TotalSeconds;
+                        double remainingSeconds = Settings.EffectiveMaxSeconds - wallClock.Elapsed.TotalSeconds;
                         if (remainingSeconds <= 0) { timeLimitReached = true; break; }
                         var preset = groupSheets[sheetIndex];
                         var trialSettings = new NestSettings();
@@ -772,7 +782,7 @@ public sealed class MainViewModel : ObservableObject
                             bestRun = trial; bestPreset = preset; bestFirst = first;
                             bestCount = count; bestUtilization = first.Utilization; bestArea = area;
                         }
-                        if (wallClock.Elapsed.TotalSeconds >= Settings.MaxSeconds) { timeLimitReached = true; break; }
+                        if (wallClock.Elapsed.TotalSeconds >= Settings.EffectiveMaxSeconds) { timeLimitReached = true; break; }
                     }
 
                     if (bestRun == null || bestPreset == null || bestFirst == null) break;
@@ -810,7 +820,7 @@ public sealed class MainViewModel : ObservableObject
                     }
                     if (addedInBatch == 0) break;
                     if (bestRun.Cancelled || _cts.Token.IsCancellationRequested) { cancelled = true; break; }
-                    if (timeLimitReached || wallClock.Elapsed.TotalSeconds >= Settings.MaxSeconds) { timeLimitReached = true; break; }
+                    if (timeLimitReached || wallClock.Elapsed.TotalSeconds >= Settings.EffectiveMaxSeconds) { timeLimitReached = true; break; }
                 }
 
                 if (remaining.Values.Any(q => q > 0))
@@ -826,7 +836,7 @@ public sealed class MainViewModel : ObservableObject
                 foreach (var pendingGroup in groups.Skip(nextGroupToProcess))
                     foreach (var part in pendingGroup.Where(p => p.Quantity > 0))
                         combined.Unplaced.Add($"{part.Name}: còn {part.Quantity} / {part.Quantity} chi tiết chưa xếp (hết giới hạn thời gian toàn tác vụ).");
-                combined.Notes.Add($"Đã chạm giới hạn {Settings.MaxSeconds:0.#} giây; giữ lại kết quả tốt nhất tìm được.");
+                combined.Notes.Add($"Đã chạm giới hạn {Settings.EffectiveMaxSeconds:0.#} giây; giữ lại kết quả tốt nhất tìm được.");
             }
 
             wallClock.Stop();
@@ -856,6 +866,7 @@ public sealed class MainViewModel : ObservableObject
     private void ShowResult(NestRun run)
     {
         var r = run.Result;
+        _manualPlacementErrors.Clear();
         Result = r;
         _resultSheet = run.Sheet;
         OnPropertyChanged(nameof(ResultSheet));
@@ -896,11 +907,67 @@ public sealed class MainViewModel : ObservableObject
     private List<string> ValidateResult(NestResult result)
         => _exportCoordinator.ValidateResult(result, DefinitionFor);
 
+    public IReadOnlyList<string> GetExportValidationErrors()
+        => Result == null ? Array.Empty<string>() : ValidateResult(Result);
+
     private void RebuildScene()
     {
-        Scene = _sceneBuilder.Build(CurrentSheet, _resultSheet, Settings);
+        var errors = CurrentSheet != null && _manualPlacementErrors.TryGetValue(CurrentSheet, out var currentErrors)
+            ? currentErrors
+            : null;
+        Scene = _sceneBuilder.Build(CurrentSheet, _resultSheet, Settings, errors);
         RefreshPlacementSelection();
         SelectedInfo = DescribeSelected();
+    }
+
+    private string? RefreshPlacementErrors(SheetResult sheet, IEnumerable<int> indices)
+    {
+        if (!_manualPlacementErrors.TryGetValue(sheet, out var errors))
+        {
+            errors = new Dictionary<int, string>();
+            _manualPlacementErrors.Add(sheet, errors);
+        }
+
+        var affected = indices.Where(i => i >= 0 && i < sheet.Placements.Count).ToHashSet();
+        affected.UnionWith(errors.Keys.Where(i => i >= 0 && i < sheet.Placements.Count));
+        foreach (int index in affected.ToArray())
+        {
+            var placement = sheet.Placements[index];
+            for (int otherIndex = 0; otherIndex < sheet.Placements.Count; otherIndex++)
+            {
+                var other = sheet.Placements[otherIndex];
+                bool near = !(placement.X >= other.X + other.Width + Settings.Spacing ||
+                              other.X >= placement.X + placement.Width + Settings.Spacing ||
+                              placement.Y >= other.Y + other.Height + Settings.Spacing ||
+                              other.Y >= placement.Y + placement.Height + Settings.Spacing);
+                if (near) affected.Add(otherIndex);
+            }
+        }
+
+        string? firstError = null;
+        foreach (int index in affected)
+        {
+            string? error = Validator.CheckPlacement(sheet, index, sheet.Placements[index], DefinitionFor(sheet));
+            if (error == null) errors.Remove(index);
+            else
+            {
+                errors[index] = error;
+                firstError ??= error;
+            }
+        }
+        if (errors.Count == 0) _manualPlacementErrors.Remove(sheet);
+        return firstError;
+    }
+
+    private void RemovePlacementErrors(SheetResult sheet, IEnumerable<int> removedIndices)
+    {
+        if (!_manualPlacementErrors.TryGetValue(sheet, out var errors)) return;
+        var removed = removedIndices.ToHashSet();
+        var updated = errors
+            .Where(item => !removed.Contains(item.Key))
+            .ToDictionary(item => item.Key - removed.Count(index => index < item.Key), item => item.Value);
+        if (updated.Count == 0) _manualPlacementErrors.Remove(sheet);
+        else _manualPlacementErrors[sheet] = updated;
     }
 
     private string DescribeSelected()
@@ -944,7 +1011,31 @@ public sealed class MainViewModel : ObservableObject
             return false;
         }
 
+        RefreshPlacementErrors(sheet, _selectedPlacementIndices);
         AfterManualEdit($"Đã di chuyển {_selectedPlacementIndices.Count} chi tiết.");
+        return true;
+    }
+
+    public bool MoveSelectedAllowInvalid(double dx, double dy)
+    {
+        var sheet = CurrentSheet;
+        if (!IsIdle || sheet == null || _resultSheet == null) return false;
+        var selected = _selectedPlacementIndices.Where(i => i >= 0 && i < sheet.Placements.Count).ToArray();
+        if (selected.Length == 0) return false;
+
+        foreach (int index in selected)
+        {
+            var placement = sheet.Placements[index];
+            sheet.Placements[index] = PlacementOps.Moved(placement, placement.X + dx, placement.Y + dy);
+        }
+
+        string? error = RefreshPlacementErrors(sheet, selected);
+        AfterManualEdit($"Đã di chuyển {selected.Length} chi tiết.");
+        if (error != null)
+        {
+            Status = "Đã di chuyển đến vị trí không hợp lệ: " + error;
+            Toasts.Show(ToastKind.Warning, "Vị trí không hợp lệ", error);
+        }
         return true;
     }
 
@@ -965,6 +1056,7 @@ public sealed class MainViewModel : ObservableObject
         if (indices.Length == 0 && SelectedPlacement >= 0 && SelectedPlacement < sheet.Placements.Count) indices = new[] { SelectedPlacement };
         if (indices.Length == 0) return 0;
         foreach (int index in indices) sheet.Placements.RemoveAt(index);
+        RemovePlacementErrors(sheet, indices);
         RenumberInstances();
         UpdateUnplacedFromRemaining();
         OnPropertyChanged(nameof(PlacedCount));
@@ -1111,69 +1203,29 @@ public sealed class MainViewModel : ObservableObject
         return moved;
     }
 
-    /// <summary>Thả một instance từ bộ lọc vào sheet; tâm hình được đặt tại tọa độ thả (mm).</summary>
+    public string? CheckManualPlacement(PartItem part, double centerX, double centerY)
+    {
+        string? error = BuildManualPlacementCandidate(part, centerX, centerY, out var sheet, out var definition,
+            out var candidate, out _);
+        if (error != null) return error;
+        return Validator.CheckPlacement(sheet, -1, candidate, definition);
+    }
+
+    /// <summary>Thả một instance từ bộ lọc vào sheet; vị trí sai vẫn được giữ và đánh dấu không hợp lệ.</summary>
     public bool TryPlaceManually(PartItem part, double centerX, double centerY)
     {
-        if (!IsIdle || !part.IsValid || part.Quantity <= 0 || string.IsNullOrWhiteSpace(part.Name)) return false;
-        if (IsStale)
-        {
-            Status = "Kết quả đã cũ; hãy chạy nesting lại trước khi tiếp tục đặt thủ công.";
-            Toasts.Show(ToastKind.Warning, "Kết quả đã cũ", Status);
-            return false;
-        }
-        var source = part.ToDefinition();
-        if (source.Shape != null && !ShapeOps.Build(source.Shape).Reliable)
-        {
-            Status = $"Không thể đặt {part.Name}: contour không hợp lệ.";
-            Toasts.Show(ToastKind.Warning, "Contour không hợp lệ", Status);
-            return false;
-        }
-        if (Result != null && SelectedSheet == null)
-        {
-            if (Sheets.Count == 0) return false;
-            SelectedSheet = Sheets[0];
-        }
-
-        var preset = part.AssignedPreset ?? SelectedPreset;
-        string partMaterial = string.IsNullOrWhiteSpace(part.Material) ? preset?.Material ?? "" : part.Material;
-        double partThickness = part.Thickness > 0 ? part.Thickness : preset?.Thickness ?? 0;
-        if (SelectedSheet != null &&
-            ((!string.IsNullOrWhiteSpace(partMaterial) && !string.Equals(MaterialKey(SelectedSheet.Material), MaterialKey(partMaterial), StringComparison.Ordinal)) ||
-             (partThickness > 0 && Math.Abs(SelectedSheet.Thickness - partThickness) > 1e-4)))
-        {
-            Status = "Vật liệu hoặc độ dày của chi tiết không khớp với tấm đang chọn.";
-            Toasts.Show(ToastKind.Warning, "Khác vật liệu/độ dày", Status);
-            return false;
-        }
-        double width = SelectedSheet?.Sheet.Width ?? preset?.Width ?? Settings.SheetWidth;
-        double height = SelectedSheet?.Sheet.Height ?? preset?.Height ?? Settings.SheetHeight;
-        string material = SelectedSheet?.Sheet.Material ?? partMaterial;
-        double thickness = SelectedSheet?.Sheet.Thickness ?? partThickness;
-        int alreadyPlaced = Result?.Sheets.SelectMany(s => s.Placements)
-            .Count(p => string.Equals(p.PartName, part.Name, StringComparison.OrdinalIgnoreCase)) ?? 0;
-        if (alreadyPlaced >= part.Quantity)
-        {
-            Status = $"Đã đặt đủ số lượng của {part.Name}.";
-            Toasts.Show(ToastKind.Warning, "Đã đủ số lượng", Status);
-            return false;
-        }
-
-        var definition = new SheetDefinition(width, height, Settings.Margin, Settings.Spacing);
-        double partWidth = source.Width, partHeight = source.Height;
-        var candidate = new Placement(part.Name, alreadyPlaced + 1, centerX - partWidth / 2, centerY - partHeight / 2,
-            partWidth, partHeight, false, source.Shape, 0,
-            source.Shape == null ? partWidth * partHeight : ShapeOps.NetArea(source.Shape));
-        bool createResult = Result == null;
-        var sheet = createResult
-            ? new SheetResult { Index = 1, Width = width, Height = height, Material = material, Thickness = thickness, StockName = preset?.Name ?? "Đặt thủ công" }
-            : SelectedSheet!.Sheet;
-        string? error = Validator.CheckPlacement(sheet, -1, candidate, definition);
+        string? error = BuildManualPlacementCandidate(part, centerX, centerY, out var sheet, out var definition,
+            out var candidate, out bool createResult);
         if (error != null)
         {
-            Status = "Không thể đặt ở đó: " + error;
+            Status = error;
             Toasts.Show(ToastKind.Warning, "Không thể đặt chi tiết", error);
             return false;
         }
+
+        if (!createResult && SelectedSheet == null)
+            SelectedSheet = Sheets.FirstOrDefault(item => ReferenceEquals(item.Sheet, sheet));
+        string? placementError = Validator.CheckPlacement(sheet, -1, candidate, definition);
         if (createResult)
         {
             _resultSheet = definition;
@@ -1186,6 +1238,7 @@ public sealed class MainViewModel : ObservableObject
             IsStale = false;
         }
         sheet.Placements.Add(candidate);
+        placementError = RefreshPlacementErrors(sheet, new[] { sheet.Placements.Count - 1 });
         OnPropertyChanged(nameof(PlacedCount));
         OnPropertyChanged(nameof(RemainingCount));
         int sheetIndex = Sheets.IndexOf(SelectedSheet!);
@@ -1201,42 +1254,117 @@ public sealed class MainViewModel : ObservableObject
         }
         SelectedPlacement = sheet.Placements.Count - 1;
         AfterManualEdit($"Đã đặt thủ công {part.Name} #{candidate.Instance}.");
+        if (placementError != null)
+        {
+            Status = "Đã đặt tại vị trí không hợp lệ: " + placementError;
+            Toasts.Show(ToastKind.Warning, "Vị trí không hợp lệ", placementError);
+        }
         return true;
     }
 
+    private string? BuildManualPlacementCandidate(PartItem part, double centerX, double centerY,
+        out SheetResult sheet, out SheetDefinition definition, out Placement candidate, out bool createResult)
+    {
+        sheet = null!;
+        definition = null!;
+        candidate = null!;
+        createResult = false;
+        if (!IsIdle || !part.IsValid || part.Quantity <= 0 || string.IsNullOrWhiteSpace(part.Name))
+            return "Chi tiết không hợp lệ hoặc ứng dụng đang bận.";
+        if (IsStale)
+            return "Kết quả đã cũ; hãy chạy nesting lại trước khi tiếp tục đặt thủ công.";
+        var source = part.ToDefinition();
+        if (source.Shape != null && !ShapeOps.Build(source.Shape).Reliable)
+            return $"Không thể đặt {part.Name}: contour không hợp lệ.";
+        var targetSheet = SelectedSheet?.Sheet ?? Result?.Sheets.FirstOrDefault();
+        if (Result != null && targetSheet == null) return "Không có tấm đang chọn.";
+
+        var preset = part.AssignedPreset ?? SelectedPreset;
+        string partMaterial = string.IsNullOrWhiteSpace(part.Material) ? preset?.Material ?? "" : part.Material;
+        double partThickness = part.Thickness > 0 ? part.Thickness : preset?.Thickness ?? 0;
+        if (targetSheet != null &&
+            ((!string.IsNullOrWhiteSpace(partMaterial) && !string.Equals(MaterialKey(targetSheet.Material), MaterialKey(partMaterial), StringComparison.Ordinal)) ||
+             (partThickness > 0 && Math.Abs(targetSheet.Thickness - partThickness) > 1e-4)))
+            return "Vật liệu hoặc độ dày của chi tiết không khớp với tấm đang chọn.";
+        double width = targetSheet?.Width ?? preset?.Width ?? Settings.SheetWidth;
+        double height = targetSheet?.Height ?? preset?.Height ?? Settings.SheetHeight;
+        string material = targetSheet?.Material ?? partMaterial;
+        double thickness = targetSheet?.Thickness ?? partThickness;
+        int alreadyPlaced = Result?.Sheets.SelectMany(s => s.Placements)
+            .Count(p => string.Equals(p.PartName, part.Name, StringComparison.OrdinalIgnoreCase)) ?? 0;
+        if (alreadyPlaced >= part.Quantity)
+            return $"Đã đặt đủ số lượng của {part.Name}.";
+
+        definition = new SheetDefinition(width, height, Settings.Margin, Settings.Spacing);
+        double partWidth = source.Width, partHeight = source.Height;
+        candidate = new Placement(part.Name, alreadyPlaced + 1, centerX - partWidth / 2, centerY - partHeight / 2,
+            partWidth, partHeight, false, source.Shape, 0,
+            source.Shape == null ? partWidth * partHeight : ShapeOps.NetArea(source.Shape));
+        createResult = Result == null;
+        sheet = createResult
+            ? new SheetResult { Index = 1, Width = width, Height = height, Material = material, Thickness = thickness, StockName = preset?.Name ?? "Đặt thủ công" }
+            : targetSheet!;
+        return null;
+    }
+
     public void MirrorSelected()
+        => MirrorSelected(null);
+
+    public void MirrorSelectedAt(double x, double y)
+        => MirrorSelected((x, y));
+
+    private void MirrorSelected((double X, double Y)? anchor)
     {
         var sheet = CurrentSheet;
         if (sheet == null || SelectedPlacement < 0 || SelectedPlacement >= sheet.Placements.Count) return;
-        var definition = DefinitionFor(sheet);
-        if (!_manualPlacementService.TryMirror(sheet, definition, SelectedPlacement))
+        var index = SelectedPlacement;
+        var before = sheet.Placements[index];
+        double anchorX = anchor?.X ?? before.X + before.Width / 2;
+        double anchorY = anchor?.Y ?? before.Y + before.Height / 2;
+        var candidate = PlacementOps.Mirrored(before, anchorX, anchorY);
+        sheet.Placements[index] = candidate;
+        string? error = RefreshPlacementErrors(sheet, new[] { index });
+        AfterManualEdit($"Đã lật {sheet.Placements[index].PartName} #{sheet.Placements[index].Instance} theo trục dọc.");
+        if (error != null)
         {
-            var error = Validator.CheckPlacement(sheet, SelectedPlacement, sheet.Placements[SelectedPlacement], definition);
-            Status = "Không lật được: " + (error ?? "không xác định");
-            Toasts.Show(ToastKind.Warning, "Không lật được", Status);
-            return;
+            Status = "Đã lật tại vị trí không hợp lệ: " + error;
+            Toasts.Show(ToastKind.Warning, "Vị trí không hợp lệ", error);
         }
-        AfterManualEdit($"Đã lật {sheet.Placements[SelectedPlacement].PartName} #{sheet.Placements[SelectedPlacement].Instance} theo trục dọc.");
     }
 
     public void RotateSelected()
+        => RotateSelected(null);
+
+    public void RotateSelectedAt(double x, double y)
+        => RotateSelected((x, y));
+
+    private void RotateSelected((double X, double Y)? anchor)
     {
         var s = CurrentSheet;
         if (s == null || _resultSheet == null || SelectedPlacement < 0 || SelectedPlacement >= s.Placements.Count) return;
-        var definition = DefinitionFor(s);
-        if (!_manualPlacementService.TryRotate(s, definition, SelectedPlacement))
+        var index = SelectedPlacement;
+        var before = s.Placements[index];
+        double anchorX = anchor?.X ?? before.X + before.Width / 2;
+        double anchorY = anchor?.Y ?? before.Y + before.Height / 2;
+        var candidate = PlacementOps.Rotated90(before, anchorX, anchorY);
+        s.Placements[index] = candidate;
+        string? error = RefreshPlacementErrors(s, new[] { index });
+        AfterManualEdit($"Đã xoay {s.Placements[index].PartName} #{s.Placements[index].Instance} thêm 90°.");
+        if (error != null)
         {
-            var error = Validator.CheckPlacement(s, SelectedPlacement, s.Placements[SelectedPlacement], definition);
-            Status = "Không xoay được: " + (error ?? "không xác định");
-            Toasts.Show(ToastKind.Warning, "Không xoay được", Status);
-            return;
+            Status = "Đã xoay tại vị trí không hợp lệ: " + error;
+            Toasts.Show(ToastKind.Warning, "Vị trí không hợp lệ", error);
         }
-        AfterManualEdit($"Đã xoay {s.Placements[SelectedPlacement].PartName} #{s.Placements[SelectedPlacement].Instance} thêm 90°.");
     }
 
     private void AfterManualEdit(string msg)
     {
         IsEdited = true;
+        if (CurrentSheet is { } sheet)
+        {
+            var item = Sheets.FirstOrDefault(candidate => ReferenceEquals(candidate.Sheet, sheet));
+            item?.RefreshPreview();
+        }
         int[] keep = _selectedPlacementIndices.ToArray();
         int primary = SelectedPlacement;
         RebuildScene();
@@ -1256,9 +1384,14 @@ public sealed class MainViewModel : ObservableObject
     public void ExportDxf(DxfExportOptions options)
     {
         if (Result == null || _resultSheet == null) return;
-        var errors = ValidateResult(Result);
-        if (errors.Count > 0 && !_dialogs.Confirm($"Kết quả hiện có {errors.Count} lỗi (chồng lấn/quá gần/ra ngoài tấm), ví dụ:\n{errors[0]}\n\nVẫn xuất?"))
+        var errors = GetExportValidationErrors();
+        if (errors.Count > 0)
+        {
+            string message = $"Không thể xuất DXF vì kết quả có {errors.Count} lỗi vị trí. Ví dụ: {errors[0]}";
+            Status = message;
+            Toasts.Show(ToastKind.Warning, "Không thể xuất DXF", errors[0]);
             return;
+        }
         string? destination = options.FileLayout == DxfFileLayout.SingleFile
             ? _dialogs.PickSaveFile("Lưu bản vẽ DXF", "DXF (*.dxf)|*.dxf", "nesting.dxf")
             : _dialogs.PickFolder("Chọn thư mục để xuất từng tấm DXF");
@@ -1298,6 +1431,7 @@ public sealed class MainViewModel : ObservableObject
 
     private void ClearResult()
     {
+        _manualPlacementErrors.Clear();
         Result = null;
         _resultSheet = null;
         _selectedPlacementIndices.Clear();

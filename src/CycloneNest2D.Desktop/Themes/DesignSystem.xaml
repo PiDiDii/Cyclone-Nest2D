@@ -176,9 +176,9 @@
         <Setter Property="Foreground" Value="{DynamicResource OnPrimaryBrush}"/>
       </MultiTrigger>
       <Trigger Property="IsEnabled" Value="False">
-        <Setter Property="Background" Value="{DynamicResource CardBgAltBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
-        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource AccentTintBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryLightBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryDarkBrush}"/>
         <Setter Property="Cursor" Value="Arrow"/>
       </Trigger>
     </Style.Triggers>

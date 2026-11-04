@@ -25,6 +25,10 @@ public sealed class SheetThumbnailView : FrameworkElement
         nameof(LabelMode), typeof(PartLabelMode), typeof(SheetThumbnailView),
         new FrameworkPropertyMetadata(PartLabelMode.None, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public static readonly DependencyProperty RevisionProperty = DependencyProperty.Register(
+        nameof(Revision), typeof(int), typeof(SheetThumbnailView),
+        new FrameworkPropertyMetadata(0, OnRevisionChanged));
+
     public static readonly DependencyProperty PartIdsProperty = DependencyProperty.Register(
         nameof(PartIds), typeof(IReadOnlyDictionary<string, int>), typeof(SheetThumbnailView),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -43,6 +47,12 @@ public sealed class SheetThumbnailView : FrameworkElement
         set => SetValue(PartIdsProperty, value);
     }
 
+    public int Revision
+    {
+        get => (int)GetValue(RevisionProperty);
+        set => SetValue(RevisionProperty, value);
+    }
+
     public SheetResult? Sheet
     {
         get => (SheetResult?)GetValue(SheetProperty);
@@ -52,13 +62,18 @@ public sealed class SheetThumbnailView : FrameworkElement
     public SheetThumbnailView() => ClipToBounds = true;
 
     private static void OnSheetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => ((SheetThumbnailView)d).RefreshScene();
+
+    private static void OnRevisionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => ((SheetThumbnailView)d).RefreshScene();
+
+    private void RefreshScene()
     {
-        var view = (SheetThumbnailView)d;
-        var sheet = e.NewValue as SheetResult;
-        view._scene = sheet == null || sheet.Width <= 0 || sheet.Height <= 0
+        var sheet = Sheet;
+        _scene = sheet == null || sheet.Width <= 0 || sheet.Height <= 0
             ? null
             : PreviewBuilder.Build(sheet, new SheetDefinition(sheet.Width, sheet.Height, 0, 0));
-        view.InvalidateVisual();
+        InvalidateVisual();
     }
 
     protected override void OnRender(DrawingContext dc)

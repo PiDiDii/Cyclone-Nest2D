@@ -80,13 +80,25 @@ internal sealed class DxfExportDialog : Window
         });
         _partsAsBlocks = new CheckBox { Content = "Xuất Part dạng Block", Margin = new Thickness(4, 3, 4, 3) };
         _nestsAsBlocks = new CheckBox { Content = "Xuất Nest dạng Block", Margin = new Thickness(4, 3, 4, 3) };
-        _removeCommonEdges = new CheckBox { Content = "Xóa cạnh chung", Margin = new Thickness(4, 3, 4, 3) };
+        _removeCommonEdges = new CheckBox { Content = "Xóa cạnh chung", IsChecked = true, Margin = new Thickness(4, 3, 4, 3) };
+        void UpdateCompatibilityOptions()
+        {
+            _partsAsBlocks.IsEnabled = _removeCommonEdges.IsChecked != true;
+            _removeCommonEdges.IsEnabled = _partsAsBlocks.IsChecked != true;
+        }
         _partsAsBlocks.Checked += (_, _) =>
         {
             _removeCommonEdges.IsChecked = false;
-            _removeCommonEdges.IsEnabled = false;
+            UpdateCompatibilityOptions();
         };
-        _partsAsBlocks.Unchecked += (_, _) => _removeCommonEdges.IsEnabled = true;
+        _partsAsBlocks.Unchecked += (_, _) => UpdateCompatibilityOptions();
+        _removeCommonEdges.Checked += (_, _) =>
+        {
+            _partsAsBlocks.IsChecked = false;
+            UpdateCompatibilityOptions();
+        };
+        _removeCommonEdges.Unchecked += (_, _) => UpdateCompatibilityOptions();
+        UpdateCompatibilityOptions();
         optionsPanel.Children.Add(Group("Tùy chọn tương thích", FieldRow("Kiểu hình học", _geometryStyle), _partsAsBlocks, _nestsAsBlocks, _removeCommonEdges));
 
         _microJoints = new CheckBox { Content = "Bật micro-joints thông minh", IsChecked = true, Margin = new Thickness(4, 4, 4, 6) };

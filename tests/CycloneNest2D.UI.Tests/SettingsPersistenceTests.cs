@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CycloneNest2D.Core;
 using CycloneNest2D.UI;
 using Xunit;
 
@@ -83,6 +84,25 @@ public sealed class SettingsPersistenceTests : IDisposable
         settings.LoadFrom(Path.Combine(_directory, "missing.json"));
 
         Assert.Equal(1600, settings.SheetWidth);
+    }
+
+    [Fact]
+    [Trait("Category", "SettingsPersistence")]
+    public void SearchModeRoundTripsAndOldSettingsDefaultToBalanced()
+    {
+        var settings = new NestSettings { SearchMode = NestSearchMode.Fast, MaxSeconds = 30 };
+
+        Assert.Equal(5, settings.EffectiveMaxSeconds);
+        Assert.Equal(5, settings.ToOptions().MaxSeconds);
+
+        var restored = new NestSettings();
+        restored.FromJson(settings.ToJson());
+        Assert.Equal(NestSearchMode.Fast, restored.SearchMode);
+        Assert.Equal(30, restored.MaxSeconds);
+
+        var legacy = new NestSettings();
+        legacy.FromJson("""{"SheetWidth":1800}""");
+        Assert.Equal(NestSearchMode.Balanced, legacy.SearchMode);
     }
 
     public void Dispose()

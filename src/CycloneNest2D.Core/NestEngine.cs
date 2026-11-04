@@ -9,8 +9,18 @@ public enum NestDirection
     FillLength
 }
 
+/// <summary>Độ rộng tìm kiếm; mọi chế độ đều dùng cùng bộ kiểm tra hình học và Validator.</summary>
+public enum NestSearchMode
+{
+    Fast,
+    Balanced,
+    Quality
+}
+
 public sealed class NestOptions
 {
+    public const double FastMaxSeconds = 5;
+
     /// <summary>Trục ưu tiên. FillWidth giảm chiều dài đã dùng; FillLength giảm bề rộng đã dùng.</summary>
     public NestDirection Direction { get; set; } = NestDirection.FillWidth;
 
@@ -25,6 +35,9 @@ public sealed class NestOptions
 
     /// <summary>Bước góc xoay (độ).</summary>
     public double RotationStep { get; set; } = 90;
+
+    /// <summary>Độ rộng tìm kiếm layout.</summary>
+    public NestSearchMode SearchMode { get; set; } = NestSearchMode.Balanced;
 
     /// <summary>Thu thập timing nội bộ tùy chọn; không đặt trong các lượt chạy cần đo overhead thuần.</summary>
     public NestDiagnostics? Diagnostics { get; set; }
@@ -105,6 +118,8 @@ public static class NestEngine
             return "Khoảng cách lề quá lớn so với kích thước tấm.";
         if (!double.IsFinite(options.RotationStep) || options.RotationStep < 5 || options.RotationStep > 180)
             return "Bước xoay phải nằm trong 5 đến 180 độ.";
+        if (!Enum.IsDefined(options.SearchMode))
+            return "Chế độ tìm kiếm nesting không hợp lệ.";
         if (!Enum.IsDefined(options.Direction))
             return "Hướng lấp đầy không hợp lệ.";
         return null;

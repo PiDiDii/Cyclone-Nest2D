@@ -19,8 +19,8 @@
             <TextBlock Text="Kéo một chi tiết từ Bộ lọc chi tiết vào tấm để bắt đầu xếp thủ công, hoặc chạy tự động." Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,6,0,14" TextAlignment="Center" TextWrapping="Wrap"/>
             <Button Command="{Binding RunCommand}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Center">
                 <StackPanel Orientation="Horizontal">
-                    <Path Data="{StaticResource IcPlay}" Style="{StaticResource IcoSolid}" Width="12" Height="12" Fill="{DynamicResource OnPrimaryBrush}" Margin="0,0,8,0"/>
-                    <TextBlock Text="Chạy Nesting" VerticalAlignment="Center" Foreground="{DynamicResource OnPrimaryBrush}"/>
+                    <Path Data="{StaticResource IcPlay}" Style="{StaticResource IcoSolid}" Width="12" Height="12" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}" Margin="0,0,8,0"/>
+                    <TextBlock Text="Chạy Nesting" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
         </StackPanel>

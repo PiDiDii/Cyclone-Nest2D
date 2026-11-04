@@ -20,6 +20,10 @@ public partial class MainWindow : Window
     private bool _sheetPresetRowsSyncQueued;
     private System.Windows.Point _nestingPartDragStart;
     private PartItem? _nestingPartDragCandidate;
+    private PartItem? _dropPreviewValidatedPart;
+    private System.Windows.Point _lastDropPreviewValidatedCenter;
+    private string? _dropPreviewValidationError;
+    private long _lastDropPreviewValidationTick;
     private bool _isDarkTheme;
     private bool _isInitialized;
     private ResourceDictionary? _darkThemeDict;
@@ -48,6 +52,7 @@ public partial class MainWindow : Window
         };
         SheetCanvas.ZoomChanged += SheetCanvas_ZoomChanged;
         SheetCanvas.DragOver += SheetCanvas_DragOver;
+        SheetCanvas.DragLeave += SheetCanvas_DragLeave;
         SheetCanvas.SelectionChanged += SheetCanvas_SelectionChanged;
         SheetCanvas.DeleteSelectedPlacementsRequested += SheetCanvas_DeleteSelectedPlacementsRequested;
         UpdatePartSelectionSummary();
@@ -646,15 +651,19 @@ public partial class MainWindow : Window
     {
         if (e.Data.GetDataPresent(DataFormats.FileDrop))
         {
+            ClearDropPreview();
             e.Effects = _vm.IsIdle ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         }
         else if (e.Data.GetDataPresent(typeof(PartItem)) && _vm.IsIdle)
         {
             e.Effects = DragDropEffects.Copy;
+            if (e.Data.GetData(typeof(PartItem)) is PartItem part)
+                UpdateDropPreview(e, part);
         }
         else
         {
+            ClearDropPreview();
             e.Effects = DragDropEffects.None;
             e.Handled = true;
         }
@@ -665,6 +674,7 @@ public partial class MainWindow : Window
         if (_vm.IsIdle && e.Data.GetData(typeof(PartItem)) is PartItem part)
         {
             var position = e.GetPosition(SheetCanvas);
+            ClearDropPreview();
             if (position.X >= 0 && position.Y >= 0 && position.X <= SheetCanvas.ActualWidth && position.Y <= SheetCanvas.ActualHeight)
             {
                 var world = SheetCanvas.WorldFromControl(position);
@@ -707,7 +717,43 @@ public partial class MainWindow : Window
     {
         bool canPlace = _vm.IsIdle && e.Data.GetDataPresent(typeof(PartItem));
         e.Effects = canPlace ? DragDropEffects.Copy : DragDropEffects.None;
+        if (canPlace && e.Data.GetData(typeof(PartItem)) is PartItem part)
+            UpdateDropPreview(e, part);
         e.Handled = true;
+    }
+
+    private void SheetCanvas_DragLeave(object sender, DragEventArgs e) => ClearDropPreview();
+
+    private void UpdateDropPreview(DragEventArgs e, PartItem part)
+    {
+        var controlPosition = e.GetPosition(SheetCanvas);
+        if (controlPosition.X < 0 || controlPosition.Y < 0 ||
+            controlPosition.X > SheetCanvas.ActualWidth || controlPosition.Y > SheetCanvas.ActualHeight)
+        {
+            ClearDropPreview();
+            return;
+        }
+
+        var center = SheetCanvas.WorldFromControl(controlPosition);
+        long now = Environment.TickCount64;
+        if (!ReferenceEquals(part, _dropPreviewValidatedPart) ||
+            now - _lastDropPreviewValidationTick >= 35 ||
+            (center - _lastDropPreviewValidatedCenter).Length >= 3)
+        {
+            _dropPreviewValidatedPart = part;
+            _lastDropPreviewValidatedCenter = center;
+            _lastDropPreviewValidationTick = now;
+            _dropPreviewValidationError = _vm.CheckManualPlacement(part, center.X, center.Y);
+        }
+        SheetCanvas.SetDropPreview(part, center, controlPosition, _dropPreviewValidationError);
+    }
+
+    private void ClearDropPreview()
+    {
+        _dropPreviewValidatedPart = null;
+        _dropPreviewValidationError = null;
+        _lastDropPreviewValidationTick = 0;
+        SheetCanvas.SetDropPreview(null, default, default, null);
     }
 
     private void ClearNesting_Click(object sender, RoutedEventArgs e)
@@ -1123,6 +1169,15 @@ public partial class MainWindow : Window
         if (_vm.Result == null || _vm.Result.Sheets.Count == 0)
         {
             MessageBox.Show(this, "Hãy chạy nesting trước khi xem báo cáo.", "Chưa có kết quả", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var errors = _vm.GetExportValidationErrors();
+        if (errors.Count > 0)
+        {
+            MessageBox.Show(this,
+                $"Không thể xem hoặc xuất PDF vì kết quả có {errors.Count} lỗi vị trí. Ví dụ: {errors[0]}",
+                "Kết quả nesting không hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 

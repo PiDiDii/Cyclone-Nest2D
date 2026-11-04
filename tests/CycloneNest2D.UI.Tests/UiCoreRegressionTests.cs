@@ -59,6 +59,106 @@ public sealed class UiCoreRegressionTests
     }
 
     [Fact]
+    [Trait("Domain", "ManualPlacement")]
+    public void ManualDrop_PersistsOutOfSheetAndOverlappingPlacementsAsInvalid()
+    {
+        var settings = new NestSettings { SheetWidth = 100, SheetHeight = 80, Margin = 5, Spacing = 3 };
+        var preset = new SheetPreset("SS400", 100, 80, "SS400", 2);
+        settings.SheetPresets.Clear();
+        settings.SheetPresets.Add(preset);
+        var vm = new MainViewModel(new FakeDialogs(), settings);
+        var part = PartItem.NewRect("Manual", 20, 20, 3);
+        part.AssignPreset(preset);
+        vm.Parts.Add(part);
+
+        Assert.True(vm.TryPlaceManually(part, -5, 30));
+        Assert.NotNull(vm.Scene.Parts.Single().InvalidReason);
+        Assert.True(vm.TryPlaceManually(part, 40, 30));
+        Assert.True(vm.TryPlaceManually(part, 40, 30));
+        Assert.Equal(3, vm.SelectedSheet!.Sheet.Placements.Count);
+        Assert.All(vm.Scene.Parts, preview => Assert.NotNull(preview.InvalidReason));
+    }
+
+    [Fact]
+    [Trait("Domain", "ManualPlacement")]
+    public void DragMove_CommitsInvalidPositionAndMarksPlacementInvalid()
+    {
+        var settings = new NestSettings { SheetWidth = 100, SheetHeight = 80, Margin = 5, Spacing = 3 };
+        var preset = new SheetPreset("SS400", 100, 80, "SS400", 2);
+        settings.SheetPresets.Clear();
+        settings.SheetPresets.Add(preset);
+        var vm = new MainViewModel(new FakeDialogs(), settings);
+        var part = PartItem.NewRect("Manual", 20, 20, 1);
+        part.AssignPreset(preset);
+        vm.Parts.Add(part);
+        Assert.True(vm.TryPlaceManually(part, 40, 30));
+        var sheetItem = vm.SelectedSheet!;
+        int previewRevision = sheetItem.Revision;
+
+        vm.SetSelectedPlacements(new[] { 0 });
+        Assert.True(vm.MoveSelectedAllowInvalid(100, 0));
+        Assert.NotNull(vm.Scene.Parts.Single().InvalidReason);
+        Assert.Equal(previewRevision + 1, sheetItem.Revision);
+    }
+
+    [Fact]
+    [Trait("Domain", "ManualPlacement")]
+    public void RotateAndMirrorSelected_ApplyEvenWhenPlacementOverlaps()
+    {
+        var settings = new NestSettings { SheetWidth = 100, SheetHeight = 80, Margin = 5, Spacing = 3 };
+        var preset = new SheetPreset("SS400", 100, 80, "SS400", 2);
+        settings.SheetPresets.Clear();
+        settings.SheetPresets.Add(preset);
+        var vm = new MainViewModel(new FakeDialogs(), settings);
+        var part = PartItem.NewRect("Manual", 30, 20, 2);
+        part.AssignPreset(preset);
+        vm.Parts.Add(part);
+
+        Assert.True(vm.TryPlaceManually(part, 40, 30));
+        Assert.True(vm.TryPlaceManually(part, 40, 30));
+        vm.SetSelectedPlacements(new[] { 1 });
+
+        vm.RotateSelectedAt(27, 23);
+        Assert.Equal(10, vm.SelectedSheet!.Sheet.Placements[1].X);
+        Assert.Equal(21, vm.SelectedSheet.Sheet.Placements[1].Y);
+        Assert.Equal(20, vm.SelectedSheet!.Sheet.Placements[1].Width);
+        Assert.All(vm.Scene.Parts, preview => Assert.NotNull(preview.InvalidReason));
+
+        vm.MirrorSelectedAt(12, 25);
+        Assert.Equal(-6, vm.SelectedSheet.Sheet.Placements[1].X);
+        Assert.Contains("Đã lật", vm.Status);
+        Assert.NotNull(vm.Scene.Parts.Single(preview => preview.Index == 1).InvalidReason);
+    }
+
+    [Fact]
+    [Trait("Domain", "ExportValidation")]
+    public void InvalidSheetBlocksDxfExportAndExposesValidationErrors()
+    {
+        var settings = new NestSettings { SheetWidth = 100, SheetHeight = 80, Margin = 5, Spacing = 3 };
+        var preset = new SheetPreset("SS400", 100, 80, "SS400", 2);
+        settings.SheetPresets.Clear();
+        settings.SheetPresets.Add(preset);
+        var dialogs = new FakeDialogs();
+        string destination = Path.Combine(Path.GetTempPath(), $"invalid-nest-{Guid.NewGuid():N}.dxf");
+        dialogs.SaveFile = destination;
+        var vm = new MainViewModel(dialogs, settings);
+        var part = PartItem.NewRect("Manual", 20, 20, 2);
+        part.AssignPreset(preset);
+        vm.Parts.Add(part);
+
+        Assert.True(vm.TryPlaceManually(part, -5, 30));
+        Assert.True(vm.AddManualSheet());
+        Assert.True(vm.TryPlaceManually(part, 40, 30));
+        Assert.NotEmpty(vm.GetExportValidationErrors());
+
+        vm.ExportDxf(new DxfExportOptions { FileLayout = DxfFileLayout.SingleFile });
+
+        Assert.Empty(dialogs.Confirmations);
+        Assert.False(File.Exists(destination));
+        Assert.Contains("Không thể xuất DXF", vm.Status);
+    }
+
+    [Fact]
     [Trait("Domain", "NestingPreflight")]
     public void NestingOrchestrator_FlagsMissingMaterialAndMissingSheet()
     {
@@ -568,16 +668,12 @@ public sealed class UiCoreRegressionTests
             vm.SelectedPlacement = 0;
             Check(vm.RotateSelectedCommand.CanExecute(null), "có thể xoay khi đã chọn");
             var before = s.Placements[0];
-            // xoay quanh tâm có thể vượt lề; nếu bị từ chối thì Status báo và dữ liệu không đổi
+            // Xoay quanh tâm giữ nguyên tâm, kể cả khi kết quả vượt lề.
             vm.RotateSelected();
             var after = s.Placements[0];
-            if (Math.Abs(after.Width - before.Height) < 1e-9)
-            {
-                Check(Math.Abs((after.X + after.Width / 2) - (before.X + before.Width / 2)) < 1e-9, "tâm X");
-                Check(Math.Abs((after.Y + after.Height / 2) - (before.Y + before.Height / 2)) < 1e-9, "tâm Y");
-            }
-            else Check(after == before, "bị từ chối thì không đổi");
-            Check(Validator.Check(vm.Result!, vm.ResultSheet).Count == 0, "validator sạch");
+            Check(Math.Abs(after.Width - before.Height) < 1e-9, "xoay được dù kết quả vượt lề");
+            Check(Math.Abs((after.X + after.Width / 2) - (before.X + before.Width / 2)) < 1e-9, "tâm X");
+            Check(Math.Abs((after.Y + after.Height / 2) - (before.Y + before.Height / 2)) < 1e-9, "tâm Y");
         });
         Test("PlacementOps.Rotated90 bốn lần trở về hình ban đầu (chi tiết DXF)", () =>
         {

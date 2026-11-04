@@ -18,6 +18,8 @@ public sealed record DirectionOption(NestDirection Direction, string Text)
     public override string ToString() => Text;
 }
 
+public sealed record SearchModeOption(NestSearchMode Mode, string Text, string Description);
+
 /// <summary>Thông số khổ tấm và thuật toán nesting hình dạng thật. Có thể lưu/nạp JSON.</summary>
 public sealed class NestSettings : ObservableObject
 {
@@ -25,6 +27,7 @@ public sealed class NestSettings : ObservableObject
     private NestDirection _direction = NestDirection.FillWidth;
     private bool _allowRotation = true;
     private double _maxSeconds = 30, _targetUtilizationPercent = 85, _rotationStep = 90;
+    private NestSearchMode _searchMode = NestSearchMode.Balanced;
 
     public ObservableCollection<SheetPreset> SheetPresets { get; } = new(Presets);
 
@@ -53,6 +56,12 @@ public sealed class NestSettings : ObservableObject
     };
 
     public static IReadOnlyList<double> RotationSteps { get; } = new double[] { 90, 45, 30, 15 };
+    public static IReadOnlyList<SearchModeOption> SearchModes { get; } = new[]
+    {
+        new SearchModeOption(NestSearchMode.Fast, "Nhanh", "Tối đa 5 giây; thử 4 thứ tự xếp, bỏ tìm kiếm cục bộ."),
+        new SearchModeOption(NestSearchMode.Balanced, "Cân bằng", "Dùng giới hạn thời gian đã cấu hình; 4 thứ tự xếp và 6 lượt tìm kiếm cục bộ."),
+        new SearchModeOption(NestSearchMode.Quality, "Chất lượng", "Dùng giới hạn thời gian đã cấu hình; 4 thứ tự xếp và tối đa 12 lượt tìm kiếm cục bộ."),
+    };
 
     public double SheetWidth { get => _sheetWidth; set => Upd(ref _sheetWidth, value); }
     public double SheetHeight { get => _sheetHeight; set => Upd(ref _sheetHeight, value); }
@@ -62,7 +71,25 @@ public sealed class NestSettings : ObservableObject
     public double Spacing { get => _spacing; set => Upd(ref _spacing, value); }
     public NestDirection Direction { get => _direction; set => Upd(ref _direction, value); }
     public bool AllowRotation { get => _allowRotation; set => Upd(ref _allowRotation, value); }
-    public double MaxSeconds { get => _maxSeconds; set => Upd(ref _maxSeconds, value); }
+    public double MaxSeconds
+    {
+        get => _maxSeconds;
+        set
+        {
+            if (Upd(ref _maxSeconds, value)) OnPropertyChanged(nameof(EffectiveMaxSeconds));
+        }
+    }
+    public NestSearchMode SearchMode
+    {
+        get => _searchMode;
+        set
+        {
+            if (Upd(ref _searchMode, value)) OnPropertyChanged(nameof(EffectiveMaxSeconds));
+        }
+    }
+    public double EffectiveMaxSeconds => SearchMode == NestSearchMode.Fast
+        ? Math.Min(MaxSeconds, NestOptions.FastMaxSeconds)
+        : MaxSeconds;
     /// <summary>0 nghĩa là không dừng sớm theo hiệu suất; thời hạn vẫn luôn có hiệu lực.</summary>
     public double TargetUtilizationPercent { get => _targetUtilizationPercent; set => Upd(ref _targetUtilizationPercent, value); }
     public double RotationStep { get => _rotationStep; set => Upd(ref _rotationStep, value); }
@@ -83,6 +110,7 @@ public sealed class NestSettings : ObservableObject
         if (!(MaxSeconds >= 0.5 && MaxSeconds <= 3600) || !double.IsFinite(MaxSeconds)) return "Giới hạn thời gian nesting phải từ 0,5 đến 3600 giây.";
         if (!(TargetUtilizationPercent >= 0 && TargetUtilizationPercent <= 100) || !double.IsFinite(TargetUtilizationPercent)) return "Mục tiêu hiệu suất phải từ 0 đến 100%. Nhập 0 để tắt dừng sớm theo mục tiêu.";
         if (!Enum.IsDefined(Direction)) return "Hướng lấp đầy không hợp lệ.";
+        if (!Enum.IsDefined(SearchMode)) return "Chế độ tìm kiếm nesting không hợp lệ.";
         if (!(RotationStep >= 5 && RotationStep <= 180) || !double.IsFinite(RotationStep)) return "Bước xoay phải nằm trong 5 đến 180 độ.";
         return null;
     }
@@ -93,9 +121,10 @@ public sealed class NestSettings : ObservableObject
     {
         Direction = Direction,
         AllowRotation = AllowRotation,
-        MaxSeconds = MaxSeconds,
+        MaxSeconds = EffectiveMaxSeconds,
         TargetUtilizationPercent = TargetUtilizationPercent,
         RotationStep = RotationStep,
+        SearchMode = SearchMode,
         Cancel = cancel,
         Report = report,
     };
@@ -113,6 +142,7 @@ public sealed class NestSettings : ObservableObject
         public double MaxSeconds { get; set; } = 30;
         public double TargetUtilizationPercent { get; set; } = 85;
         public double RotationStep { get; set; } = 90;
+        public string SearchMode { get; set; } = nameof(NestSearchMode.Balanced);
         public List<SheetPreset>? SheetPresets { get; set; }
     }
 
@@ -127,6 +157,7 @@ public sealed class NestSettings : ObservableObject
         MaxSeconds = MaxSeconds,
         TargetUtilizationPercent = TargetUtilizationPercent,
         RotationStep = RotationStep,
+        SearchMode = SearchMode.ToString(),
         SheetPresets = SheetPresets.ToList(),
     }, Json);
 
@@ -137,6 +168,8 @@ public sealed class NestSettings : ObservableObject
                   ?? throw new InvalidDataException("File thiết lập không có dữ liệu.");
         if (!Enum.TryParse<NestDirection>(dto.Direction, true, out var direction) || !Enum.IsDefined(direction))
             throw new InvalidDataException($"Hướng lấp đầy '{dto.Direction}' không hợp lệ.");
+        if (!Enum.TryParse<NestSearchMode>(dto.SearchMode, true, out var searchMode) || !Enum.IsDefined(searchMode))
+            throw new InvalidDataException($"Chế độ tìm kiếm '{dto.SearchMode}' không hợp lệ.");
 
         var candidate = new NestSettings
         {
@@ -148,7 +181,8 @@ public sealed class NestSettings : ObservableObject
             AllowRotation = dto.AllowRotation,
             MaxSeconds = dto.MaxSeconds,
             TargetUtilizationPercent = dto.TargetUtilizationPercent,
-            RotationStep = dto.RotationStep
+            RotationStep = dto.RotationStep,
+            SearchMode = searchMode
         };
         string? validationError = candidate.Validate();
         if (validationError != null)
@@ -196,6 +230,7 @@ public sealed class NestSettings : ObservableObject
         MaxSeconds = dto.MaxSeconds;
         TargetUtilizationPercent = dto.TargetUtilizationPercent;
         RotationStep = dto.RotationStep;
+        SearchMode = searchMode;
     }
 
     public void ResetDefaults() => FromJson(JsonSerializer.Serialize(new Dto(), Json));

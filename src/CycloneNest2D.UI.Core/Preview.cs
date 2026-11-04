@@ -14,6 +14,7 @@ public sealed class PreviewPart
     public double Height { get; init; }
     public int ColorIndex { get; init; }
     public bool IsRotated { get; init; }
+    public string? InvalidReason { get; init; }
     /// <summary>Đa giác kín: tô theo quy tắc even-odd (lỗ tự trống).</summary>
     public IReadOnlyList<(double X, double Y)[]> Loops { get; init; } = Array.Empty<(double, double)[]>();
     /// <summary>Có dùng hình thật không (false = chỉ hộp bao chữ nhật).</summary>
@@ -73,7 +74,8 @@ public sealed class PreviewScene
 
 public static class PreviewBuilder
 {
-    public static PreviewScene Build(SheetResult sheet, SheetDefinition def)
+    public static PreviewScene Build(SheetResult sheet, SheetDefinition def,
+        IReadOnlyDictionary<int, string>? invalidPlacements = null)
     {
         var parts = new List<PreviewPart>(sheet.Placements.Count);
 
@@ -104,6 +106,7 @@ public static class PreviewBuilder
                 Height = p.Height,
                 ColorIndex = ci,
                 IsRotated = p.IsRotated,
+                InvalidReason = invalidPlacements?.GetValueOrDefault(i),
                 Loops = loops,
                 HasShape = shaped,
                 MaterialTest = ls,

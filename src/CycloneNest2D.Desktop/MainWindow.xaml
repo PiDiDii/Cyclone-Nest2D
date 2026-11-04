@@ -507,7 +507,7 @@
  </UniformGrid>
  <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="12,0,0,0">
  <Button Style="{StaticResource PrimaryButton}" Command="{Binding RunCommand}" Padding="18,8" Margin="0,0,8,0" MinWidth="148" ToolTip="Chạy nesting (F5)">
- <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><Path Data="{StaticResource IcPlay}" Style="{StaticResource IcoSolid}" Width="13" Height="13" Fill="{DynamicResource OnPrimaryBrush}" Margin="0,0,9,0"/><TextBlock Text="Chạy nesting" FontSize="13.5" VerticalAlignment="Center" Foreground="{DynamicResource OnPrimaryBrush}"/></StackPanel>
+ <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><Path Data="{StaticResource IcPlay}" Style="{StaticResource IcoSolid}" Width="13" Height="13" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}" Margin="0,0,9,0"/><TextBlock Text="Chạy nesting" FontSize="13.5" VerticalAlignment="Center"/></StackPanel>
  </Button>
  <Button Style="{StaticResource DangerButton}" Command="{Binding CancelCommand}" Padding="16,8" Margin="0" MinWidth="92" ToolTip="Dừng và giữ kết quả tốt nhất hiện có">
  <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><Path Data="{StaticResource IcStop}" Style="{StaticResource IcoSolid}" Width="13" Height="13" Fill="{DynamicResource DangerTextBrush}" Margin="0,0,7,0"/><TextBlock Text="Dừng" VerticalAlignment="Center" Foreground="{DynamicResource DangerTextBrush}"/></StackPanel>
@@ -534,7 +534,7 @@
  <DockPanel LastChildFill="False">
  <TextBlock Text="Bộ lọc chi tiết" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
  </DockPanel>
- <TextBlock Text="Kéo một chi tiết vào tấm để đặt thủ công. Dùng mũi tên để đẩy tới vật cản; Shift + mũi tên nhích 1 mm." Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5" TextWrapping="Wrap" Margin="0,5,0,0"/>
+ <TextBlock Text="Kéo một chi tiết vào tấm để đặt thủ công. Vị trí chồng lấn hoặc ngoài tấm vẫn được giữ và đánh dấu đỏ. Dùng mũi tên để đẩy tới vật cản; Shift + mũi tên nhích 1 mm." Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5" TextWrapping="Wrap" Margin="0,5,0,0"/>
  </StackPanel>
  <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" x:Name="NestingPartsScrollViewer" CanContentScroll="False" Padding="10,0,10,10">
  <ItemsControl ItemsSource="{Binding PartGroups}" x:Name="NestingPartGroupsControl">
@@ -700,7 +700,7 @@
  <Grid Margin="10">
  <Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
  <Border Background="{DynamicResource ThumbBgBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="6" Margin="0,0,12,0" Height="68">
- <local:SheetThumbnailView Sheet="{Binding Sheet}"/>
+ <local:SheetThumbnailView Sheet="{Binding Sheet}" Revision="{Binding Revision}"/>
  </Border>
  <StackPanel Grid.Column="1" VerticalAlignment="Center">
  <DockPanel LastChildFill="False">
@@ -752,6 +752,9 @@
                             <StackPanel>
                                 <TextBlock Text="Thuật toán nesting" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,12"/>
                                 <CheckBox Content="Cho phép tự động xoay chi tiết" IsChecked="{Binding Settings.AllowRotation, Mode=TwoWay}" Margin="2,4,2,12" ToolTip="Cho phép thuật toán xoay part theo bước xoay bên dưới."/>
+                                <TextBlock Text="Chế độ tìm kiếm" Style="{StaticResource Label}"/>
+                                <ComboBox ItemsSource="{x:Static ui:NestSettings.SearchModes}" DisplayMemberPath="Text" SelectedValuePath="Mode" SelectedValue="{Binding Settings.SearchMode, Mode=TwoWay}" Padding="7,5" Margin="0,0,0,4"/>
+                                <TextBlock Text="Nhanh: tối đa 5 giây, không tìm cục bộ. Cân bằng: 6 lượt tìm cục bộ. Chất lượng: tối đa 12 lượt, tất cả trong giới hạn thời gian." Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
                                 <TextBlock Text="Hướng lấp đầy" Style="{StaticResource Label}"/>
                                 <ComboBox ItemsSource="{x:Static ui:NestSettings.Directions}" DisplayMemberPath="Text" SelectedValuePath="Direction" SelectedValue="{Binding Settings.Direction, Mode=TwoWay}" Padding="7,5" Margin="0,0,0,10"/>
                                 <TextBlock Text="Bước xoay chi tiết (độ)" Style="{StaticResource Label}"/>

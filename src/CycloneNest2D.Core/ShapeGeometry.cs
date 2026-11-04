@@ -28,6 +28,7 @@ public sealed class LoopSet
     internal double[] LMinX = Array.Empty<double>(), LMinY = Array.Empty<double>(),
                       LMaxX = Array.Empty<double>(), LMaxY = Array.Empty<double>();
     internal LoopSegment[][] LoopSegments = Array.Empty<LoopSegment[]>();
+    internal (double X, double Y)[] MaterialSamples = Array.Empty<(double X, double Y)>();
 
     /// <summary>Tạo contour chữ nhật thực sự cho part chữ nhật đơn giản.</summary>
     public static LoopSet FromRect(double w, double h, string? problem = null)
@@ -69,14 +70,57 @@ public sealed class LoopSet
             LMinX[i] = a; LMinY[i] = b; LMaxX[i] = c; LMaxY[i] = d;
             LoopSegments[i] = segs;
         }
+
+        var materialSamples = new List<(double X, double Y)>(n);
+        for (int i = 0; i < n; i++)
+        {
+            var (xs, ys) = Loops[i];
+            foreach (ref readonly var segment in LoopSegments[i].AsSpan())
+            {
+                if (segment.Len2 <= 1e-24) continue;
+                double length = Math.Sqrt(segment.Len2);
+                double epsilon = Math.Max(1e-9, Math.Min(1e-4, length * 1e-6));
+                double mx = (segment.X1 + segment.X2) / 2;
+                double my = (segment.Y1 + segment.Y2) / 2;
+                double nx = -segment.Vy / length * epsilon;
+                double ny = segment.Vx / length * epsilon;
+                if (TryAddSample(mx + nx, my + ny, xs, ys, materialSamples) ||
+                    TryAddSample(mx - nx, my - ny, xs, ys, materialSamples))
+                    break;
+            }
+        }
+        MaterialSamples = materialSamples.ToArray();
+    }
+
+    private bool TryAddSample(double x, double y, double[] xs, double[] ys, List<(double X, double Y)> samples)
+    {
+        if (!PointInLoop(x, y, xs, ys) || !ContainsMaterial(x, y)) return false;
+        samples.Add((x, y));
+        return true;
+    }
+
+    private static bool PointInLoop(double x, double y, double[] xs, double[] ys)
+    {
+        bool inside = false;
+        for (int i = 0, j = xs.Length - 1; i < xs.Length; j = i++)
+            if ((ys[i] > y) != (ys[j] > y) &&
+                x < (xs[j] - xs[i]) * (y - ys[i]) / (ys[j] - ys[i]) + xs[i])
+                inside = !inside;
+        return inside;
     }
 
     /// <summary>Điểm (x, y) có nằm trong vật liệu không (even-odd), loop dịch chuyển (dx, dy).</summary>
     public bool ContainsMaterial(double x, double y, double dx = 0, double dy = 0)
     {
         bool inside = false;
-        foreach (var (xs, ys) in Loops)
+        for (int loopIndex = 0; loopIndex < Loops.Count; loopIndex++)
         {
+            if (LMinX.Length == Loops.Count &&
+                (x < LMinX[loopIndex] + dx || x > LMaxX[loopIndex] + dx ||
+                 y < LMinY[loopIndex] + dy || y > LMaxY[loopIndex] + dy))
+                continue;
+
+            var (xs, ys) = Loops[loopIndex];
             int n = xs.Length;
             for (int i = 0, j = n - 1; i < n; j = i++)
             {
@@ -462,7 +506,6 @@ public static class ShapeOps
                     ref readonly var sa = ref segsA[p];
                     double sMinX = sa.MinX - minGap, sMaxX = sa.MaxX + minGap;
                     double sMinY = sa.MinY - minGap, sMaxY = sa.MaxY + minGap;
-
                     for (int q = 0; q < nb; q++)
                     {
                         ref readonly var sb = ref segsB[q];
@@ -483,30 +526,11 @@ public static class ShapeOps
 
     private static bool HasMaterialOverlap(LoopSet source, double sx, double sy, LoopSet other, double ox, double oy)
     {
-        foreach (var (xs, ys) in source.Loops)
-        {
-            for (int i = 0, j = xs.Length - 1; i < xs.Length; j = i++)
-            {
-                double dx = xs[i] - xs[j], dy = ys[i] - ys[j];
-                double length = Math.Sqrt(dx * dx + dy * dy);
-                if (length <= 1e-12) continue;
-                double epsilon = Math.Max(1e-9, Math.Min(1e-4, length * 1e-6));
-                double mx = (xs[i] + xs[j]) / 2 + sx;
-                double my = (ys[i] + ys[j]) / 2 + sy;
-                double nx = -dy / length * epsilon, ny = dx / length * epsilon;
-                if (ContainsMaterialSample(mx + nx, my + ny, xs, ys, source, sx, sy, other, ox, oy) ||
-                    ContainsMaterialSample(mx - nx, my - ny, xs, ys, source, sx, sy, other, ox, oy))
-                    return true;
-            }
-        }
+        foreach (var sample in source.MaterialSamples)
+            if (other.ContainsMaterial(sample.X + sx - ox, sample.Y + sy - oy))
+                return true;
         return false;
     }
-
-    private static bool ContainsMaterialSample(double x, double y, double[] xs, double[] ys,
-        LoopSet source, double sx, double sy, LoopSet other, double ox, double oy) =>
-        PointInPoly(x - sx, y - sy, xs, ys) &&
-        source.ContainsMaterial(x, y, sx, sy) &&
-        other.ContainsMaterial(x - ox, y - oy);
 
     public static bool ContainsInnerContour(DxfShape shape, double x, double y)
         => ContainsInnerContour(Build(shape), x, y);

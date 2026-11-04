@@ -6,6 +6,24 @@ namespace CycloneNest2D.Tests;
 public sealed class NestDiagnosticsTests
 {
     [Fact]
+    public void ConflictDetectsContainmentWithoutTreatingHolesAsMaterial()
+    {
+        var outer = ShapeOps.Build(ShapeOps.RectShape("Outer", 10, 10));
+        var inner = ShapeOps.Build(ShapeOps.RectShape("Inner", 2, 2));
+        var ring = new DxfShape(
+            "Ring",
+            [new CircleSeg(10, 10, 10, "CUT"), new CircleSeg(10, 10, 8, "CUT")],
+            1,
+            new Dictionary<string, int> { ["CUT"] = 1 },
+            Array.Empty<string>(),
+            0);
+        var holeInsert = ShapeOps.Build(ShapeOps.RectShape("Hole insert", 5, 5));
+
+        Assert.True(ShapeOps.Conflict(outer, 0, 0, inner, 4, 4, 0));
+        Assert.False(ShapeOps.Conflict(ShapeOps.Build(ring), 0, 0, holeInsert, 6, 6, 0));
+    }
+
+    [Fact]
     public void CollectsVariantSearchAndConflictMetricsWithoutChangingPlacementValidity()
     {
         var ring = new DxfShape(

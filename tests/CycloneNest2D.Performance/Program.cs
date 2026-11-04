@@ -27,7 +27,7 @@ internal static class PerformanceProgram
             Console.WriteLine($"Runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription} · {Environment.OSVersion} · " +
                               $"{Environment.ProcessorCount} logical CPU · {Environment.Is64BitProcess switch { true => "64-bit", false => "32-bit" }}");
             Console.WriteLine($"Mode: {(config.Full ? "FULL" : "QUICK")} · {config.Repetitions} lần đo/profile · " +
-                              $"ngân sách {config.MaxSeconds:0.##} giây/lần · {workloads.Count} workload(s)");
+                              $"ngân sách {config.MaxSeconds:0.##} giây/lần · tìm kiếm {config.SearchMode} · {workloads.Count} workload(s)");
             Console.WriteLine("Các lượt benchmark chạy tuần tự; warm-up và validator không tính vào thời gian NestEngine.\n");
             if (config.Diagnostics)
                 Console.WriteLine("Diagnostics bật: Search bao gồm Verify; Verify bao gồm Conflict (thời gian lồng nhau, không cộng trực tiếp).\n");
@@ -104,6 +104,7 @@ internal static class PerformanceProgram
         {
             AllowRotation = true,
             Direction = NestDirection.FillWidth,
+            SearchMode = config.SearchMode,
             RotationStep = profile.RotationStep,
             TargetUtilizationPercent = profile.TargetUtilizationPercent,
             MaxSeconds = warmup ? Math.Min(config.MaxSeconds, 0.25) : config.MaxSeconds,
@@ -162,7 +163,9 @@ internal static class PerformanceProgram
         {
             Workload = workload.Name,
             Description = workload.Description,
-            Profile = profile.Name,
+            Profile = config.SearchMode == NestSearchMode.Balanced
+                ? profile.Name
+                : $"{config.SearchMode}-{profile.Name}",
             Strategy = result.Strategy,
             CompletionStatus = hitTimeBudget ? "time-budget" : placed == requested ? "complete" : "partial",
             StopReason = hitTimeBudget ? "time budget reached" : placed == requested ? "all instances placed" : "instances unplaced",
@@ -343,6 +346,7 @@ internal static class PerformanceProgram
               --quick                 3 synthetic workloads, one measured run/profile (default)
               --full                  Full workload matrix, three measured runs/profile
               --diagnostics           Collect internal timings; adds measurement overhead
+              --search-mode <mode>    Search breadth: fast, balanced (default), or quality
               --repeat <count>        Override measured repetitions (1-20)
               --max-seconds <seconds> NestEngine time budget per run (0.1-3600)
               --dxf <file-or-folder>  Add a real DXF file, or recursively load a folder of DXFs

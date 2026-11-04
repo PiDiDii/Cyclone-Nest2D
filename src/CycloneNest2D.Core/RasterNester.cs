@@ -143,6 +143,8 @@ internal static class RasterNester
         var result = new NestResult();
         var sw = Stopwatch.StartNew();
         double maxSeconds = Math.Clamp(double.IsFinite(opt.MaxSeconds) ? opt.MaxSeconds : 30, 0.05, 3600);
+        if (opt.SearchMode == NestSearchMode.Fast)
+            maxSeconds = Math.Min(maxSeconds, NestOptions.FastMaxSeconds);
         opt.MaxSeconds = maxSeconds;
         double target = Math.Clamp(double.IsFinite(opt.TargetUtilizationPercent) ? opt.TargetUtilizationPercent : 0, 0, 100);
         var types = new List<PartType>();
@@ -371,6 +373,12 @@ internal static class RasterNester
                     .ThenBy(item => item.Type).ThenBy(item => item.Inst).ToList()
             )).ToList()
             : [("thứ tự tốt nhất hiện tại", incumbentOrder)];
+        int searchIterations = opt.SearchMode switch
+        {
+            NestSearchMode.Fast => 0,
+            NestSearchMode.Quality => 12,
+            _ => 6
+        };
 
         Outcome? best = incumbent;
         List<(int Type, int Inst)> bestOrder = incumbentOrder;
@@ -378,12 +386,12 @@ internal static class RasterNester
         var syncLock = new object();
         bool earlyStop = false;
         int completedLayouts = 0;
-        int progressSteps = Math.Max(1, keyRuns.Count + 6);
+        int progressSteps = Math.Max(1, keyRuns.Count + (runLocalSearch ? searchIterations : 0));
         int totalProgressSteps = progressSteps * phaseCount;
 
         Parallel.ForEach(keyRuns, runItem =>
         {
-            if (earlyStop || IsStopped(opt, sw)) return;
+            if (Volatile.Read(ref earlyStop) || IsStopped(opt, sw)) return;
             var outcome = Pack(runItem.Order, types, sheet, cellSize, spacingCells, rows, cols, primaryX, opt, sw,
                 fraction => opt.ReportProgress?.Invoke(
                     0.9 * (phaseIndex * progressSteps + Volatile.Read(ref completedLayouts) + fraction) / totalProgressSteps));
@@ -404,9 +412,9 @@ internal static class RasterNester
                     best = outcome;
                     bestOrder = runItem.Order;
                     bestName += " · đã đạt mục tiêu hiệu suất";
-                    earlyStop = true;
+                    Volatile.Write(ref earlyStop, true);
                 }
-                if (outcome.Interrupted) earlyStop = true;
+                if (outcome.Interrupted) Volatile.Write(ref earlyStop, true);
             }
         });
 
@@ -414,7 +422,6 @@ internal static class RasterNester
             !GoalReached(best, fullSheetArea, target))
         {
             var rng = new Random(12345);
-            const int searchIterations = 6;
             for (int iteration = 0; iteration < searchIterations && !IsStopped(opt, sw); iteration++)
             {
                 var candidate = new List<(int Type, int Inst)>(bestOrder);

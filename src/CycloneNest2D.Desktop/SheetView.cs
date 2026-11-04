@@ -3,13 +3,15 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using CycloneNest2D.Core;
 using CycloneNest2D.UI;
+using Rect = System.Windows.Rect;
 
 namespace CycloneNest2D.Desktop;
 
 /// <summary>
 /// Vẽ một tấm và các chi tiết đã đặt. Lăn chuột = phóng to/thu nhỏ; kéo chuột giữa/phải hoặc kéo nền = di chuyển khung nhìn;
-/// kéo chi tiết = dời (đỏ nếu chồng/quá gần/ra ngoài lề, thả ra thì bị từ chối); nhấp đúp hoặc phím R = xoay 90°;
+/// kéo chi tiết = dời (đỏ nếu vị trí không hợp lệ; vẫn giữ vị trí khi thả); nhấp đúp hoặc phím R = xoay 90°;
 /// phím mũi tên = đẩy tới vật cản/mép tấm (Shift = nhích 1 mm); R xoay, M lật; Esc = huỷ thao tác kéo.
 /// </summary>
 public sealed class SheetView : FrameworkElement
@@ -80,6 +82,11 @@ public sealed class SheetView : FrameworkElement
     private string? _dragError;
     private long _lastValidationTimestamp;
     private Point _lastValidatedPosition;
+    private PartItem? _dropPreviewSource;
+    private PreviewPart? _dropPreviewPart;
+    private Geometry? _dropPreviewGeometry;
+    private Point _dropPreviewCenter;
+    private string? _dropPreviewError;
 
     private bool _panning;
     private Point _panStart, _panOrigin;
@@ -185,6 +192,42 @@ public sealed class SheetView : FrameworkElement
         new((screen.X - _ox) / _zoom, (Scene?.SheetHeight ?? 0) - (screen.Y - _oy) / _zoom);
 
     public Point WorldFromControl(Point point) => ToWorld(point);
+
+    public void SetDropPreview(PartItem? part, Point center, Point controlPosition, string? error)
+    {
+        if (part == null)
+        {
+            _dropPreviewSource = null;
+            _dropPreviewPart = null;
+            _dropPreviewGeometry = null;
+            _dropPreviewError = null;
+            InvalidateVisual();
+            return;
+        }
+
+        if (!ReferenceEquals(part, _dropPreviewSource))
+        {
+            _dropPreviewSource = part;
+            _dropPreviewPart = null;
+            _dropPreviewGeometry = null;
+            if (part.IsValid)
+            {
+                var definition = part.ToDefinition();
+                var placement = new Placement(part.Name, 1, 0, 0, definition.Width, definition.Height, false, definition.Shape);
+                var sheet = new SheetResult { Index = 1, Width = definition.Width, Height = definition.Height };
+                sheet.Placements.Add(placement);
+                var preview = PreviewBuilder.Build(sheet,
+                    new SheetDefinition(definition.Width, definition.Height, 0, 0)).Parts.Single();
+                _dropPreviewPart = preview;
+                _dropPreviewGeometry = BuildGeometry(preview);
+            }
+        }
+
+        _dropPreviewCenter = center;
+        _dropPreviewError = error;
+        _mouse = controlPosition;
+        InvalidateVisual();
+    }
 
     public void Fit()
     {
@@ -315,8 +358,10 @@ public sealed class SheetView : FrameworkElement
         {
             if (_dragMoved && _selectedIndices.Contains(p.Index)) continue;
             if (!_geo.TryGetValue(p.Index, out var g)) continue;
-            var pen = _selectedIndices.Contains(p.Index) ? selPen : p.Index == _hover ? hoverPen : normalPen;
-            dc.DrawGeometry(Fills[p.ColorIndex % Fills.Length], pen, g);
+            var pen = p.InvalidReason != null
+                ? new Pen(Brushes.Red, thick)
+                : _selectedIndices.Contains(p.Index) ? selPen : p.Index == _hover ? hoverPen : normalPen;
+            dc.DrawGeometry(p.InvalidReason == null ? Fills[p.ColorIndex % Fills.Length] : invalid, pen, g);
         }
         if (_dragMoved)
         {
@@ -327,6 +372,17 @@ public sealed class SheetView : FrameworkElement
                 dc.DrawGeometry(_dragError == null ? Fills[dragged.ColorIndex % Fills.Length] : invalid,
                                 _dragError == null ? selPen : new Pen(Brushes.Red, thick), geometry);
             }
+            dc.Pop();
+        }
+        if (_dropPreviewPart != null && _dropPreviewGeometry != null)
+        {
+            dc.PushTransform(new TranslateTransform(
+                _dropPreviewCenter.X - _dropPreviewPart.Width / 2,
+                _dropPreviewCenter.Y - _dropPreviewPart.Height / 2));
+            dc.DrawGeometry(
+                _dropPreviewError == null ? Fills[_dropPreviewPart.ColorIndex % Fills.Length] : invalid,
+                _dropPreviewError == null ? selPen : new Pen(Brushes.Red, thick),
+                _dropPreviewGeometry);
             dc.Pop();
         }
         dc.Pop();
@@ -349,10 +405,16 @@ public sealed class SheetView : FrameworkElement
         string? tip = null;
         if (_dragIdx >= 0 && _dragMoved)
             tip = _dragError == null ? $"X {_dragPos.X:0.#}, Y {_dragPos.Y:0.#}" : $"X {_dragPos.X:0.#}, Y {_dragPos.Y:0.#}\nKhông hợp lệ: {_dragError}";
+        else if (_dropPreviewSource != null)
+            tip = _dropPreviewError == null
+                ? $"{_dropPreviewSource.Name} · thả để đặt"
+                : $"{_dropPreviewSource.Name}\nKhông hợp lệ: {_dropPreviewError}";
         else if (_hover >= 0 && _dragIdx < 0)
         {
             var hp = s.Parts.FirstOrDefault(q => q.Index == _hover);
-            if (hp != null) tip = $"{hp.Label}\n{hp.Width:0.#} x {hp.Height:0.#} mm";
+            if (hp != null) tip = hp.InvalidReason == null
+                ? $"{hp.Label}\n{hp.Width:0.#} x {hp.Height:0.#} mm"
+                : $"{hp.Label}\nKhông hợp lệ: {hp.InvalidReason}";
         }
         if (tip != null)
         {
@@ -434,7 +496,7 @@ public sealed class SheetView : FrameworkElement
             }
             if (!_selectedIndices.Contains(idx)) SetSelection(new[] { idx }, idx);
             else if (SelectedIndex != idx) SetSelection(_selectedIndices, idx);
-            if (e.ClickCount == 2) { Model?.RotateSelected(); return; }
+            if (e.ClickCount == 2) { Model?.RotateSelectedAt(w.X, w.Y); return; }
             var part = s.Parts.FirstOrDefault(q => q.Index == idx);
             if (part == null || Model == null || !Model.IsIdle) return;
             _dragIdx = idx;
@@ -570,7 +632,7 @@ public sealed class SheetView : FrameworkElement
             bool moved = _dragMoved;
             double dx = _dragPos.X - _dragOrigin.X, dy = _dragPos.Y - _dragOrigin.Y;
             CancelDrag();
-            if (moved) Model?.TryMoveSelected(dx, dy);
+            if (moved) Model?.MoveSelectedAllowInvalid(dx, dy);
         }
         EndPan();
     }
@@ -643,8 +705,26 @@ public sealed class SheetView : FrameworkElement
         bool fineStep = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
         switch (e.Key)
         {
-            case Key.R: Model.RotateSelected(); e.Handled = true; break;
-            case Key.M: Model.MirrorSelected(); e.Handled = true; break;
+            case Key.R:
+            {
+                var anchor = ToWorld(_mouse);
+                if (s.HitTest(anchor.X, anchor.Y) == SelectedIndex)
+                    Model.RotateSelectedAt(anchor.X, anchor.Y);
+                else
+                    Model.RotateSelected();
+                e.Handled = true;
+                break;
+            }
+            case Key.M:
+            {
+                var anchor = ToWorld(_mouse);
+                if (s.HitTest(anchor.X, anchor.Y) == SelectedIndex)
+                    Model.MirrorSelectedAt(anchor.X, anchor.Y);
+                else
+                    Model.MirrorSelected();
+                e.Handled = true;
+                break;
+            }
             case Key.Left: Move(-1, 0); e.Handled = true; break;
             case Key.Right: Move(1, 0); e.Handled = true; break;
             case Key.Up: Move(0, 1); e.Handled = true; break;

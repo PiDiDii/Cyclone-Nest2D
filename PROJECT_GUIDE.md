@@ -107,13 +107,27 @@ Lưu ý: dữ liệu dự án hiện lưu danh sách preset nhưng không có t�
 
 `RasterNester` chọn cell size thích ứng theo kích thước khổ, chi tiết nhỏ nhất, spacing, độ phức tạp contour và giới hạn bộ nhớ/lưới. Lưới raster được xây bảo thủ: ô chạm vật liệu được đánh dấu chiếm, nhưng vùng lỗ được giữ trống. Các part đặt trước được giãn theo khe hở. Thuật toán dùng phép toán bit để tìm vị trí ứng viên nhanh; trước khi xác minh chính xác bằng hình học (`ShapeOps.Conflict`), Verify dùng danh sách placement sắp theo X cùng giới hạn kích thước lớn nhất để bỏ qua các placement chắc chắn nằm ngoài vùng lân cận. Phép lọc này chỉ loại cặp không thể chạm theo X; kiểm tra khoảng cách/hộp bao và contour thật vẫn được giữ nguyên.
 
-Với bước xoay mịn, variant 0°/90°/180°/270° được dựng và thử trước. Khi bật target, engine dành tối đa 20% ngân sách cho lượt coarse nhanh; nếu chưa đạt target, phần góc mịn theo `RotationStep` chỉ được dựng/thử tiếp khi còn thời gian. Khi tắt target, góc mịn cũng được mở rộng nếu còn ngân sách. Các orientation không thuộc lưới góc người dùng chọn không được tự thêm. Cell size chỉ refinement khi chi tiết nhỏ hoặc spacing nhỏ so với lưới theo khổ; refinement bị chặn ở mức tăng tối đa 25% số ô và vẫn tuân thủ giới hạn raster. Độ phức tạp contour có thể chọn ô lớn hơn để giới hạn raster work. Thuật toán giữ các thứ tự sắp theo diện tích, cạnh dài, cạnh ngắn, chu vi cùng số lượt xáo trộn tất định; có thể dừng sớm khi đạt utilization mục tiêu. `MaxSeconds` bị giới hạn trong khoảng nội bộ 0.05–3600 giây.
+Với bước xoay mịn, variant 0°/90°/180°/270° được dựng và thử trước. Khi bật target, engine dành tối đa 20% ngân sách cho lượt coarse nhanh; nếu chưa đạt target, phần góc mịn theo `RotationStep` chỉ được dựng/thử tiếp khi còn thời gian. Khi tắt target, góc mịn cũng được mở rộng nếu còn ngân sách. Các orientation không thuộc lưới góc người dùng chọn không được tự thêm. Cell size chỉ refinement khi chi tiết nhỏ hoặc spacing nhỏ so với lưới theo khổ; refinement bị chặn ở mức tăng tối đa 25% số ô và vẫn tuân thủ giới hạn raster. Độ phức tạp contour có thể chọn ô lớn hơn để giới hạn raster work. Thuật toán thử thứ tự theo diện tích, cạnh dài, cạnh ngắn và chu vi, sau đó có thể tìm kiếm cục bộ với seed cố định; các lượt thứ tự chạy song song nên seed không bảo đảm toàn bộ kết quả tất định khi có dừng sớm/thời hạn. `MaxSeconds` bị giới hạn trong khoảng nội bộ 0.05–3600 giây.
 
 `NestResult` mang sheet, placement, utilization, ghi chú, chiến lược và danh sách chưa đặt. Utilization dùng diện tích vật liệu thật (không tính lỗ), theo mô tả trong README. Khi có lỗ/contour lõm, hộp bao không thể dùng để kết luận va chạm.
 
 Core xác thực kích thước tấm và bước xoay (5–180°) ngay cả khi được gọi ngoài UI. Một lần chạy bị giới hạn tối đa 250.000 instance; lưới raster tối đa 8192 ô mỗi chiều và 16.777.216 ô tổng. Đầu vào vượt giới hạn bị từ chối với thông báo thay vì tạo danh sách/cấp phát lưới không kiểm soát. Các vòng lặp raster kiểm tra cancellation định kỳ; hủy được thể hiện riêng với hết thời gian và các chi tiết chưa xử lý vẫn được báo rõ.
 
 `RasterNester.GapTol` là dung sai 0,1 mm do rời rạc hóa cung tròn. Với contour thật, bước xác minh chính xác dùng `max(0, SheetDefinition.Spacing - GapTol)`: khoảng cách biên có thể thấp hơn spacing cấu hình tối đa 0,1 mm, nhưng không chấp nhận chồng lấn. Validator dùng cùng ngưỡng cho placement có contour thật; hai placement chữ nhật kiểm tra spacing chính xác theo hộp bao. Đây là dung sai xác minh, không phải thay đổi lề hoặc giá trị spacing lưu trong thiết lập.
+
+#### Kiểm kê thuật toán đang triển khai
+
+| Thành phần | Cách thực hiện hiện tại | Giới hạn cần hiểu |
+|---|---|---|
+| Đọc và chuẩn hóa DXF | Đọc DXF ASCII theo group code; xử lý LINE, CIRCLE, ARC, LWPOLYLINE, POLYLINE, ELLIPSE, SPLINE, INSERT, TEXT và MTEXT. INSERT áp dụng transform/block; ellipse và spline được xấp xỉ bằng các đoạn thẳng. Layer, `$INSUNITS`/đơn vị cưỡng bức, hộp bao và gốc tọa độ được chuẩn hóa trước khi tạo geometry mm. | Không hỗ trợ DXF nhị phân. Entity/biến thể không hỗ trợ được cảnh báo hoặc bỏ qua; TEXT/MTEXT không phải contour cắt. |
+| Dựng contour | Gom đầu mút trong `JoinTol` 0,02 mm thành node, nối cạnh thành loop; cung tròn được chia theo sai số dây cung `ChordTol` 0,05 mm. Kiểm tra junction/loop kín và độ khớp hộp bao; tính diện tích và quan hệ chứa theo quy tắc even-odd. | Contour không đáng tin cậy bị từ chối, không thay bằng hộp bao. Xấp xỉ cung và spline vẫn có sai số hình học hữu hạn. |
+| Phát sinh orientation và raster mask | Tạo các orientation theo bước xoay; ưu tiên góc vuông trong pha đầu, chỉ dựng góc mịn khi chưa đạt mục tiêu và còn ngân sách. Cell size được chọn theo kích thước/độ phức tạp và giới hạn lưới. Mask đánh dấu vùng vật liệu và giãn theo spacing để lọc nhanh ứng viên. | Raster chỉ tạo ứng viên và không tự chứng minh va chạm hay khoảng cách chính xác. |
+| Tìm vị trí | Với mỗi thứ tự, quét hàng trên mask bằng bitset; xét ứng viên theo trục ưu tiên và chọn tọa độ nhỏ nhất theo trục chính rồi trục phụ. Tối đa 400 ứng viên bị loại có thể được xác minh trong một lần tìm vị trí trước khi dừng tìm ở đó. Mỗi placement được kiểm tra contour/khe hở chính xác trước khi ghi vào sheet. | Đây là chiến lược heuristic, không bảo đảm tối ưu toàn cục; chất lượng phụ thuộc lưới, góc xoay, thứ tự và ngân sách thời gian. |
+| Tạo và chấm layout | Thử lần lượt bốn thứ tự giảm dần theo diện tích thật, cạnh dài, cạnh ngắn và tổng `W + H` (proxy chu vi hộp bao); các lượt này chạy song song. Khi được bật, tìm kiếm cục bộ tạo thứ tự ứng viên bằng đổi chỗ/chuyển vị trí, với seed `12345`: 0 lượt Fast, 6 Balanced, 12 Quality. So sánh theo ít chi tiết chưa đặt, ít sheet, phạm vi dùng theo trục chính, phạm vi trục phụ, rồi diện tích vật liệu đã đặt lớn hơn. Có thể dừng khi đã đặt đủ và đạt utilization mục tiêu. | `W + H` không phải chu vi contour thật. Thời hạn và dừng sớm dùng chung giữa các lượt song song; kết quả có thể phụ thuộc lịch chạy khi chạm giới hạn thời gian. Seed cố định không biến toàn bộ pipeline song song thành tất định. |
+| Chọn khổ trong UI | Với mỗi nhóm vật liệu/độ dày, thử từng preset hợp lệ; ưu tiên phương án đặt được nhiều chi tiết nhất trên tấm đầu tiên, sau đó utilization cao hơn, rồi diện tích tấm nhỏ hơn. Nếu chỉ có một preset, áp dụng các sheet còn lại từ cùng lượt chạy; nhiều preset thì lặp lại lựa chọn cho lượng còn lại. | Không quản lý tồn kho; số tấm được sinh theo nhu cầu. Đây là lựa chọn khổ trong UI, tách biệt với scoring layout bên trong Core. |
+| Xác minh độc lập | `Validator` kiểm tra lề, contour và từng cặp gần nhau; cặp chữ nhật dùng khoảng cách hộp bao, cặp có contour dùng giao cắt, khoảng cách segment và quan hệ chứa. UI gọi lại kiểm tra khi sửa placement và trước export. | Validator không tối ưu lại layout; lỗi validation chặn export. |
+| Nhóm mẫu và xuất | Nhóm sheet theo vật liệu/độ dày; gộp mẫu có signature giống nhau (khổ, material/thickness, placement và geometry), đánh số và thêm số lượng. Micro-joints phân bổ theo chiều dài segment, giới hạn theo khả năng chia an toàn; tùy chọn common-edge lọc các đoạn thẳng trùng/chồng lấn khi ghi DXF. PDF nhóm báo cáo theo material/thickness. | DXF round-trip test không thay thế kiểm tra CAD/CAM đích. Micro-joints làm ngắt đường cắt và cần xác nhận quy trình sản xuất. |
+| Tính chỉ số báo cáo | Tính diện tích sheet, diện tích chi tiết, utilization theo toàn sheet, chiều dài sử dụng theo trục dài, efficiency theo envelope (chiều dài dùng × bề rộng hữu dụng) và tỷ lệ hao hụt; danh mục chi tiết đếm placement theo tên trên từng mẫu. | Efficiency theo envelope và utilization theo diện tích toàn sheet là hai chỉ số khác nhau; không dùng thay nhau. |
 
 ### 4.5 Kiểm tra kết quả và hiển thị
 
@@ -125,15 +139,15 @@ Canvas hỗ trợ chọn đơn, Ctrl-click để cộng/trừ selection và qué
 
 ### 4.6 Lưu và mở dự án
 
-`ProjectStore.Save` lưu settings dưới dạng JSON trong trường `Settings`, cùng danh sách Part. Hình chữ nhật lưu width/height; chi tiết DXF lưu đường dẫn tương đối với file `.nest2d`, danh sách layer, tên, số lượng, trạng thái xoay, vật liệu, độ dày và flip.
+Project `.nest2d` nhiều nhóm gồm một file chỉ mục và các workspace con trong thư mục `<tên dự án>.data`. Chỉ mục lưu ID/tên/đường dẫn tương đối và số liệu tóm tắt của từng nhóm; workspace lưu settings JSON, danh sách Part và kết quả nesting. Workspace hình chữ nhật lưu width/height; chi tiết DXF lưu đường dẫn tương đối, danh sách layer, tên, số lượng, trạng thái xoay, vật liệu, độ dày và flip. Dữ liệu workspace/index được ghi qua file tạm rồi thay thế file đích.
 
-`ProjectStore.Load` phục hồi settings, tạo Part chữ nhật trực tiếp, hoặc nạp lại DXF từ đường dẫn tương đối. Thiếu/lỗi một DXF được ghi vào `problems` và bỏ qua item đó thay vì làm hỏng toàn bộ phiên nạp. Vì DXF ngoài vẫn là nguồn geometry, khi di chuyển dự án sang máy/thư mục khác cần giữ các file DXF tại vị trí tương đối tương ứng.
+Khi mở project index, ứng dụng giải đường dẫn workspace con; khi mở workspace, `ProjectStore.LoadWorkspace` phục hồi settings/kết quả, tạo lại hình chữ nhật/template hoặc đọc lại DXF từ đường dẫn tương đối. DXF thiếu/lỗi được thêm vào `problems`, còn các Part khác vẫn được nạp. Nếu settings cũ không có danh sách preset khổ tấm, loader khôi phục preset từ sheet trong kết quả đã lưu hoặc metadata Part. `ProjectFormatMigrator` nâng schema cũ trước khi nạp. Vì DXF ngoài vẫn là nguồn geometry, khi di chuyển dự án cần giữ các file DXF tại vị trí tương đối tương ứng.
 
 ### 4.7 Xuất DXF/PDF
 
-Lệnh export của UI gọi `ExportService`, sau đó `DxfWriter`/`DxfExportWriter` ghi DXF. Tùy chọn có thể quyết định một file hay mỗi sheet một file, layer, nhãn, block, đơn vị, hướng nest và kiểu geometry. Micro-joints thông minh mặc định bật; mặc định tạo tổng cộng 6 cầu rộng 0,4 mm trên mỗi part và phân bổ lên các contour đủ kích thước, bao gồm cả contour ngoài lẫn đường bao lỗ. Từng contour được phân loại theo chiều dài/rộng; contour nhỏ bị bỏ qua. Ngưỡng mặc định theo hộp thoại: contour nhỏ có chiều dài và rộng dưới 50 mm; contour lớn có cả chiều dài và rộng trên 500 mm; các trường hợp còn lại là contour vừa. Có thể chỉnh ngưỡng và thông số cầu. Đây là đường cắt bị ngắt chứ không phải đường bù CAM; cần xác minh DXF sau export trên CAM/máy cắt đích. Tùy chọn xóa cạnh chung khử các đoạn thẳng trùng hoặc chồng lấn, kể cả khi chúng thuộc các layer khác nhau; tính năng không tương thích với xuất Part dạng Block. PDF được tạo bởi lớp Desktop dùng PDFsharp; mỗi tấm nesting có chung một báo cáo gồm thông số, sơ đồ và danh mục chi tiết của chính tấm đó; báo cáo không còn chỉ số chiều dài sử dụng. Preview, in và PDF dùng chung lựa chọn A4 ngang/dọc, một hoặc hai báo cáo mỗi trang, và nhãn chi tiết `None`, `ID Number` hoặc `Part Name`. Bảng danh mục có thêm độ dày; vật liệu, độ dày và khổ tấm chỉ xuất hiện ở phần đầu báo cáo. Bố cục căn theo tỷ lệ tấm, bỏ dòng ngày giờ và giới hạn số dòng theo vùng in được để danh mục không lấn sang báo cáo/trang kế tiếp.
+Lệnh export UI qua `ExportCoordinator`/`ExportService` kiểm tra nhóm tấm rồi gọi `DxfWriter`/`DxfExportWriter`. DXF có thể xuất theo mẫu trong nhóm vật liệu/độ dày đang chọn; tên file dùng dạng `NNNN-vật_liệu độ_dày-số_lượng` (ví dụ `0001-ZAM 1.2-1`). Tùy chọn gồm layout file, layer, nhãn, block, đơn vị, hướng nest và kiểu geometry. Micro-joints mặc định bật với mục tiêu tổng cộng 6 cầu rộng 0,4 mm trên mỗi Part; số thực tế có thể thấp hơn nếu segment/contour không đủ khả năng chia an toàn. Cầu được phân bổ theo chiều dài segment đủ điều kiện và bỏ qua contour nhỏ hơn ngưỡng cấu hình (mặc định 50 mm). Tùy chọn xóa cạnh chung loại bỏ đoạn thẳng trùng/chồng lấn, kể cả khác layer, và không dùng đồng thời với xuất Part dạng Block. Micro-joints làm ngắt đường cắt, không phải bù CAM; cần xác minh trên CAM/máy cắt đích.
 
-Các kiểm thử lõi có đường đi xuất rồi đọc lại DXF để xác nhận segment/placement. Tuy vậy, kiểm thử round-trip parser không chứng minh file mở hoàn hảo trong AutoCAD, ZWCAD hay Inventor; cần kiểm tra compatibility trên các ứng dụng CAD mục tiêu trước khi phát hành sản xuất.
+PDF được dựng ở Desktop bằng PDFsharp và phân loại theo vật liệu/độ dày; preview cho phép chọn nhóm. Báo cáo cho mẫu tấm gồm tên dự án, tên tấm, số lượng tấm, thông tin vật liệu/độ dày/khổ, sơ đồ và danh mục chi tiết trên tấm. Preview, in và PDF dùng chung cấu hình trang A4 ngang/dọc, một hoặc hai báo cáo mỗi trang và lựa chọn nhãn chi tiết. Test Core có đường đi xuất rồi đọc lại DXF để xác nhận segment/placement, nhưng round-trip parser không chứng minh tương thích với CAD/CAM; cần kiểm tra file trên phần mềm đích trước khi dùng sản xuất.
 
 ## 5. Kiểu dữ liệu và bất biến cần giữ
 
@@ -186,45 +200,19 @@ dotnet run --project tests\CycloneNest2D.Performance -c Release -- --full --dxf 
 
 Để so sánh trước/sau tối ưu, dùng cùng máy, cấu hình Release, dữ liệu DXF, số lần lặp và ngân sách; không so Debug với Release hoặc dùng thời gian validator thay cho thời gian engine. Kết quả benchmark không tự khẳng định nguyên nhân hot path: dùng CPU/allocation profiler trên workload chậm nhất trước khi sửa thuật toán. Dấu vân tay khác nhau giữa các lần chạy cần được xem cùng trạng thái chạm giới hạn thời gian và tính song song của heuristic.
 
-## 7. Chất lượng mã: kết quả rà soát và giới hạn xác minh
+## 7. Tự động hóa kiểm tra và ranh giới xác minh
 
-### Điểm tốt
+GitHub Actions cấu hình tại `.github/workflows/ci.yml` có ba luồng:
 
-- Tách Core khỏi WPF; cấu trúc hỗ trợ test logic đa nền tảng.
-- Nullability và implicit usings được bật trong các project chính.
-- Có hai bộ test tự chạy, bao phủ nhiều nhánh quan trọng: DXF units/layers/bulge/ellipse/spline/INSERT, hình học xoay, nesting, validator, save/load UI, cancellation, stale state và thao tác thủ công.
-- Có validator độc lập sau nesting; có preflight contour; các lỗi nhập DXF được đưa thành warning/thông báo.
-- `.gitignore` đã bỏ qua `bin/`, `obj/`, `.vs/`, `out/` và artefact IDE.
+- **Core và UI Core:** chạy test project riêng trên `ubuntu-latest` và `windows-latest` bằng .NET 8.
+- **Desktop:** trên Windows chạy `dotnet format ... --verify-no-changes` và build WPF Release.
+- **Performance:** trên Windows chạy benchmark nhanh ba lượt, giới hạn mỗi lượt 1,5 giây và upload báo cáo JSON/CSV làm artifact trong 14 ngày.
 
-### Các điểm cần cải thiện lâu dài
+Hai project test dùng xUnit. Core/UI Core test có thể chạy độc lập hoặc lọc theo trait; workflow `Category=EndToEnd` chạy trên Windows kiểm tra pipeline DXF → nesting → chỉnh vị trí → lưu/mở workspace → xuất/đọc lại DXF. Đây là kiểm thử nghiệp vụ qua API, không phải tự động hóa thao tác chuột/bàn phím hay xác minh render WPF.
 
-1. **Tiếp tục mở rộng test theo domain.** Hai project test đã dùng xUnit với discovery, lọc theo domain và coverage collector. Khi thêm test, đặt chúng trong domain/use-case phù hợp; Performance vẫn chạy riêng để không đặt ngưỡng thời gian tuyệt đối trong unit test.
-2. **Thêm CI đa nền tảng.** Build/test Core và UI Core trên Windows/Linux; build Desktop trên Windows. Lưu artifact/log và kiểm tra format/lint để phát hiện lỗi sớm.
-3. **Đưa cảnh báo compiler và phân tích tĩnh thành cổng chất lượng.** Bật warnings-as-errors có chọn lọc, `dotnet format --verify-no-changes`, analyzer; giải quyết cảnh báo theo nhóm thay vì bật cứng toàn bộ ngay nếu code hiện có chưa sạch.
-4. **Quản lý version dự án `.nest2d`.** `ProjectFormatMigrator` hiện nâng workspace v1 và project/workspace v2 lên v3; version tương lai, loại dữ liệu lạ và danh sách chính bị thiếu được từ chối rõ ràng. Khi tăng version, bổ sung migration tuần tự và fixture/test cho cả workspace lẫn project index; chỉ ghi phiên bản mới khi dự án được lưu.
-5. **Quản lý tham chiếu DXF bền vững.** Đường dẫn tương đối tiện cho di chuyển nhưng file nguồn có thể bị mất/thay đổi. Cân nhắc checksum/metadata thời gian sửa, cảnh báo source changed, tùy chọn copy/embed file nguồn hoặc đóng gói dự án.
-7. **Làm rõ tính tất định và song song của heuristic.** `RasterNester` dùng `Parallel.ForEach` cho các thứ tự thử, trong khi giới hạn thời gian và early-stop chung có thể khiến phương án cuối phụ thuộc lịch chạy. Nếu cần tái lập kết quả, ghi seed/cấu hình/phiên bản thuật toán, cân nhắc chạy tuần tự hoặc gom kết quả theo cơ chế determinism rõ ràng; thêm benchmark.
-8. **Thiết lập timeout và cancellation có test biên.** Thời gian được tính trong lõi và lại được phân bổ cho các trial theo nhóm/khổ. Tiếp tục test lượng dữ liệu lớn, cancellation khi đang tạo variant, nhiều vật liệu và trường hợp 0/âm/NaN/infinity; bảo đảm mọi vòng lặp nặng có điểm kiểm tra cancellation. Benchmark hiện ghi trạng thái hoàn tất/lý do hết ngân sách riêng, không suy luận timeout chỉ từ thời gian chạy gần ngưỡng.
-9. **Kiểm thử DXF interoperability.** Thêm bộ fixture do CAD thực xuất, kiểm tra phiên bản DXF, OCS/extrusion, bulge, SPLINE, blocks/arrays, encoding, layer và round-trip; xác nhận thủ công trên ZWCAD/Inventor/AutoCAD phù hợp phiên bản đích.
-10. **Hiệu năng/bộ nhớ raster.** Đặt giới hạn kích thước lưới/đầu vào, đo benchmark theo sheet/chi tiết/độ phân giải; xử lý file DXF lớn hoặc số lượng cực lớn có tiến độ và giới hạn tài nguyên. Không để input không tin cậy tạo cấp phát bất thường.
-11. **Nợ kiến trúc đang hiện hữu — không mở rộng các lớp trung tâm.** `MainViewModel` đang chứa lifecycle dự án, preflight/nesting đa nhóm, placement thủ công, export và state/preview; `MainWindow.xaml.cs` đồng thời xử lý nhiều trang, nhập liệu, menu, dialog và lifecycle. `ProjectFormatMigrator` đã tách riêng nâng cấp schema; đây là một lát cắt nhỏ, chưa thay thế việc tách use-case. Test đã có xUnit discovery theo domain, cùng một workflow đầu-cuối qua API nghiệp vụ. Ưu tiên tiếp theo:
-   1. `NestingCoordinator` cho preflight, nhóm vật liệu/khổ, tiến độ và ghép kết quả.
-   2. `ProjectSessionService` cho index/workspace, chuyển nhóm và lưu nguyên tử.
-   3. Các test theo miền/use-case và UI adapter nhỏ cho bảng Part, Sheet, canvas/dialog.
+Benchmark console tách thời gian engine và validator, thu thập chất lượng, throughput, allocations và GC; `--diagnostics` đo thêm các bước bên trong nhưng tạo overhead. Thời gian Search bao gồm Verify và Verify bao gồm Conflict; các bộ đếm trong heuristic song song không nên cộng để suy ra thời gian wall-clock. So sánh cần giữ cùng dữ liệu, máy, cấu hình, profile và ngân sách.
 
-   Giữ `MainViewModel` làm facade điều phối để giảm rủi ro binding; không bắt đầu bằng việc viết lại toàn bộ UI hoặc thay kiến trúc MVVM.
-12. **Gia cố persistence trước tính năng cộng tác/dữ liệu lớn.** Workspace/index tiếp tục ghi qua file tạm rồi thay thế; loader đã có migration và kiểm tra loại/danh sách chính. Cần thêm test lỗi ghi thực tế, phục hồi file tạm sau crash, và xác nhận đường dẫn DXF thiếu/đổi; khi thay đổi cơ chế atomic cần bảo toàn file đích nếu ghi thất bại.
-13. **Phân loại lỗi thay vì catch tổng quát.** Tải settings và tùy chọn theme hiện báo lỗi, giữ mặc định hoặc trạng thái phiên hiện tại; `FromJson` từ chối dữ liệu sai mà không áp dụng dở dang. Tiếp tục rà soát các ranh giới khác để phân biệt lỗi định dạng/IO/operation cancelled với lỗi lập trình, tránh thông báo chung che nguyên nhân.
-14. **Tài liệu vận hành và phát hành.** Bổ sung release notes, phiên bản ứng dụng, ma trận Windows/.NET/CAD hỗ trợ, quy trình publish/signing và lưu kết quả kiểm tra CAD.
-
-### Kiểm tra đã thực hiện cho bản được gửi
-
-- Đã kiểm kê mã nguồn, solution, README, project files, thuật toán Core, luồng ViewModel/service/persistence và một phần nội dung tests.
-- ZIP ban đầu chứa artefact Visual Studio và build: khoảng 5.6 MiB tổng; trong đó `bin` khoảng 3.31 MiB, `obj` 1.06 MiB, `.vs` 0.68 MiB. Chúng không phải source và đã được loại khỏi bản làm việc/tài liệu giao.
-- Test Core và UI Core được chạy qua xUnit discovery; các regression test hiện có (kể cả kiểm tra tĩnh XAML/binding/handler) được giữ lại. Kiểm tra tĩnh XAML không thay thế build Desktop hoặc xác minh tương tác WPF thực tế trên Windows.
-- Có test workflow DXF → nesting → chỉnh placement → lưu/mở workspace → xuất/đọc lại DXF; CI chạy riêng test này trên Windows. Đây là kiểm thử pipeline nghiệp vụ, không phải tự động hóa thao tác chuột/bàn phím trên WPF.
-- CI xác minh `dotnet format` và chạy benchmark nhanh với workload cố định, ba lần lặp; báo cáo có chiến lược và trạng thái/lý do dừng.
-- Chưa xác nhận giao diện tương tác trên Windows thật và chưa mở DXF xuất trong CAD mục tiêu.
+Test và build không chứng minh DXF tương thích với mọi bản CAD/CAM. Round-trip parser chỉ xác nhận những đặc tính mà parser test kiểm tra; giao diện WPF và quy trình sản xuất cần xác minh trên Windows/CAD/CAM đích. Không suy diễn mức xác minh vượt quá kết quả CI hoặc kiểm tra thực tế đã chạy.
 
 ## 8. Quy tắc cho AI/nhà phát triển tiếp theo
 
@@ -240,24 +228,58 @@ Quy tắc chuẩn và có tính ràng buộc nằm trong [`DEVELOPMENT_RULES.md`
 8. Phân biệt kết quả cũ (`IsStale`) và kết quả đã chỉnh tay (`IsEdited`) trong mọi hành vi lưu/xuất.
 9. Không xóa file người dùng hay artefact cần thiết một cách mù quáng. `bin/obj/.vs` có thể tái tạo; DXF nguồn và `.nest2d` thì không.
 
-## 9. Sơ đồ vòng đời rút gọn
+## 9. Sơ đồ luồng dữ liệu
 
-```text
-DXF / Part hình chữ nhật
-        │
-        └── Desktop: AddPaths → PartItem → DxfReader
-                               │
-                    geometry chuẩn hóa mm
-                               │
-     UI preflight + nhóm vật liệu/độ dày + thiết lập ứng dụng
-                               │
-                 NestEngine → RasterNester
-                               │
-                NestResult + danh sách chưa đặt
-                               │
-              Validator độc lập / cập nhật preview
-                    │                    │
-              kéo-xoay hợp lệ       export DXF / PDF
-                    │                    │
-          đánh dấu edited/stale     lưu file kết quả
+Sơ đồ thể hiện các luồng chính trong UI; workspace là dữ liệu riêng cho từng nhóm của project, còn DXF nguồn vẫn là file ngoài được tham chiếu tương đối.
+
+```mermaid
+flowchart TD
+    DXF["DXF ASCII<br/>file/thư mục/kéo-thả"] --> Add["Desktop: AddPaths"]
+    Rect["Part chữ nhật hoặc hình mẫu"] --> Add
+    Add --> PartItem["PartItem<br/>metadata + layer + số lượng"]
+    PartItem --> Reader["DxfReader"]
+    Reader --> Geometry["Geometry chuẩn hóa mm<br/>DxfShape / contour"]
+    PartItem --> PartInput["Part hợp lệ + quantity"]
+    Geometry --> PartInput
+
+    Open["Mở .nest2d"] --> Index["ProjectStore<br/>đọc chỉ mục nhóm"]
+    Index --> Workspace["Nạp workspace con<br/>settings + Part + result"]
+    Workspace --> PartInput
+    Workspace --> Settings["NestSettings<br/>lề, spacing, xoay, thời gian"]
+    Presets["SheetPresets<br/>vật liệu + độ dày + khổ"] --> Preflight
+    Settings --> Preflight
+    PartInput --> Preflight["Preflight<br/>kiểm tra dữ liệu, contour, preset"]
+    PartInput --> Changed["Thay đổi Part/settings"]
+    Settings --> Changed
+    Preflight --> Group["Nhóm theo vật liệu<br/>và độ dày"]
+    Group --> Trials["Thử preset khổ phù hợp<br/>lặp theo số lượng còn lại"]
+    Trials --> Service["NestingService<br/>Task nền + báo tiến độ"]
+    Service --> Engine["NestEngine<br/>xác thực request/contour"]
+    Engine --> Raster["RasterNester<br/>variant + mask + tìm layout heuristic"]
+    Raster --> Result["NestResult<br/>sheet + placement + chưa xếp"]
+    Result --> Validation["Validator.Check"]
+    Validation --> View["MainViewModel<br/>Sheets + summary + preview"]
+
+    View --> SheetGroups["Nhóm sheet/mẫu<br/>material + thickness + signature"]
+    SheetGroups --> Select["Chọn nhóm/mẫu<br/>xem kết quả"]
+    Select --> Edit["Kéo / xoay / lật / thêm sheet"]
+    Edit --> PlacementCheck["Validator.CheckPlacement"]
+    PlacementCheck -->|hợp lệ| View
+    PlacementCheck -->|không hợp lệ| Edit
+    Edit --> Edited["Đánh dấu IsEdited"]
+    Edited --> View
+    Changed --> Stale["Đánh dấu IsStale"]
+    Stale --> View
+
+    Select --> DxfCheck["Kiểm tra nhóm và toàn bộ vị trí"]
+    DxfCheck --> DxfExport["ExportCoordinator / ExportService"]
+    DxfExport --> DxfWriter["DXF theo mẫu<br/>micro-joints / common-edge tùy chọn"]
+    DxfWriter --> DxfFiles["Các file DXF"]
+    Select --> PdfReport["NestingReportBuilder<br/>chọn nhóm vật liệu/độ dày"]
+    PdfReport --> Pdf["PDFsharp<br/>preview / in / PDF"]
+
+    View --> Save["ProjectStore.SaveWorkspace<br/>ghi JSON qua file tạm"]
+    Save --> Child["Workspace con trong .data<br/>DXF nguồn giữ bên ngoài"]
+    Save --> SaveIndex["ProjectStore.SaveProjectIndex<br/>đường dẫn workspace tương đối"]
+    SaveIndex --> Project["File .nest2d"]
 ```

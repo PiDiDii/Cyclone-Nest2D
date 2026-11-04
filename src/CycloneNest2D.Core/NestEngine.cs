@@ -42,6 +42,12 @@ public sealed class NestOptions
     /// <summary>Thu thập timing nội bộ tùy chọn; không đặt trong các lượt chạy cần đo overhead thuần.</summary>
     public NestDiagnostics? Diagnostics { get; set; }
 
+    /// <summary>Cho phép thử portfolio dựa trên feature trước khi chạy search chính. Mặc định tắt để giữ nguyên behavior hiện tại.</summary>
+    public bool UsePortfolio { get; set; }
+
+    /// <summary>Phân tích/luật portfolio; khi null dùng bộ ngưỡng mặc định.</summary>
+    public NestPortfolioOptions? Portfolio { get; set; }
+
     public CancellationToken Cancel { get; set; }
     public Action<string>? Report { get; set; }
     public Action<double>? ReportProgress { get; set; }
@@ -60,6 +66,18 @@ public static class NestEngine
         options ??= new NestOptions();
         if (options.Cancel.IsCancellationRequested)
             return Interrupted(parts, "Đã hủy nesting theo yêu cầu.");
+
+        if (options.UsePortfolio)
+        {
+            var portfolioOptions = options.Portfolio ?? new NestPortfolioOptions();
+            options.Portfolio = portfolioOptions;
+            var runner = new NestingPortfolioRunner();
+            var portfolioResult = runner.Run(parts, sheet, options);
+            if (portfolioResult.BestResult.Result.Sheets.Count > 0 || portfolioResult.BestResult.Result.Unplaced.Count == 0)
+            {
+                return portfolioResult.BestResult.Result;
+            }
+        }
 
         string? validationError = ValidateRequest(sheet, options);
         long totalInstances = 0;

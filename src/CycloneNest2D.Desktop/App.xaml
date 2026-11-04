@@ -12,6 +12,7 @@
                 <Setter Property="FontSize" Value="14"/>
                 <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
                 <Setter Property="Background" Value="{DynamicResource BgBrush}"/>
+                <Setter Property="Icon" Value="pack://application:,,,/CycloneNest2D;component/Assets/CycloneNest.ico"/>
             </Style>
 
             <BooleanToVisibilityConverter x:Key="B2V" />

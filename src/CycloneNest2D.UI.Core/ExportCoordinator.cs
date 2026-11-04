@@ -18,4 +18,8 @@ public sealed class ExportCoordinator
 
     public List<string> ExportSheets(NestResult result, SheetDefinition definition, string destination, DxfExportOptions options)
         => ExportService.ExportSheets(result, definition, destination, options);
+
+    public List<string> ExportPatterns(IReadOnlyList<NestingPatternItem> patterns, SheetDefinition definition,
+        string destination, DxfExportOptions options)
+        => ExportService.ExportPatterns(patterns, definition, destination, options);
 }

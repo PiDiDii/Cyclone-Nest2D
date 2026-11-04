@@ -59,6 +59,40 @@ public sealed class UiCoreRegressionTests
     }
 
     [Fact]
+    [Trait("Domain", "NestingPatterns")]
+    public void NestingPatternGrouping_GroupsIdenticalLayoutsAndIgnoresInstanceNumbers()
+    {
+        static SheetItem MakeSheet(int index, int instance, double x, string material = "ZAM", double thickness = 1.2)
+        {
+            var sheet = new SheetResult
+            {
+                Index = index,
+                Width = 1000,
+                Height = 600,
+                Material = material,
+                Thickness = thickness
+            };
+            sheet.Placements.Add(new Placement("Part", instance, x, 20, 100, 50, false));
+            return new SheetItem(sheet);
+        }
+
+        var patterns = NestingPatternGrouping.Group(new[]
+        {
+            MakeSheet(1, 1, 10),
+            MakeSheet(2, 2, 10),
+            MakeSheet(3, 3, 11),
+            MakeSheet(4, 4, 10, "SUS304", 1.5)
+        });
+
+        Assert.Equal(3, patterns.Count);
+        Assert.Equal(new[] { 2, 1, 1 }, patterns.Select(pattern => pattern.Quantity));
+        Assert.Equal(new[] { "0001-ZAM 1.2-2", "0002-ZAM 1.2-1", "0003-SUS304 1.5-1" },
+            patterns.Select(pattern => pattern.Name));
+        Assert.StartsWith("0001-", NestingPatternGrouping.Group(new[] { MakeSheet(1, 1, 10) }).Single().Name);
+        Assert.Equal("0001-ZAM_SS 1.2-2", ExportService.SafeFileName("0001-ZAM/SS 1.2-2"));
+    }
+
+    [Fact]
     [Trait("Domain", "ManualPlacement")]
     public void ManualDrop_PersistsOutOfSheetAndOverlappingPlacementsAsInvalid()
     {
@@ -571,7 +605,35 @@ public sealed class UiCoreRegressionTests
             Check(vm.Result != null && vm.Result.Sheets.Count == 4, "4 tấm được tạo dù không khai báo tồn kho");
             Check(vm.Result!.Sheets.Select(s => (s.Material, s.Thickness)).Distinct().Count() == 2, "tách theo vật liệu và độ dày");
             Check(vm.Result.Sheets.All(s => s.Placements.Count == 1), "mỗi sheet 200x200 chứa một part");
-            Check(vm.Result.Unplaced.Count == 0 && vm.Result.Sheets.Sum(s => s.Placements.Count) == 4, "xếp đủ mọi part không bị giới hạn bởi tồn kho");
+            Check(vm.SheetGroups.Count == 2 && vm.SheetGroups.All(group =>
+                      group.Sheets.Count == 2 && group.PatternCount == 1 && group.Patterns[0].Quantity == 2),
+                "danh sách gộp các bố trí giống hệt theo nhóm vật liệu/độ dày và giữ số tấm vật lý");
+            vm.SelectedSheetGroup = vm.SheetGroups[1];
+            Check(vm.SelectedSheet?.Material == vm.SheetGroups[1].Material &&
+                  vm.SelectedSheetGroupCount == 1 && vm.SelectedSheetGroupPhysicalCount == 2 &&
+                  vm.SelectedSheetGroupPosition == 1 &&
+                  vm.SheetGroups.SelectMany(group => group.Patterns).Select(pattern => pattern.Name).Distinct().Count() == 2 &&
+                  vm.SheetGroups.SelectMany(group => group.Patterns).Any(pattern =>
+                      pattern.Name.StartsWith("0001-", StringComparison.Ordinal) && pattern.Quantity == 2),
+                "mã mẫu duy nhất chạy liên tục qua các nhóm, số lượng được gộp và tên bắt đầu từ 0001");
+            var otherGroupSheet = vm.SheetGroups[0].Sheets[0].Sheet;
+            otherGroupSheet.Placements[0] = otherGroupSheet.Placements[0] with { X = -5 };
+            string dxfDir = Path.Combine(tmp, "selected-group-dxf");
+            dlg.Folder = dxfDir;
+            vm.ExportDxf(new DxfExportOptions { FileLayout = DxfFileLayout.MultipleFiles }, vm.SelectedSheetGroup);
+            Check(Directory.GetFiles(dxfDir, "*.dxf").Length == vm.SelectedSheetGroupCount &&
+                  Path.GetFileNameWithoutExtension(Directory.GetFiles(dxfDir, "*.dxf").Single()) == vm.SelectedSheetGroup.Patterns[0].Name &&
+                  vm.Result.Sheets.Count == 4,
+                "DXF chọn nhóm theo Dropdown, xuất một tệp theo tên mẫu và không bị lỗi ở nhóm khác");
+            Check(vm.Result.Unplaced.Count == 0 && vm.Result.Sheets.Sum(s => s.Placements.Count) == 4,
+                "xếp đủ mọi part không bị giới hạn bởi tồn kho");
+            var placement = vm.SelectedSheet!.Sheet.Placements[0];
+            Check(vm.TryMove(0, placement.X + 1, placement.Y) == null &&
+                  vm.SelectedSheetGroupCount == 2 && vm.SelectedSheetGroupPhysicalCount == 2,
+                "chỉnh tay một tấm đại diện sẽ tách mẫu và làm mới nhóm");
+            Check(vm.DeleteSelectedSheet() && vm.SelectedSheetGroupPhysicalCount == 1 &&
+                  vm.SelectedSheetGroup.Patterns.Sum(pattern => pattern.Quantity) == 1,
+                "xóa một đại diện chỉ giảm số lượng tấm vật lý và tự cập nhật nhóm mẫu");
         });
 
         Console.WriteLine("Xếp thủ công");
@@ -764,6 +826,9 @@ public sealed class UiCoreRegressionTests
             var vm = NewVm();
             vm.AddRect();
             vm.Parts[0].Name = "Part gốc";
+            PrepareProfiles(vm);
+            vm.RunAsync().GetAwaiter().GetResult();
+            Check(vm.SelectedNestingPattern?.Name == "0001-SS400 1-1", "nhóm đầu tiên bắt đầu từ 0001");
             string project = Path.Combine(tmp, "multi-group", "job.nest2d");
             dlg.SaveFile = project;
             Check(vm.SaveProject(true), "tạo dự án tổng");
@@ -783,9 +848,12 @@ public sealed class UiCoreRegressionTests
             Check(vm.Result?.Sheets.Count == 1, "nesting nhóm SUS");
 
             vm.SelectedProjectGroup = firstGroup;
-            Check(vm.Parts.Single().Name == "Part gốc", "khôi phục danh sách nhóm đầu");
+            Check(vm.Parts.Single().Name == "Part gốc" && vm.SelectedNestingPattern?.Name == "0001-SS400 1-1",
+                "khôi phục kết quả và mã của nhóm đầu");
             vm.SelectedProjectGroup = secondGroup;
-            Check(vm.Parts.Single().Name == "Part SUS" && vm.Result?.Sheets.Count == 1, "khôi phục kết quả nhóm SUS khi chuyển lại");
+            Check(vm.Parts.Single().Name == "Part SUS" && vm.Result?.Sheets.Count == 1 &&
+                  vm.SelectedNestingPattern?.Name == "0002-SUS304 1.5-1",
+                "mã mẫu chạy tiếp nối qua các nhóm vật liệu trong cùng dự án");
             Check(vm.SaveProject(false), "lưu dự án nhiều nhóm");
 
             var reopened = NewVm();
@@ -793,7 +861,9 @@ public sealed class UiCoreRegressionTests
             Check(reopened.ProjectGroups.Count == 2, "cả hai nhóm được nạp");
             var reopenedSecond = reopened.ProjectGroups.Single(group => group.Name == secondGroup.Name);
             reopened.SelectedProjectGroup = reopenedSecond;
-            Check(reopened.Parts.Single().Name == "Part SUS" && reopened.Result?.Sheets.Count == 1, "kết quả nesting được lưu/nạp theo nhóm");
+            Check(reopened.Parts.Single().Name == "Part SUS" && reopened.Result?.Sheets.Count == 1 &&
+                  reopened.SelectedNestingPattern?.Name == "0002-SUS304 1.5-1",
+                "kết quả nesting được lưu/nạp theo nhóm và mã toàn dự án được tái tạo tương thích");
         });
         Test("Lưu dự án cũ chuyển sang chỉ mục và nhóm con", () =>
         {
@@ -1066,23 +1136,27 @@ public sealed class UiCoreRegressionTests
                       ((string?)combo.Attribute("SelectedItem"))?.Contains("SelectedProjectGroup", StringComparison.Ordinal) == true),
                 "bỏ bộ chọn nhóm vật liệu trùng trong tab Nesting");
             Check(nestingTab.Descendants(wpf + "UniformGrid").All(grid => (string?)grid.Attribute("Grid.Row") != "1") &&
-                  nestingTab.Descendants(wpf + "TextBlock").Any(text => (string?)text.Attribute("Text") == "CHI TIẾT ĐÃ XẾP") &&
-                  nestingTab.Descendants(wpf + "TextBlock").Any(text => (string?)text.Attribute("Text") == "TẤM ĐÃ DÙNG"),
+                  nestingTab.Descendants(wpf + "TextBlock").Any(text => (string?)text.Attribute("Text") == "ĐÃ XẾP") &&
+                  nestingTab.Descendants(wpf + "TextBlock").Any(text => (string?)text.Attribute("Text") == "TẤM NHÓM"),
                 "đưa chỉ số nesting lên cùng hàng tiêu đề");
-            Check(nestingTab.Descendants(wpf + "Button").Any(button => ((string?)button.Attribute("Command"))?.Contains("RunCommand", StringComparison.Ordinal) == true) &&
-                  nestingTab.Descendants(wpf + "Button").Any(button => ((string?)button.Attribute("Command"))?.Contains("CancelCommand", StringComparison.Ordinal) == true),
-                "nút chạy/dừng nằm trong tab Nesting");
-            Check(nestingTab.Descendants(wpf + "StackPanel").Any(panel =>
-                      (string?)panel.Attribute("Grid.Column") == "2" &&
-                      panel.Descendants(wpf + "Button").Any(button => ((string?)button.Attribute("Command"))?.Contains("RunCommand", StringComparison.Ordinal) == true) &&
-                      panel.Descendants(wpf + "Button").Any(button => ((string?)button.Attribute("Command"))?.Contains("CancelCommand", StringComparison.Ordinal) == true)) &&
-                  nestingTab.Descendants(wpf + "UniformGrid").Any(grid =>
-                      (string?)grid.Attribute("Grid.Column") == "1" && (string?)grid.Attribute("Columns") == "4"),
-                "nút nằm cùng hàng chỉ số, các chỉ số được chia đều trong 4 cột");
-            Check(nestingTab.Descendants(wpf + "Button").Any(button =>
-                      ((string?)button.Attribute("Command"))?.Contains("CancelCommand", StringComparison.Ordinal) == true &&
-                      ((string?)button.Attribute("Style"))?.Contains("DangerButton", StringComparison.Ordinal) == true),
-                "nút dừng dùng màu cảnh báo rõ ràng, đồng bộ với theme");
+            var runButton = nestingTab.Descendants(wpf + "Button").Single(button =>
+                ((string?)button.Attribute("Command"))?.Contains("RunCommand", StringComparison.Ordinal) == true);
+            Check(!nestingTab.Descendants(wpf + "Button").Any(button =>
+                      ((string?)button.Attribute("Command"))?.Contains("CancelCommand", StringComparison.Ordinal) == true) &&
+                  (string?)runButton.Attribute("Grid.Column") == "1" &&
+                  (string?)runButton.Attribute("HorizontalAlignment") == "Center" &&
+                  (string?)runButton.Attribute("MinWidth") == "210" &&
+                  (string?)runButton.Attribute("MinHeight") == "48",
+                "nút dừng không hiển thị, nút Nesting lớn hơn và được căn giữa");
+            Check(nestingTab.Descendants(wpf + "UniformGrid").Any(grid =>
+                      (string?)grid.Attribute("Grid.Column") == "2" && (string?)grid.Attribute("Columns") == "4") &&
+                  nestingTab.Descendants(wpf + "ComboBox").Any(combo =>
+                      (string?)combo.Attribute("ItemsSource") == "{Binding SheetGroups}" &&
+                      (string?)combo.Attribute("SelectedItem") == "{Binding SelectedSheetGroup, Mode=TwoWay}") &&
+                  nestingTab.Descendants(wpf + "ListBox").Any(list =>
+                      (string?)list.Attribute("ItemsSource") == "{Binding SelectedSheetGroup.Patterns}" &&
+                      (string?)list.Attribute("SelectedItem") == "{Binding SelectedNestingPattern, Mode=TwoWay}"),
+                "chỉ số nằm trên một hàng và kết quả nesting gộp mẫu theo nhóm vật liệu/độ dày");
             Check(doc.Descendants(wpf + "ProgressBar").Any(bar =>
                       ((string?)bar.Attribute("Value"))?.Contains("ProgressPercent", StringComparison.Ordinal) == true) &&
                   doc.Descendants(wpf + "TextBlock").Any(text =>
@@ -1092,6 +1166,12 @@ public sealed class UiCoreRegressionTests
                 "hộp tiến trình có phần trăm, thời gian đã chạy và ETA");
             var presetsGrid = doc.Descendants(wpf + "DataGrid").Single(element =>
                 (string?)element.Attribute("{http://schemas.microsoft.com/winfx/2006/xaml}Name") == "SheetPresetsGrid");
+            var thicknessBinding = presetsGrid.Descendants(wpf + "DataGridTextColumn")
+                .Single(column => (string?)column.Attribute("Header") == "Độ dày (mm)")
+                .Descendants(wpf + "Binding").Single();
+            Check((string?)thicknessBinding.Attribute("Path") == "ThicknessText" &&
+                  (string?)thicknessBinding.Attribute("UpdateSourceTrigger") == "PropertyChanged",
+                "độ dày được nhận dưới dạng chuỗi để giữ dấu thập phân trong khi nhập");
             var partsGrid = doc.Descendants(wpf + "DataGrid").Single(element =>
                 (string?)element.Attribute("{http://schemas.microsoft.com/winfx/2006/xaml}Name") == "PartsGrid");
             System.Xml.Linq.XNamespace xamlNs = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -1137,6 +1217,60 @@ public sealed class UiCoreRegressionTests
                 "cột Part cố định theo bố cục, nội dung căn giữa, viền rõ và tiêu đề lớn hơn chữ trong dòng");
             string mainWindowCode = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "MainWindow.xaml.cs"));
             string partAlignmentCode = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "PartGridAlignmentSettings.cs"));
+            Check(mainWindowCode.Contains("row.ThicknessText.Trim().Replace(',', '.')", StringComparison.Ordinal) &&
+                  mainWindowCode.Contains("NumberStyles.AllowDecimalPoint", StringComparison.Ordinal),
+                "độ dày chấp nhận cả dấu phẩy và dấu chấm thập phân trước khi lưu");
+            string mainViewModelCode = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.UI.Core", "MainViewModel.cs"));
+            Check(mainWindowCode.Contains("nameof(MainViewModel.Presets)", StringComparison.Ordinal) &&
+                  mainViewModelCode.Contains("OnPropertyChanged(nameof(Presets))", StringComparison.Ordinal),
+                "danh sách vật tư được đồng bộ lại trên giao diện sau khi mở workspace");
+            string reportSource = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "NestingReport.cs"));
+            string pdfWriterSource = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "PdfReportWriter.cs"));
+            string reportPreviewSource = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "ReportPreviewWindow.cs"));
+            string appSource = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "App.xaml"));
+            string desktopProject = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "CycloneNest2D.Desktop.csproj"));
+            string dxfDialogSource = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "DxfExportDialog.cs"));
+            string exportServiceSource = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.UI.Core", "ExportService.cs"));
+            Check(reportSource.Contains("ProjectName = vm.ProjectName", StringComparison.Ordinal) &&
+                  reportSource.Contains("ForGroup(NestingReportMaterialGroup group)", StringComparison.Ordinal) &&
+                  reportSource.Contains("PlateName = pattern.Name", StringComparison.Ordinal) &&
+                  reportSource.Contains("PlateQuantity = pattern.Quantity", StringComparison.Ordinal) &&
+                  pdfWriterSource.Contains("Tên tấm: {model.PlateName}", StringComparison.Ordinal) &&
+                  pdfWriterSource.Contains("Số lượng tấm: {model.PlateQuantity}", StringComparison.Ordinal) &&
+                  pdfWriterSource.Contains("Dự án: {report.ProjectName}", StringComparison.Ordinal) &&
+                  pdfWriterSource.Contains("Tên tấm: {model.PlateName}", StringComparison.Ordinal) &&
+                  pdfWriterSource.Contains("Số lượng tấm: {model.PlateQuantity}", StringComparison.Ordinal) &&
+                  pdfWriterSource.Contains("Vật liệu: {model.Sheet.Material}", StringComparison.Ordinal) &&
+                  pdfWriterSource.Contains("string sheetThickness =", StringComparison.Ordinal) &&
+                  pdfWriterSource.Contains("string sheetSize =", StringComparison.Ordinal) &&
+                  pdfWriterSource.Contains("new XRect(rightColumnLeft, metadataTop + P(metadataLineHeight), rightColumnWidth, P(metadataLineHeight))", StringComparison.Ordinal) &&
+                  reportPreviewSource.Contains("Dự án: {_report.ProjectName}", StringComparison.Ordinal) &&
+                  reportPreviewSource.Contains("Tên tấm: {model.PlateName}", StringComparison.Ordinal) &&
+                  reportPreviewSource.Contains("Số lượng tấm: {model.PlateQuantity}", StringComparison.Ordinal) &&
+                  reportPreviewSource.Contains("Độ dày: {model.Sheet.Thickness:0.##} mm", StringComparison.Ordinal) &&
+                  reportPreviewSource.Contains("Khổ tấm: {model.Sheet.Width:0.##} × {model.Sheet.Height:0.##} mm", StringComparison.Ordinal) &&
+                  reportPreviewSource.Contains("MetadataRightColumnStartRatio", StringComparison.Ordinal) &&
+                  pdfWriterSource.Contains("MetadataRightColumnStartRatio", StringComparison.Ordinal) &&
+                  reportSource.Contains("MetadataLeftColumnRatio = 0.23", StringComparison.Ordinal) &&
+                  reportSource.Contains("MetadataRightColumnStartRatio = 0.25", StringComparison.Ordinal) &&
+                  reportSource.Contains("MetricsTopDip(layout) + MetricsCellHeightDip(layout) + 8", StringComparison.Ordinal) &&
+                  reportSource.Contains("MetricsCellHeightDip(NestingPageLayout layout)", StringComparison.Ordinal) &&
+                  pdfWriterSource.Contains("compact ? 6.5 : 7.8, XFontStyleEx.Bold", StringComparison.Ordinal) &&
+                  pdfWriterSource.Contains("compact ? 7.5 : 9.2, XFontStyleEx.Bold", StringComparison.Ordinal) &&
+                  reportPreviewSource.Contains("FontWeight = FontWeights.Bold", StringComparison.Ordinal) &&
+                  !reportPreviewSource.Contains("Nest {model.NestNumber} / {model.NestCount}", StringComparison.Ordinal) &&
+                  reportSource.Contains("ContentMarginRatio = 0.02", StringComparison.Ordinal) &&
+                  reportSource.Contains("ContentVerticalMarginRatio = 0.02", StringComparison.Ordinal) &&
+                  reportPreviewSource.Contains("MaterialGroups.Select", StringComparison.Ordinal) &&
+                  appSource.Contains("Assets/CycloneNest.ico", StringComparison.Ordinal) &&
+                  appSource.Contains("Property=\"Icon\"", StringComparison.Ordinal) &&
+                  desktopProject.Contains("<ApplicationIcon>Assets\\CycloneNest.ico</ApplicationIcon>", StringComparison.Ordinal),
+                "PDF được giới hạn theo nhóm vật liệu/độ dày, có tên dự án và tên/số lượng mẫu tấm");
+            Check(dxfDialogSource.Contains("ItemsSource = groups", StringComparison.Ordinal) &&
+                  dxfDialogSource.Contains("SelectedItem = selectedGroup", StringComparison.Ordinal) &&
+                  dxfDialogSource.Contains("SetPatterns(SelectedGroup)", StringComparison.Ordinal) &&
+                  exportServiceSource.Contains("SafeFileName(pattern.Name)", StringComparison.Ordinal),
+                "hộp thoại DXF chọn nhanh nhóm, mặc định theo nhóm đang chọn và tạo tệp có tên mẫu an toàn");
             Check(!mainWindowCode.Contains("AutoFitPartColumns", StringComparison.Ordinal) &&
                   !mainWindowCode.Contains("SchedulePartColumnAutoFit", StringComparison.Ordinal) &&
                   !mainWindowCode.Contains("PartsGrid_Loaded", StringComparison.Ordinal) &&
@@ -1150,7 +1284,6 @@ public sealed class UiCoreRegressionTests
                   partAlignmentCode.Contains("Normalize(alignment)", StringComparison.Ordinal) &&
                   mainWindowCode.Contains("PartColumnAlignment_Click", StringComparison.Ordinal),
                 "không tự đo cột; menu căn tiêu đề/nội dung chỉ có trái/giữa và lưu thiết lập");
-            string desktopProject = File.ReadAllText(Path.Combine(root!, "src", "CycloneNest2D.Desktop", "CycloneNest2D.Desktop.csproj"));
             Check(desktopProject.Contains("<Version>1.0.11</Version>", StringComparison.Ordinal) &&
                   desktopProject.Contains("Cập nhật 31/10/2026", StringComparison.Ordinal),
                 "tăng phiên bản và cập nhật ngày phát hành");

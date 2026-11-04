@@ -10,7 +10,6 @@ namespace CycloneNest2D.Desktop;
 internal static class PdfReportWriter
 {
     private const double DipToPoint = 72d / 96d;
-    private const double ContentMarginRatio = 0.06;
     private static readonly CultureInfo Culture = CultureInfo.CurrentCulture;
 
     public static void Write(NestingReportDocument report, string path, NestingPageOrientation orientation,
@@ -59,12 +58,13 @@ internal static class PdfReportWriter
         NestingReportPage page, NestingPageOrientation orientation, NestingPageLayout layout,
         PartLabelMode partLabel, double pageWidth, double pageHeight)
     {
-        double margin = pageWidth * ContentMarginRatio;
-        double usableHeight = pageHeight - 2 * margin;
+        double margin = pageWidth * NestingReportPagePlan.ContentMarginRatio;
+        double verticalMargin = pageHeight * NestingReportPagePlan.ContentVerticalMarginRatio;
+        double usableHeight = pageHeight - 2 * verticalMargin;
         double cardHeight = usableHeight / page.SlotCount;
         foreach (var pageRef in page.Reports)
         {
-            double cardTop = margin + pageRef.Slot * cardHeight;
+            double cardTop = verticalMargin + pageRef.Slot * cardHeight;
             DrawSheetReportCard(gfx, report, pageRef, orientation, layout, partLabel,
                 cardTop, cardHeight, margin, pageWidth - 2 * margin);
         }
@@ -80,17 +80,36 @@ internal static class PdfReportWriter
         bool compact = layout == NestingPageLayout.TwoPerPage;
         double titleTop = cardTop + P(compact ? 4 : 8);
         var titleFont = new XFont("Arial", compact ? 9.5 : 12.5, XFontStyleEx.Bold);
-        var subtitleFont = new XFont("Arial", compact ? 6.8 : 8.3, XFontStyleEx.Bold);
+        var metadataFont = new XFont("Arial", compact ? 6.8 : 8.2, XFontStyleEx.Bold);
         gfx.DrawString(firstPage ? "BÁO CÁO TẤM NESTING 2D" : "DANH MỤC CHI TIẾT · TIẾP THEO",
             titleFont, Color(23, 43, 77), new XRect(left, titleTop, width, P(compact ? 18 : 24)), XStringFormats.CenterLeft);
-        string line = $"Nest {model.NestNumber} / {model.NestCount} · {model.Sheet.Material} · {model.Sheet.Thickness:0.##} mm · {model.Sheet.Width:0.##} × {model.Sheet.Height:0.##} mm";
-        double subtitleTop = titleTop + P(compact ? 19 : 26);
-        gfx.DrawString(line, FitFont(gfx, line, subtitleFont, width), Color(52, 68, 91),
-            new XRect(left, subtitleTop, width, P(compact ? 16 : 19)), XStringFormats.CenterLeft);
+        double metadataTop = titleTop + P(compact ? 19 : 26);
+        double metadataLineHeight = compact ? 12 : 14;
+        string projectName = $"Dự án: {report.ProjectName}";
+        string plateName = $"Tên tấm: {model.PlateName}";
+        string plateQuantity = $"Số lượng tấm: {model.PlateQuantity}";
+        string sheetMaterial = $"Vật liệu: {model.Sheet.Material}";
+        string sheetThickness = $"Độ dày: {model.Sheet.Thickness:0.##} mm";
+        string sheetSize = $"Khổ tấm: {model.Sheet.Width:0.##} × {model.Sheet.Height:0.##} mm";
+        double leftColumnWidth = width * NestingReportPagePlan.MetadataLeftColumnRatio;
+        gfx.DrawString(projectName, FitFont(gfx, projectName, metadataFont, leftColumnWidth), Color(52, 68, 91),
+            new XRect(left, metadataTop, leftColumnWidth, P(metadataLineHeight)), XStringFormats.CenterLeft);
+        gfx.DrawString(plateName, FitFont(gfx, plateName, metadataFont, leftColumnWidth), Color(52, 68, 91),
+            new XRect(left, metadataTop + P(metadataLineHeight), leftColumnWidth, P(metadataLineHeight)), XStringFormats.CenterLeft);
+        gfx.DrawString(sheetSize, FitFont(gfx, sheetSize, metadataFont, leftColumnWidth), Color(52, 68, 91),
+            new XRect(left, metadataTop + P(metadataLineHeight * 2), leftColumnWidth, P(metadataLineHeight)), XStringFormats.CenterLeft);
+        double rightColumnLeft = left + width * NestingReportPagePlan.MetadataRightColumnStartRatio;
+        double rightColumnWidth = width * (1 - NestingReportPagePlan.MetadataRightColumnStartRatio);
+        gfx.DrawString(sheetMaterial, FitFont(gfx, sheetMaterial, metadataFont, rightColumnWidth), Color(52, 68, 91),
+            new XRect(rightColumnLeft, metadataTop, rightColumnWidth, P(metadataLineHeight)), XStringFormats.CenterLeft);
+        gfx.DrawString(sheetThickness, FitFont(gfx, sheetThickness, metadataFont, rightColumnWidth), Color(52, 68, 91),
+            new XRect(rightColumnLeft, metadataTop + P(metadataLineHeight), rightColumnWidth, P(metadataLineHeight)), XStringFormats.CenterLeft);
+        gfx.DrawString(plateQuantity, FitFont(gfx, plateQuantity, metadataFont, rightColumnWidth), Color(52, 68, 91),
+            new XRect(rightColumnLeft, metadataTop + P(metadataLineHeight * 2), rightColumnWidth, P(metadataLineHeight)), XStringFormats.CenterLeft);
 
         if (firstPage)
         {
-            double metricTop = cardTop + P(compact ? 42 : 56);
+            double metricTop = cardTop + P(NestingReportPagePlan.MetricsTopDip(layout));
             DrawMetrics(gfx, model, left, metricTop, width, compact);
             double chartTop = cardTop + P(NestingReportPagePlan.FirstChartTopDip(layout));
             double tableGap = P(NestingReportPagePlan.FirstTableGapDip(layout));
@@ -112,7 +131,7 @@ internal static class PdfReportWriter
             double chartHeight = P(chartHeightDip);
             DrawSheet(gfx, report, model.Sheet, new XRect(chartLeft, chartTop, chartWidth, chartHeight), partLabel);
             double tableTitleTop = chartTop + chartHeight + P(1);
-            gfx.DrawString($"DANH MỤC CHI TIẾT TRONG TẤM NEST {model.NestNumber}",
+            gfx.DrawString($"DANH MỤC CHI TIẾT TRONG {model.PlateName}",
                 new XFont("Arial", compact ? 6.5 : 8, XFontStyleEx.Bold), Color(23, 43, 77),
                 new XRect(left, tableTitleTop, width, Math.Max(1, tableGap - P(1))), XStringFormats.CenterLeft);
             double tableTop = chartTop + chartHeight + tableGap;
@@ -121,7 +140,7 @@ internal static class PdfReportWriter
         else
         {
             double tableTitleTop = cardTop + P(NestingReportPagePlan.ContinuationTitleTopDip(layout));
-            gfx.DrawString($"DANH MỤC CHI TIẾT TRONG TẤM NEST {model.NestNumber} · TIẾP THEO",
+            gfx.DrawString($"DANH MỤC CHI TIẾT TRONG {model.PlateName} · TIẾP THEO",
                 new XFont("Arial", compact ? 6.5 : 8, XFontStyleEx.Bold), Color(23, 43, 77),
                 new XRect(left, tableTitleTop, width, P(compact ? 16 : 20)), XStringFormats.CenterLeft);
             DrawPartTable(gfx, model, pageRef.PartPageIndex, orientation, layout, left,
@@ -141,19 +160,20 @@ internal static class PdfReportWriter
             ("Loại chi tiết", model.Parts.Count.ToString(Culture))
         };
         int columns = metrics.Length;
-        double cellWidth = width / columns, cellHeight = P(compact ? 16 : 22);
-        var labelFont = new XFont("Arial", compact ? 4.8 : 5.8, XFontStyleEx.Regular);
-        var valueFont = new XFont("Arial", compact ? 5.5 : 7, XFontStyleEx.Bold);
+        double cellWidth = width / columns, cellHeight = P(NestingReportPagePlan.MetricsCellHeightDip(
+            compact ? NestingPageLayout.TwoPerPage : NestingPageLayout.OnePerPage));
+        var labelFont = new XFont("Arial", compact ? 6.5 : 7.8, XFontStyleEx.Bold);
+        var valueFont = new XFont("Arial", compact ? 7.5 : 9.2, XFontStyleEx.Bold);
         for (int i = 0; i < metrics.Length; i++)
         {
             int row = i / columns, column = i % columns;
             var rect = new XRect(left + column * cellWidth, top + row * cellHeight, cellWidth, cellHeight);
             gfx.DrawRectangle(new XSolidBrush(XColor.FromArgb(248, 250, 252)), rect);
             gfx.DrawRectangle(new XPen(XColor.FromArgb(218, 224, 232), 0.4), rect);
-            gfx.DrawString(metrics[i].Label, labelFont, Color(90, 104, 120),
-                new XRect(rect.X + 2, rect.Y + 1, rect.Width - 4, P(compact ? 6 : 8)), XStringFormats.Center);
+            gfx.DrawString(metrics[i].Label, FitFont(gfx, metrics[i].Label, labelFont, rect.Width - 6), Color(90, 104, 120),
+                new XRect(rect.X + 2, rect.Y + 1, rect.Width - 4, P(compact ? 8 : 10)), XStringFormats.Center);
             gfx.DrawString(metrics[i].Value, FitFont(gfx, metrics[i].Value, valueFont, rect.Width - 6), Color(23, 43, 77),
-                new XRect(rect.X + 2, rect.Y + P(compact ? 7 : 9), rect.Width - 4, P(compact ? 9 : 12)), XStringFormats.Center);
+                new XRect(rect.X + 2, rect.Y + P(compact ? 10 : 12), rect.Width - 4, P(compact ? 9 : 13)), XStringFormats.Center);
         }
     }
 
@@ -170,9 +190,9 @@ internal static class PdfReportWriter
         double rowHeight = P(partPageIndex == 0
             ? NestingReportPagePlan.FirstTableRowHeightDip(orientation, layout)
             : NestingReportPagePlan.ContinuationTableRowHeightDip(orientation, layout));
-        var headerFont = new XFont("Arial", compact ? 5.3 : 6.5, XFontStyleEx.Bold);
-        var normalFont = new XFont("Arial", compact ? 5.4 : 6.7, XFontStyleEx.Regular);
-        var boldFont = new XFont("Arial", compact ? 5.4 : 6.7, XFontStyleEx.Bold);
+        var headerFont = new XFont("Arial", compact ? 5.8 : 7, XFontStyleEx.Bold);
+        var normalFont = new XFont("Arial", compact ? 6 : 7.2, XFontStyleEx.Regular);
+        var boldFont = new XFont("Arial", compact ? 6 : 7.2, XFontStyleEx.Bold);
         double x = left;
         for (int column = 0; column < headers.Length; column++)
         {

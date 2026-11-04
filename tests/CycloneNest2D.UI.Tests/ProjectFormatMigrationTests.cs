@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CycloneNest2D.Core;
 using CycloneNest2D.UI;
 using Xunit;
 
@@ -67,6 +68,55 @@ public sealed class ProjectFormatMigrationTests : IDisposable
         using var saved = JsonDocument.Parse(File.ReadAllText(indexPath));
         Assert.Equal(ProjectStore.CurrentFormatVersion,
             saved.RootElement.GetProperty("Version").GetInt32());
+    }
+
+    [Fact]
+    [Trait("Category", "ProjectMigration")]
+    public void WorkspaceWithoutSavedSheetPresetsRecoversInventoryFromNestingResult()
+    {
+        string path = Path.Combine(_directory, "legacy-inventory.nest2d");
+        File.WriteAllText(path, JsonSerializer.Serialize(new ProjectStore.ProjectDto
+        {
+            Kind = ProjectStore.GroupKind,
+            Version = 3,
+            Settings = """{"SheetWidth":1800,"SheetHeight":1000,"Direction":"FillWidth","SearchMode":"Balanced"}""",
+            Parts =
+            {
+                new ProjectStore.PartDto
+                {
+                    Kind = "Rect",
+                    Name = "Vỏ",
+                    Material = "Tole ZAM",
+                    Thickness = 1.2,
+                    Width = 120,
+                    Height = 60
+                }
+            },
+            Result = new ProjectStore.NestResultDto
+            {
+                Sheets =
+                {
+                    new ProjectStore.SheetResultDto
+                    {
+                        Index = 1,
+                        Width = 3000,
+                        Height = 1219,
+                        Material = "Tole ZAM",
+                        Thickness = 1.2,
+                        StockName = "ZAM 1.2"
+                    }
+                }
+            }
+        }));
+
+        var settings = new NestSettings();
+        ProjectStore.LoadWorkspace(path, settings, new List<string>());
+
+        var recovered = Assert.Single(settings.SheetPresets, preset =>
+            preset.Material == "Tole ZAM" && preset.Thickness == 1.2);
+        Assert.Equal("ZAM 1.2", recovered.Name);
+        Assert.Equal(3000, recovered.Width);
+        Assert.Equal(1219, recovered.Height);
     }
 
     [Theory]

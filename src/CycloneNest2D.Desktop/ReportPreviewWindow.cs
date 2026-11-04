@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -13,13 +14,15 @@ namespace CycloneNest2D.Desktop;
 
 internal sealed class ReportPreviewWindow : Window
 {
-    private readonly NestingReportDocument _report;
+    private readonly NestingReportDocument _allReports;
+    private NestingReportDocument _report;
     private readonly ScrollViewer _pageScrollViewer;
     private readonly TextBox _zoomBox;
     private readonly TextBlock _pageText;
     private readonly Button _previous;
     private readonly Button _next;
     private readonly ComboBox _orientationBox;
+    private readonly ComboBox _materialGroupBox;
     private readonly ComboBox _layoutBox;
     private readonly ComboBox _partLabelBox;
     private readonly ReportPreviewPreferences _preferences;
@@ -37,7 +40,12 @@ internal sealed class ReportPreviewWindow : Window
 
     public ReportPreviewWindow(NestingReportDocument report)
     {
-        _report = report;
+        _allReports = report;
+        _materialGroupBox = ComboBox(report.MaterialGroups.Select(group => (group.Label, group)), 205);
+        _materialGroupBox.SelectedIndex = 0;
+        _report = report.MaterialGroups.Count > 0
+            ? report.ForGroup(report.MaterialGroups[0])
+            : report;
         _preferences = ReportPreviewPreferences.Load();
         _zoomPercent = _preferences.ZoomPercent;
         _layout = _preferences.Layout;
@@ -61,10 +69,11 @@ internal sealed class ReportPreviewWindow : Window
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var heading = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         heading.Children.Add(new TextBlock { Text = "XEM TRƯỚC BÁO CÁO PDF", FontSize = 16, FontWeight = FontWeights.SemiBold, Foreground = Brush("#172B4D") });
-        heading.Children.Add(new TextBlock { Text = "Chọn hướng giấy, số báo cáo mỗi trang và nhãn chi tiết.", FontSize = 11, Foreground = Brush("#66758A"), Margin = new Thickness(0, 4, 0, 0) });
+        heading.Children.Add(new TextBlock { Text = "Chọn nhóm vật liệu/độ dày, hướng giấy, bố cục và nhãn chi tiết.", FontSize = 11, Foreground = Brush("#66758A"), Margin = new Thickness(0, 4, 0, 0) });
         headerGrid.Children.Add(heading);
 
         var controls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        controls.Children.Add(LabeledControl("Vật liệu · độ dày", _materialGroupBox));
         _orientationBox = ComboBox(new[]
         {
             ("A4 ngang", NestingPageOrientation.Landscape),
@@ -152,6 +161,14 @@ internal sealed class ReportPreviewWindow : Window
         _orientationBox.SelectionChanged += ReportSettings_Changed;
         _layoutBox.SelectionChanged += ReportSettings_Changed;
         _partLabelBox.SelectionChanged += ReportSettings_Changed;
+        _materialGroupBox.SelectionChanged += ReportGroup_Changed;
+        RefreshPages();
+    }
+
+    private void ReportGroup_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_materialGroupBox.SelectedValue is not NestingReportMaterialGroup group) return;
+        _report = _allReports.ForGroup(group);
         RefreshPages();
     }
 
@@ -183,6 +200,7 @@ internal sealed class ReportPreviewWindow : Window
     private double PageWidth => NestingReportPagePlan.PageWidthDip(_orientation);
     private double PageHeight => NestingReportPagePlan.PageHeightDip(_orientation);
     private double ContentMargin => NestingReportPagePlan.ContentMarginDip(_orientation);
+    private double ContentVerticalMargin => NestingReportPagePlan.ContentVerticalMarginDip(_orientation);
 
     private void ShowPage(int index)
     {
@@ -208,7 +226,7 @@ internal sealed class ReportPreviewWindow : Window
         bool compact = _layout == NestingPageLayout.TwoPerPage;
         foreach (var reportPage in page.Reports)
         {
-            double cardTop = ContentMargin + reportPage.Slot * cardHeight;
+            double cardTop = ContentVerticalMargin + reportPage.Slot * cardHeight;
             DrawSheetReportCard(canvas, reportPage, pageIndex, cardTop, cardHeight, compact);
         }
     }
@@ -222,8 +240,23 @@ internal sealed class ReportPreviewWindow : Window
         double titleTop = cardTop + (compact ? 4 : 8);
         AddText(canvas, firstPage ? "BÁO CÁO TẤM NESTING 2D" : "DANH MỤC CHI TIẾT · TIẾP THEO",
             left, titleTop, width, compact ? 18 : 24, compact ? 13 : 17, true, "#172B4D");
-        AddText(canvas, $"Nest {model.NestNumber} / {model.NestCount}  ·  {model.Sheet.Material}  ·  {model.Sheet.Thickness:0.##} mm  ·  {model.Sheet.Width:0.##} × {model.Sheet.Height:0.##} mm",
-            left, titleTop + (compact ? 19 : 26), width, compact ? 16 : 19, compact ? 9 : 11, true, "#344862");
+        double metadataTop = titleTop + (compact ? 19 : 26);
+        double metadataLineHeight = compact ? 12 : 14;
+        double leftColumnWidth = width * NestingReportPagePlan.MetadataLeftColumnRatio;
+        AddText(canvas, $"Dự án: {_report.ProjectName}", left, metadataTop,
+            leftColumnWidth, metadataLineHeight, compact ? 8 : 10, true, "#344862");
+        AddText(canvas, $"Tên tấm: {model.PlateName}", left, metadataTop + metadataLineHeight,
+            leftColumnWidth, metadataLineHeight, compact ? 8 : 10, true, "#344862");
+        AddText(canvas, $"Khổ tấm: {model.Sheet.Width:0.##} × {model.Sheet.Height:0.##} mm", left, metadataTop + metadataLineHeight * 2,
+            leftColumnWidth, metadataLineHeight, compact ? 8 : 10, true, "#344862");
+        double rightColumnLeft = left + width * NestingReportPagePlan.MetadataRightColumnStartRatio;
+        double rightColumnWidth = width * (1 - NestingReportPagePlan.MetadataRightColumnStartRatio);
+        AddText(canvas, $"Vật liệu: {model.Sheet.Material}", rightColumnLeft, metadataTop,
+            rightColumnWidth, metadataLineHeight, compact ? 8 : 10, true, "#344862");
+        AddText(canvas, $"Độ dày: {model.Sheet.Thickness:0.##} mm", rightColumnLeft, metadataTop + metadataLineHeight,
+            rightColumnWidth, metadataLineHeight, compact ? 8 : 10, true, "#344862");
+        AddText(canvas, $"Số lượng tấm: {model.PlateQuantity}", rightColumnLeft, metadataTop + metadataLineHeight * 2,
+            rightColumnWidth, metadataLineHeight, compact ? 8 : 10, true, "#344862");
 
         if (firstPage)
         {
@@ -238,17 +271,17 @@ internal sealed class ReportPreviewWindow : Window
             };
             int columns = metrics.Length;
             double cellWidth = width / columns;
-            double cellHeight = compact ? 16 : 22;
-            double metricTop = cardTop + (compact ? 42 : 56);
+            double metricTop = cardTop + NestingReportPagePlan.MetricsTopDip(_layout);
+            double metricCellHeight = NestingReportPagePlan.MetricsCellHeightDip(_layout);
             for (int i = 0; i < metrics.Length; i++)
             {
                 int row = i / columns, col = i % columns;
-                var border = new Border { Width = cellWidth, Height = cellHeight, Background = Brush("#F8FAFC"), BorderBrush = Brush("#D8E0E8"), BorderThickness = new Thickness(0.55) };
+                var border = new Border { Width = cellWidth, Height = metricCellHeight, Background = Brush("#F8FAFC"), BorderBrush = Brush("#D8E0E8"), BorderThickness = new Thickness(0.55) };
                 var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(2, 0, 2, 0) };
-                stack.Children.Add(new TextBlock { Text = metrics[i].Label, FontSize = compact ? 5.8 : 7, Foreground = Brush("#5A6878"), TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
-                stack.Children.Add(new TextBlock { Text = metrics[i].Value, FontSize = compact ? 6.5 : 8.5, FontWeight = FontWeights.SemiBold, Foreground = Brush("#172B4D"), TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+                stack.Children.Add(new TextBlock { Text = metrics[i].Label, FontSize = compact ? 7.2 : 9, FontWeight = FontWeights.Bold, Foreground = Brush("#5A6878"), TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+                stack.Children.Add(new TextBlock { Text = metrics[i].Value, FontSize = compact ? 8.2 : 10.5, FontWeight = FontWeights.Bold, Foreground = Brush("#172B4D"), TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
                 border.Child = stack;
-                Canvas.SetLeft(border, left + col * cellWidth); Canvas.SetTop(border, metricTop + row * cellHeight); canvas.Children.Add(border);
+                Canvas.SetLeft(border, left + col * cellWidth); Canvas.SetTop(border, metricTop + row * metricCellHeight); canvas.Children.Add(border);
             }
         }
 
@@ -279,14 +312,14 @@ internal sealed class ReportPreviewWindow : Window
                 IsHitTestVisible = false
             };
             Canvas.SetLeft(frame, previewLeft); Canvas.SetTop(frame, previewTop); canvas.Children.Add(frame);
-            AddText(canvas, $"DANH MỤC CHI TIẾT TRONG TẤM NEST {model.NestNumber}", left,
+            AddText(canvas, $"DANH MỤC CHI TIẾT TRONG {model.PlateName}", left,
                 previewTop + previewHeight + 1, width, tableGap - 1, compact ? 8 : 10, true, "#172B4D");
             tableTop = previewTop + previewHeight + tableGap;
         }
         else
         {
             double tableTitleTop = cardTop + NestingReportPagePlan.ContinuationTitleTopDip(_layout);
-            AddText(canvas, $"DANH MỤC CHI TIẾT TRONG TẤM NEST {model.NestNumber} · TIẾP THEO",
+            AddText(canvas, $"DANH MỤC CHI TIẾT TRONG {model.PlateName} · TIẾP THEO",
                 left, tableTitleTop, width, compact ? 16 : 20, compact ? 9 : 11, true, "#172B4D");
             tableTop = cardTop + NestingReportPagePlan.ContinuationTableTopDip(_layout);
         }
@@ -348,7 +381,7 @@ internal sealed class ReportPreviewWindow : Window
             Filter = "PDF (*.pdf)|*.pdf",
             DefaultExt = ".pdf",
             AddExtension = true,
-            FileName = "bao_cao_nesting_theo_tam.pdf",
+            FileName = BuildDefaultPdfFileName(),
             OverwritePrompt = true
         };
         if (dialog.ShowDialog(this) != true) return;
@@ -364,6 +397,15 @@ internal sealed class ReportPreviewWindow : Window
         {
             MessageBox.Show(this, "Không tạo được PDF: " + ex.Message, "Lỗi xuất PDF", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private string BuildDefaultPdfFileName()
+    {
+        var firstSheet = _report.SheetSummaries[0].Sheet;
+        string baseName = $"bao_cao_{_report.ProjectName}_{firstSheet.Material}_{firstSheet.Thickness:0.###}mm";
+        char[] invalid = Path.GetInvalidFileNameChars();
+        return string.Concat(baseName.Select(character =>
+            Array.IndexOf(invalid, character) >= 0 ? '_' : character)) + ".pdf";
     }
 
     private void PrintReport_Click(object sender, RoutedEventArgs e)
@@ -481,7 +523,7 @@ internal sealed class ReportPreviewWindow : Window
         return stack;
     }
 
-    private static ComboBox ComboBox<T>(IEnumerable<(string Label, T Value)> items, double width) where T : struct, Enum
+    private static ComboBox ComboBox<T>(IEnumerable<(string Label, T Value)> items, double width)
     {
         var combo = new ComboBox { Width = width, Height = 29, FontSize = 11, Padding = new Thickness(5, 3, 5, 3), SelectedValuePath = nameof(ComboBoxItem.Tag) };
         foreach (var (label, value) in items) combo.Items.Add(new ComboBoxItem { Content = label, Tag = value });
@@ -504,7 +546,8 @@ internal sealed class ReportPreviewWindow : Window
         Canvas.SetLeft(border, x); Canvas.SetTop(border, y); canvas.Children.Add(border);
     }
 
-    private static void AddText(Canvas canvas, string text, double x, double y, double width, double height, double size, bool bold, string color)
+    private static void AddText(Canvas canvas, string text, double x, double y, double width, double height, double size, bool bold, string color,
+        TextAlignment alignment = TextAlignment.Left)
     {
         var block = new TextBlock
         {
@@ -514,6 +557,7 @@ internal sealed class ReportPreviewWindow : Window
             FontSize = size,
             FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
             Foreground = Brush(color),
+            TextAlignment = alignment,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis
         };

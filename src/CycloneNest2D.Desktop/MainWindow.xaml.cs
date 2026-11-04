@@ -37,6 +37,11 @@ public partial class MainWindow : Window
         LoadThemePreference();
         _vm = new MainViewModel(new WpfDialogService(this), settings);
         DataContext = _vm;
+        _vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.Presets))
+                ScheduleSheetPresetRowsSync();
+        };
         LoadPartGridAlignmentSettings();
         ApplyPartGridAlignmentSettings();
         PartsGrid.AddHandler(FrameworkElement.ContextMenuOpeningEvent,
@@ -340,8 +345,11 @@ public partial class MainWindow : Window
     private void DeleteSelectedSheet_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.SelectedSheet == null) return;
+        var pattern = _vm.SelectedNestingPattern;
+        string target = pattern?.Name ?? $"Tấm {_vm.SelectedSheet.Sheet.Index}";
+        string scope = pattern?.Quantity > 1 ? " Chỉ xóa một tấm đại diện; số lượng mẫu sẽ được cập nhật." : "";
         if (ConfirmationDialog.Confirm(this, "Xóa nesting của tấm",
-                $"Xóa nesting của tấm {_vm.SelectedSheet.Sheet.Index}? Các chi tiết sẽ được giữ lại để xếp lại.", "Xóa nesting"))
+                $"Xóa nesting của {target}? Các chi tiết sẽ được giữ lại để xếp lại.{scope}", "Xóa nesting"))
             _vm.DeleteSelectedSheet();
     }
 
@@ -628,10 +636,11 @@ public partial class MainWindow : Window
 
     private void SelectAdjacentSheet(int direction)
     {
-        if (_vm.Sheets.Count == 0) return;
-        int current = _vm.SelectedSheet == null ? -1 : _vm.Sheets.IndexOf(_vm.SelectedSheet);
-        int next = Math.Clamp(current + direction, 0, _vm.Sheets.Count - 1);
-        _vm.SelectedSheet = _vm.Sheets[next];
+        var patterns = _vm.SelectedSheetGroup?.Patterns;
+        if (patterns == null || patterns.Count == 0) return;
+        int current = _vm.SelectedNestingPattern == null ? -1 : patterns.ToList().IndexOf(_vm.SelectedNestingPattern);
+        int next = Math.Clamp(current + direction, 0, patterns.Count - 1);
+        _vm.SelectedNestingPattern = patterns[next];
     }
 
     public void OpenFromCommandLine(string[] args)
@@ -1079,13 +1088,18 @@ public partial class MainWindow : Window
     {
         if (!_sheetPresetRows.Contains(row)) return;
         string material = row.Material.Trim();
+        bool validThickness = double.TryParse(
+            row.ThicknessText.Trim().Replace(',', '.'),
+            NumberStyles.AllowDecimalPoint,
+            CultureInfo.InvariantCulture,
+            out double thickness);
         if (string.IsNullOrWhiteSpace(material) ||
             string.Equals(material, "Chưa phân loại", StringComparison.OrdinalIgnoreCase) ||
             !(row.Width > 0) || !double.IsFinite(row.Width) ||
             !(row.Height > 0) || !double.IsFinite(row.Height) ||
-            !(row.Thickness > 0) || !double.IsFinite(row.Thickness))
+            !validThickness || !(thickness > 0) || !double.IsFinite(thickness))
         {
-            MessageBox.Show(this, "Nhập vật liệu cụ thể, chiều dài/rộng và độ dày lớn hơn 0 hợp lệ.", "Thông tin tấm chưa hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, "Nhập vật liệu cụ thể, chiều dài/rộng và độ dày lớn hơn 0 hợp lệ. Độ dày có thể dùng dấu phẩy hoặc dấu chấm thập phân.", "Thông tin tấm chưa hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
             if (!row.IsNew) SyncSheetPresetRows();
             else FocusSheetPresetRow(row);
             return;
@@ -1095,19 +1109,19 @@ public partial class MainWindow : Window
             string.Equals(original.Material, material, StringComparison.Ordinal) &&
             original.Width.Equals(row.Width) &&
             original.Height.Equals(row.Height) &&
-            original.Thickness.Equals(row.Thickness) &&
+            original.Thickness.Equals(thickness) &&
             string.Equals(original.Note, row.Note.Trim(), StringComparison.Ordinal))
             return;
 
-        string profileName = $"{material} · {row.Thickness:0.##} mm · {row.Width:0.##} × {row.Height:0.##} mm";
-        var edited = new SheetPreset(profileName, row.Width, row.Height, material, row.Thickness)
+        string profileName = $"{material} · {thickness:0.##} mm · {row.Width:0.##} × {row.Height:0.##} mm";
+        var edited = new SheetPreset(profileName, row.Width, row.Height, material, thickness)
         {
             Note = row.Note.Trim()
         };
         bool duplicate = _vm.Presets.Any(preset =>
             !ReferenceEquals(preset, row.Preset) &&
             string.Equals(preset.Material.Trim(), material, StringComparison.OrdinalIgnoreCase) &&
-            Math.Round(preset.Thickness, 4) == Math.Round(row.Thickness, 4) &&
+            Math.Round(preset.Thickness, 4) == Math.Round(thickness, 4) &&
             Math.Round(preset.Width, 3) == Math.Round(row.Width, 3) &&
             Math.Round(preset.Height, 3) == Math.Round(row.Height, 3));
         if (duplicate)
@@ -1159,9 +1173,19 @@ public partial class MainWindow : Window
             MessageBox.Show(this, "Hãy chạy nesting trước khi xuất DXF.", "Chưa có kết quả", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var dialog = new DxfExportDialog(_vm.Result.Sheets) { Owner = this };
+        var group = _vm.SelectedSheetGroup;
+        if (group == null)
+        {
+            MessageBox.Show(this, "Hãy chọn nhóm vật liệu và độ dày trước khi xuất DXF.", "Chưa chọn nhóm", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var dialog = new DxfExportDialog(_vm.SheetGroups.ToList(), group)
+        {
+            Owner = this,
+            Title = $"Xuất Nest — DXF · {group.Material} · {group.Thickness:0.###} mm"
+        };
         if (dialog.ShowDialog() == true && dialog.Options is { } options)
-            _vm.ExportDxf(options);
+            _vm.ExportDxf(options, dialog.SelectedGroup);
     }
 
     private void PreviewReport_Click(object sender, RoutedEventArgs e)
@@ -1241,7 +1265,7 @@ public partial class MainWindow : Window
         private string _material;
         private double _width;
         private double _height;
-        private double _thickness;
+        private string _thicknessText;
         private string _note;
 
         public SheetPresetRow(SheetPreset preset, int sequence)
@@ -1251,7 +1275,7 @@ public partial class MainWindow : Window
             _material = preset.Material;
             _width = preset.Width;
             _height = preset.Height;
-            _thickness = preset.Thickness;
+            _thicknessText = preset.Thickness.ToString("0.##", CultureInfo.CurrentCulture);
             _note = preset.Note;
         }
 
@@ -1259,6 +1283,7 @@ public partial class MainWindow : Window
         {
             _sequence = sequence;
             _material = string.Empty;
+            _thicknessText = string.Empty;
             _note = string.Empty;
         }
 
@@ -1291,10 +1316,10 @@ public partial class MainWindow : Window
             set => Set(ref _height, value);
         }
 
-        public double Thickness
+        public string ThicknessText
         {
-            get => _thickness;
-            set => Set(ref _thickness, value);
+            get => _thicknessText;
+            set => Set(ref _thicknessText, value);
         }
 
         public string Note

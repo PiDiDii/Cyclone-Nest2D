@@ -441,9 +441,7 @@
                                     </DataGridTextColumn>
                                     <DataGridTextColumn Header="Độ dày (mm)" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="124">
                                         <DataGridTextColumn.Binding>
-                                            <Binding Path="Thickness" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" StringFormat="{}{0:0.##}">
-                                                <Binding.ValidationRules><local:NumericRangeValidationRule Minimum="0.000001" ErrorMessage="Độ dày phải lớn hơn 0."/></Binding.ValidationRules>
-                                            </Binding>
+                                            <Binding Path="ThicknessText" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged"/>
                                         </DataGridTextColumn.Binding>
                                     </DataGridTextColumn>
                                     <DataGridTextColumn Header="Ghi chú" Binding="{Binding Note, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" CellStyle="{StaticResource CenteredCell}" ElementStyle="{StaticResource CenteredText}" EditingElementStyle="{StaticResource CenteredEditor}" Width="230"/>
@@ -491,39 +489,34 @@
                 </Grid>
             </TabItem>
  <TabItem Header="Nesting">
- <Grid Margin="24,18,24,16">
+ <Grid Margin="12,10,12,10">
  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
- <Grid Grid.Row="0" Margin="0,0,0,8">
- <Grid.ColumnDefinitions><ColumnDefinition Width="1.1*"/><ColumnDefinition Width="2.2*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+ <Grid Grid.Row="0" Margin="0,0,0,6">
+ <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
  <StackPanel VerticalAlignment="Center">
- <TextBlock Text="Nesting" Style="{StaticResource SectionTitle}" FontSize="24"/>
- <TextBlock Text="Sắp xếp chi tiết trên tấm · Chỉnh tay trực tiếp trên vùng bố trí." Foreground="{DynamicResource TextSecondaryBrush}"/>
+ <TextBlock Text="Nesting" Style="{StaticResource SectionTitle}" FontSize="22" Margin="0,0,0,2"/>
+ <TextBlock Text="Sắp xếp và chỉnh tay chi tiết trên tấm." Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
  </StackPanel>
- <UniformGrid Grid.Column="1" Columns="4" VerticalAlignment="Center" Margin="12,0">
- <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="CHI TIẾT ĐÃ XẾP" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><TextBlock Text="{Binding PlacedCount}" FontSize="17" FontWeight="Bold"/><TextBlock Text="/" Foreground="{DynamicResource TextMutedBrush}" Margin="5,0"/><TextBlock Text="{Binding RequiredCount}" FontSize="14" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="0,0,0,2"/></StackPanel></StackPanel>
- <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="TẤM ĐÃ DÙNG" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><TextBlock Text="{Binding Sheets.Count}" FontSize="17" FontWeight="Bold"/><TextBlock Text=" tấm" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="5,0,0,2"/></StackPanel></StackPanel>
- <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="HIỆU SUẤT TẤM" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><TextBlock Text="{Binding SelectedSheet.Sheet.Utilization, StringFormat='{}{0:P1}', TargetNullValue='—'}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PrimaryDarkBrush}" HorizontalAlignment="Center"/></StackPanel>
- <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="THỜI GIAN TÍNH" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><TextBlock Text="{Binding LastNestDuration.TotalSeconds, StringFormat='{}{0:0.0} giây'}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center"/></StackPanel>
+ <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Command="{Binding RunCommand}" Padding="24,13" MinWidth="210" MinHeight="48" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Chạy nesting (F5)">
+ <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><Path Data="{StaticResource IcPlay}" Style="{StaticResource IcoSolid}" Width="15" Height="15" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}" Margin="0,0,10,0"/><TextBlock Text="Chạy nesting" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel>
+ </Button>
+ <UniformGrid Grid.Column="2" Columns="4" VerticalAlignment="Center" Margin="8,0">
+ <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="ĐÃ XẾP" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><TextBlock Text="{Binding PlacedCount}" FontSize="16" FontWeight="Bold"/><TextBlock Text="/" Foreground="{DynamicResource TextMutedBrush}" Margin="4,0"/><TextBlock Text="{Binding RequiredCount}" FontSize="13" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="0,0,0,2"/></StackPanel></StackPanel>
+ <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="TẤM NHÓM" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><TextBlock Text="{Binding SelectedSheetGroupPhysicalCount}" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/></StackPanel>
+ <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="HIỆU SUẤT TẤM" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><TextBlock Text="{Binding SelectedSheet.Sheet.Utilization, StringFormat='{}{0:P1}', TargetNullValue='—'}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PrimaryDarkBrush}" HorizontalAlignment="Center"/></StackPanel>
+ <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="THỜI GIAN TÍNH" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/><TextBlock Text="{Binding LastNestDuration.TotalSeconds, StringFormat='{}{0:0.0} giây'}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center"/></StackPanel>
  </UniformGrid>
- <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="12,0,0,0">
- <Button Style="{StaticResource PrimaryButton}" Command="{Binding RunCommand}" Padding="18,8" Margin="0,0,8,0" MinWidth="148" ToolTip="Chạy nesting (F5)">
- <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><Path Data="{StaticResource IcPlay}" Style="{StaticResource IcoSolid}" Width="13" Height="13" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}" Margin="0,0,9,0"/><TextBlock Text="Chạy nesting" FontSize="13.5" VerticalAlignment="Center"/></StackPanel>
- </Button>
- <Button Style="{StaticResource DangerButton}" Command="{Binding CancelCommand}" Padding="16,8" Margin="0" MinWidth="92" ToolTip="Dừng và giữ kết quả tốt nhất hiện có">
- <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><Path Data="{StaticResource IcStop}" Style="{StaticResource IcoSolid}" Width="13" Height="13" Fill="{DynamicResource DangerTextBrush}" Margin="0,0,7,0"/><TextBlock Text="Dừng" VerticalAlignment="Center" Foreground="{DynamicResource DangerTextBrush}"/></StackPanel>
- </Button>
- </StackPanel>
  </Grid>
  <Grid Grid.Row="1">
  <Grid.ColumnDefinitions>
- <ColumnDefinition Width="270" MinWidth="240"/>
- <ColumnDefinition Width="12"/>
+ <ColumnDefinition Width="220" MinWidth="190"/>
+ <ColumnDefinition Width="8"/>
  <ColumnDefinition Width="*" MinWidth="340"/>
- <ColumnDefinition Width="12"/>
- <ColumnDefinition Width="318" MinWidth="260"/>
+ <ColumnDefinition Width="8"/>
+ <ColumnDefinition Width="280" MinWidth="240"/>
  </Grid.ColumnDefinitions>
- <GridSplitter Grid.Column="1" Width="12" HorizontalAlignment="Center" VerticalAlignment="Stretch" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Background="Transparent" Cursor="SizeWE" ToolTip="Kéo để đổi kích thước"/>
- <GridSplitter Grid.Column="3" Width="12" HorizontalAlignment="Center" VerticalAlignment="Stretch" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Background="Transparent" Cursor="SizeWE" ToolTip="Kéo để đổi kích thước"/>
+ <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Center" VerticalAlignment="Stretch" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Background="Transparent" Cursor="SizeWE" ToolTip="Kéo để đổi kích thước"/>
+ <GridSplitter Grid.Column="3" Width="8" HorizontalAlignment="Center" VerticalAlignment="Stretch" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Background="Transparent" Cursor="SizeWE" ToolTip="Kéo để đổi kích thước"/>
 
  <!-- ===== TRÁI: THIẾT LẬP NESTING + BỘ LỌC CHI TIẾT ===== -->
  <!-- ===== TRÁI: BỘ LỌC CHI TIẾT (kéo part vào sheet để xếp thủ công) ===== -->
@@ -622,7 +615,7 @@
  <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
  <Button Click="PreviousSheet_Click" Padding="9,6" Margin="0" ToolTip="Tấm trước"><Path Data="{StaticResource IcPrev}" Style="{StaticResource Ico}" Width="14" Height="14"/></Button>
  <Border Background="{DynamicResource CardBgHoverBrush}" CornerRadius="7" Padding="14,6" Margin="4,0">
- <TextBlock Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold"><Run Text="Tấm "/><Run Text="{Binding SelectedSheet.Sheet.Index, Mode=OneWay}"/><Run Text=" / "/><Run Text="{Binding Sheets.Count, Mode=OneWay}"/></TextBlock>
+ <TextBlock Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold"><Run Text="Mẫu "/><Run Text="{Binding SelectedSheetGroupPosition, Mode=OneWay}"/><Run Text=" / "/><Run Text="{Binding SelectedSheetGroupCount, Mode=OneWay}"/></TextBlock>
  </Border>
  <Button Click="NextSheet_Click" Padding="9,6" Margin="0,0,10,0" ToolTip="Tấm tiếp theo"><Path Data="{StaticResource IcNext}" Style="{StaticResource Ico}" Width="14" Height="14"/></Button>
  <Button Click="DeleteSelectedSheet_Click" Padding="9,6" Margin="0,0,8,0" ToolTip="Xóa toàn bộ nesting của tấm đang chọn">
@@ -656,15 +649,16 @@
 
  <!-- ===== PHẢI: KẾT QUẢ NESTING + CHI TIẾT TẤM ===== -->
  <Grid Grid.Column="4">
- <Grid.RowDefinitions><RowDefinition Height="*" MinHeight="140"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+ <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*" MinHeight="140"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
  <Border Grid.Row="0" Style="{StaticResource CardFlat}" Padding="12,10" Margin="0,0,0,12">
- <Grid>
- <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
- <DockPanel Grid.Row="0" Margin="4,2,4,10" LastChildFill="False">
+ <DockPanel Margin="4,2,4,0" LastChildFill="False">
  <TextBlock Text="Kết quả Nesting" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
  <TextBlock DockPanel.Dock="Right" Text="{Binding Sheets.Count, StringFormat='{}{0} tấm'}" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
  </DockPanel>
- <ListBox Grid.Row="1" ItemsSource="{Binding Sheets}" SelectedItem="{Binding SelectedSheet, Mode=TwoWay}" IsEnabled="{Binding IsIdle}" BorderThickness="0" Background="Transparent" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+ </Border>
+ <ComboBox Grid.Row="1" ItemsSource="{Binding SheetGroups}" SelectedItem="{Binding SelectedSheetGroup, Mode=TwoWay}" DisplayMemberPath="Label" IsEnabled="{Binding IsIdle}" Margin="0,0,0,10" ToolTip="Chọn nhóm vật liệu và độ dày"/>
+ <Border Grid.Row="2" Style="{StaticResource CardFlat}" Padding="12,10" Margin="0,0,0,12">
+ <ListBox ItemsSource="{Binding SelectedSheetGroup.Patterns}" SelectedItem="{Binding SelectedNestingPattern, Mode=TwoWay}" IsEnabled="{Binding IsIdle}" BorderThickness="0" Background="Transparent" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
  <ListBox.ContextMenu>
  <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
  <MenuItem Header="Thêm tấm thủ công" Command="{Binding AddManualSheetCommand}"/>
@@ -704,24 +698,23 @@
  </Border>
  <StackPanel Grid.Column="1" VerticalAlignment="Center">
  <DockPanel LastChildFill="False">
- <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"><Run Text="Tấm "/><Run Text="{Binding Sheet.Index, Mode=OneWay}"/></TextBlock>
+ <TextBlock Text="{Binding Name, Mode=OneWay}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
  <TextBlock DockPanel.Dock="Right" Text="{Binding Sheet.Utilization, StringFormat='{}{0:P1}'}" Foreground="{DynamicResource PrimaryDarkBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
  </DockPanel>
  <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,3,0,0" FontSize="12.5"><Run Text="{Binding Material, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding Thickness, Mode=OneWay, StringFormat='{}{0:0.###}'}"/><Run Text=" mm"/></TextBlock>
  <ProgressBar Value="{Binding Sheet.Utilization, Mode=OneWay}" Maximum="1" Height="6" Margin="0,7,0,4" Foreground="{DynamicResource PrimaryBrush}" Background="{DynamicResource ProgressTrackBrush}" BorderThickness="0"/>
- <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12"><Run Text="{Binding Sheet.Placements.Count, Mode=OneWay}"/><Run Text=" chi tiết"/></TextBlock>
+ <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12"><Run Text="{Binding Sheet.Placements.Count, Mode=OneWay}"/><Run Text=" chi tiết · "/><Run Text="{Binding Quantity, Mode=OneWay}"/><Run Text=" tấm"/></TextBlock>
  </StackPanel>
  </Grid>
  </DataTemplate>
  </ListBox.ItemTemplate>
  </ListBox>
- </Grid>
  </Border>
 
- <Border Grid.Row="1" Style="{StaticResource CardFlat}" Padding="16,12">
+ <Border Grid.Row="3" Style="{StaticResource CardFlat}" Padding="16,12">
  <StackPanel>
  <TextBlock Text="Chi tiết tấm" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,6"/>
- <Grid Margin="0,0,0,0" MinHeight="34"><Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Tên tấm" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><TextBlock Grid.Column="1" Text="{Binding SelectedSheet.Sheet.Index, Mode=OneWay, StringFormat='Tấm {}{0}', TargetNullValue='—', FallbackValue='—'}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/></Grid><Border Height="1" Background="{DynamicResource AppBorderBrush}" Opacity="0.7"/>
+ <Grid Margin="0,0,0,0" MinHeight="34"><Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Tên tấm" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><TextBlock Grid.Column="1" Text="{Binding SelectedNestingPattern.Name, Mode=OneWay, TargetNullValue='—', FallbackValue='—'}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedNestingPattern.Name}"/></Grid><Border Height="1" Background="{DynamicResource AppBorderBrush}" Opacity="0.7"/>
  <Grid Margin="0,0,0,0" MinHeight="34"><Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Vật liệu" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><TextBlock Grid.Column="1" Text="{Binding SelectedSheet.Material, Mode=OneWay, TargetNullValue='—', FallbackValue='—'}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/></Grid><Border Height="1" Background="{DynamicResource AppBorderBrush}" Opacity="0.7"/>
  <Grid Margin="0,0,0,0" MinHeight="34"><Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Độ dày" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><TextBlock Grid.Column="1" Text="{Binding SelectedSheet.Thickness, Mode=OneWay, StringFormat='{}{0:0.###} mm', TargetNullValue='—', FallbackValue='—'}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/></Grid><Border Height="1" Background="{DynamicResource AppBorderBrush}" Opacity="0.7"/>
  <Grid Margin="0,0,0,0" MinHeight="34"><Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Kích thước" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><TextBlock Grid.Column="1" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"><Run Text="{Binding SelectedSheet.Sheet.Width, Mode=OneWay, StringFormat='{}{0:0}'}"/><Run Text=" × "/><Run Text="{Binding SelectedSheet.Sheet.Height, Mode=OneWay, StringFormat='{}{0:0}'}"/><Run Text=" mm"/></TextBlock></Grid><Border Height="1" Background="{DynamicResource AppBorderBrush}" Opacity="0.7"/>

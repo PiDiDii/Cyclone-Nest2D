@@ -6,6 +6,31 @@ namespace CycloneNest2D.UI;
 
 public static class ExportService
 {
+    public static List<string> ExportPatterns(IReadOnlyList<NestingPatternItem> patterns, SheetDefinition definition,
+        string folder, DxfExportOptions options)
+    {
+        Directory.CreateDirectory(folder);
+        var files = new List<string>(patterns.Count);
+        foreach (var pattern in patterns)
+        {
+            string stem = Path.Combine(folder, SafeFileName(pattern.Name));
+            var sheet = pattern.Sheet;
+            var sheetDefinition = new SheetDefinition(sheet.Width, sheet.Height, definition.Margin, definition.Spacing);
+            DxfWriter.Write(sheet, sheetDefinition, stem + ".dxf", options);
+            files.Add(stem + ".dxf");
+        }
+        return files;
+    }
+
+    public static string SafeFileName(string name)
+    {
+        const string windowsInvalid = "<>:\"/\\|?*";
+        char[] invalid = Path.GetInvalidFileNameChars().Concat(windowsInvalid).Distinct().ToArray();
+        string safe = string.Concat(name.Select(character => Array.IndexOf(invalid, character) >= 0 ? '_' : character))
+            .TrimEnd(' ', '.');
+        return string.IsNullOrWhiteSpace(safe) ? "nest" : safe;
+    }
+
     /// <summary>Xuất một DXF gộp nhiều nest hoặc từng tấm theo lựa chọn người dùng.</summary>
     public static List<string> ExportSheets(NestResult result, SheetDefinition def, string destination, DxfExportOptions options)
     {

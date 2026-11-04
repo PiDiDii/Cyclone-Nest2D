@@ -296,6 +296,14 @@ public sealed class SheetView : FrameworkElement
         FormattedText Text(string value) => new(value, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
             ThemePalette.AppTypeface, 11, ThemePalette.Brush("CanvasTextBrush", Color.FromRgb(0x5F, 0x6D, 0x7E)), dpi);
 
+        bool endpointHasLabel = Math.Abs(scene.SheetWidth % 500) < 1e-6;
+        var unit = Text("mm");
+        var unitBounds = new Rect(
+            Math.Max(2, _ox + scene.SheetWidth * _zoom - unit.Width),
+            Math.Max(2, _oy - unit.Height - 11),
+            unit.Width,
+            unit.Height);
+
         for (double mm = 0; mm <= scene.SheetWidth + 1e-6; mm += 100)
         {
             double x = _ox + mm * _zoom;
@@ -304,8 +312,12 @@ public sealed class SheetView : FrameworkElement
             dc.DrawLine(pen, new Point(x, _oy - (label ? 9 : 4)), new Point(x, _oy));
             if (label)
             {
-                var ft = Text(mm.ToString("0", CultureInfo.CurrentUICulture));
+                bool isEndpoint = Math.Abs(mm - scene.SheetWidth) < 1e-6;
+                var ft = Text(mm.ToString("0", CultureInfo.CurrentUICulture) +
+                              (isEndpoint ? " mm" : ""));
                 double tx = Math.Clamp(x - ft.Width / 2, 2, Math.Max(2, ActualWidth - ft.Width - 2));
+                var labelBounds = new Rect(tx, Math.Max(2, _oy - ft.Height - 11), ft.Width, ft.Height);
+                if (!isEndpoint && labelBounds.IntersectsWith(unitBounds)) continue;
                 dc.DrawText(ft, new Point(tx, Math.Max(2, _oy - ft.Height - 11)));
             }
         }
@@ -324,8 +336,8 @@ public sealed class SheetView : FrameworkElement
                 dc.DrawText(ft, new Point(tx, ty));
             }
         }
-        var unit = Text("mm");
-        dc.DrawText(unit, new Point(Math.Max(2, _ox + scene.SheetWidth * _zoom - unit.Width), Math.Max(2, _oy - unit.Height - 11)));
+        if (!endpointHasLabel)
+            dc.DrawText(unit, new Point(unitBounds.X, unitBounds.Y));
     }
 
     protected override void OnRender(DrawingContext dc)

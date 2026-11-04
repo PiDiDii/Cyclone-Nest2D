@@ -26,9 +26,16 @@ internal enum ReportPageSelection
 internal sealed record NestingReportPart(
     int Id, string Name, double Width, double Height, double Thickness, double AreaPerPart, int QuantityOnSheet);
 
+internal sealed record NestingReportMaterialGroup(string Material, double Thickness)
+{
+    public string Label => $"{Material} · {Thickness:0.###} mm";
+}
+
 internal sealed class NestingSheetSummary
 {
     public required SheetResult Sheet { get; init; }
+    public required string PlateName { get; init; }
+    public required int PlateQuantity { get; init; }
     public required int NestNumber { get; init; }
     public required int NestCount { get; init; }
     public required double SheetArea { get; init; }
@@ -41,9 +48,46 @@ internal sealed class NestingSheetSummary
 
 internal sealed class NestingReportDocument
 {
+    public required string ProjectName { get; init; }
     public required IReadOnlyList<NestingSheetSummary> SheetSummaries { get; init; }
     public required IReadOnlyDictionary<string, int> PartIds { get; init; }
     public DateTime? CompletedAt { get; init; }
+
+    public IReadOnlyList<NestingReportMaterialGroup> MaterialGroups => SheetSummaries
+        .GroupBy(summary => (Material: MaterialKey(summary.Sheet.Material), Thickness: Math.Round(summary.Sheet.Thickness, 4)))
+        .OrderBy(group => group.First().Sheet.Material, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(group => group.Key.Thickness)
+        .Select(group => new NestingReportMaterialGroup(group.First().Sheet.Material, group.Key.Thickness))
+        .ToList();
+
+    public NestingReportDocument ForGroup(NestingReportMaterialGroup group)
+    {
+        var matches = SheetSummaries.Where(summary =>
+            MaterialKey(summary.Sheet.Material) == MaterialKey(group.Material) &&
+            Math.Round(summary.Sheet.Thickness, 4) == Math.Round(group.Thickness, 4)).ToList();
+        return new NestingReportDocument
+        {
+            ProjectName = ProjectName,
+            PartIds = PartIds,
+            CompletedAt = CompletedAt,
+            SheetSummaries = matches.Select((summary, index) => new NestingSheetSummary
+            {
+                Sheet = summary.Sheet,
+                PlateName = summary.PlateName,
+                PlateQuantity = summary.PlateQuantity,
+                NestNumber = index + 1,
+                NestCount = matches.Count,
+                SheetArea = summary.SheetArea,
+                UsedPartArea = summary.UsedPartArea,
+                NestEfficiency = summary.NestEfficiency,
+                SheetUtilization = summary.SheetUtilization,
+                WasteRate = summary.WasteRate,
+                Parts = summary.Parts
+            }).ToList()
+        };
+    }
+
+    private static string MaterialKey(string? material) => (material ?? "").Trim().ToUpperInvariant();
 
     public static string SquareMeters(double squareMillimeters) =>
         (squareMillimeters / 1_000_000d).ToString("0.00", CultureInfo.CurrentCulture);
@@ -64,10 +108,14 @@ internal static class NestingReportBuilder
         var sourceParts = vm.Parts.GroupBy(part => part.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
-        var summaries = new List<NestingSheetSummary>(result.Sheets.Count);
-        for (int sheetIndex = 0; sheetIndex < result.Sheets.Count; sheetIndex++)
+        var patterns = vm.SheetGroups.SelectMany(group => group.Patterns)
+            .OrderBy(pattern => pattern.Number)
+            .ToList();
+        var summaries = new List<NestingSheetSummary>(patterns.Count);
+        for (int patternIndex = 0; patternIndex < patterns.Count; patternIndex++)
         {
-            var sheet = result.Sheets[sheetIndex];
+            var pattern = patterns[patternIndex];
+            var sheet = pattern.Sheet;
             double sheetArea = sheet.Width * sheet.Height;
             bool lengthAlongX = sheet.Width >= sheet.Height;
             double maxLengthEdge = sheet.Placements.Count == 0 ? 0 : sheet.Placements.Max(placement =>
@@ -96,8 +144,10 @@ internal static class NestingReportBuilder
             summaries.Add(new NestingSheetSummary
             {
                 Sheet = sheet,
-                NestNumber = sheetIndex + 1,
-                NestCount = result.Sheets.Count,
+                PlateName = pattern.Name,
+                PlateQuantity = pattern.Quantity,
+                NestNumber = patternIndex + 1,
+                NestCount = patterns.Count,
                 SheetArea = sheetArea,
                 UsedPartArea = sheet.UsedArea,
                 NestEfficiency = efficiency,
@@ -109,6 +159,7 @@ internal static class NestingReportBuilder
 
         return new NestingReportDocument
         {
+            ProjectName = vm.ProjectName,
             SheetSummaries = summaries,
             PartIds = ids,
             CompletedAt = vm.LastNestAt
@@ -121,20 +172,32 @@ internal sealed record NestingReportPage(IReadOnlyList<NestingReportPageRef> Rep
 
 internal static class NestingReportPagePlan
 {
+    public const double ContentMarginRatio = 0.02;
+    public const double ContentVerticalMarginRatio = 0.02;
+    public const double MetadataLeftColumnRatio = 0.23;
+    public const double MetadataRightColumnStartRatio = 0.25;
+
     public static double PageWidthDip(NestingPageOrientation orientation) =>
         orientation == NestingPageOrientation.Landscape ? 1122 : 794;
 
     public static double PageHeightDip(NestingPageOrientation orientation) =>
         orientation == NestingPageOrientation.Landscape ? 794 : 1122;
 
-    public static double ContentMarginDip(NestingPageOrientation orientation) => PageWidthDip(orientation) * 0.06;
+    public static double ContentMarginDip(NestingPageOrientation orientation) => PageWidthDip(orientation) * ContentMarginRatio;
+    public static double ContentVerticalMarginDip(NestingPageOrientation orientation) => PageHeightDip(orientation) * ContentVerticalMarginRatio;
 
     public static double CardHeightDip(NestingPageOrientation orientation, int slotCount) =>
-        (PageHeightDip(orientation) - 2 * ContentMarginDip(orientation)) /
+        (PageHeightDip(orientation) - 2 * ContentVerticalMarginDip(orientation)) /
         slotCount;
 
+    public static double MetricsTopDip(NestingPageLayout layout) =>
+        layout == NestingPageLayout.TwoPerPage ? 65 : 82;
+
+    public static double MetricsCellHeightDip(NestingPageLayout layout) =>
+        layout == NestingPageLayout.TwoPerPage ? 22 : 28;
+
     public static double FirstChartTopDip(NestingPageLayout layout) =>
-        layout == NestingPageLayout.TwoPerPage ? 66 : 78;
+        MetricsTopDip(layout) + MetricsCellHeightDip(layout) + 8;
 
     public static double FirstChartMinimumHeightDip(NestingPageOrientation orientation, NestingPageLayout layout) =>
         layout == NestingPageLayout.TwoPerPage
@@ -156,10 +219,10 @@ internal static class NestingReportPagePlan
         layout == NestingPageLayout.TwoPerPage ? 22 : 28;
 
     public static double ContinuationTitleTopDip(NestingPageLayout layout) =>
-        layout == NestingPageLayout.TwoPerPage ? 28 : 48;
+        layout == NestingPageLayout.TwoPerPage ? 64 : 82;
 
     public static double ContinuationTableTopDip(NestingPageLayout layout) =>
-        layout == NestingPageLayout.TwoPerPage ? 50 : 75;
+        layout == NestingPageLayout.TwoPerPage ? 84 : 104;
 
     public static double ContinuationTableHeaderHeightDip(NestingPageLayout layout) =>
         layout == NestingPageLayout.TwoPerPage ? 16 : 20;

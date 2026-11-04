@@ -236,16 +236,73 @@ public static class ProjectStore
             catch (Exception ex) { problems.Add($"{Path.GetFileName(full)}: {ex.Message}"); }
         }
 
+        var result = dto.Result == null ? null : FromDto(dto.Result);
+        if (dto.Settings == null || !HasSavedSheetPresetList(dto.Settings))
+            RestoreSheetPresetsFromWorkspace(settings, items, result);
+
         return new WorkspaceSnapshot
         {
             Parts = items,
-            Result = dto.Result == null ? null : FromDto(dto.Result),
+            Result = result,
             ResultSheet = dto.ResultSheet?.ToSheet(),
             IsStale = dto.IsStale,
             IsEdited = dto.IsEdited,
             LastNestDuration = TimeSpan.FromSeconds(Math.Max(0, dto.LastNestDurationSeconds)),
             LastNestAt = dto.LastNestAt
         };
+    }
+
+    private static bool HasSavedSheetPresetList(string settingsJson)
+    {
+        using var document = JsonDocument.Parse(settingsJson);
+        return document.RootElement.EnumerateObject().Any(property =>
+            string.Equals(property.Name, "SheetPresets", StringComparison.OrdinalIgnoreCase) &&
+            property.Value.ValueKind == JsonValueKind.Array);
+    }
+
+    private static void RestoreSheetPresetsFromWorkspace(
+        NestSettings settings, IReadOnlyList<PartItem> parts, NestResult? result)
+    {
+        if (result != null)
+        {
+            foreach (var sheet in result.Sheets)
+            {
+                if (string.IsNullOrWhiteSpace(sheet.Material) || !(sheet.Thickness > 0) ||
+                    !(sheet.Width > 0) || !(sheet.Height > 0))
+                    continue;
+
+                AddRecoveredPreset(settings, sheet.Material, sheet.Thickness, sheet.Width, sheet.Height, sheet.StockName);
+            }
+        }
+
+        foreach (var part in parts)
+        {
+            if (string.IsNullOrWhiteSpace(part.Material) || !(part.Thickness > 0))
+                continue;
+            if (settings.SheetPresets.Any(preset =>
+                    string.Equals(preset.Material, part.Material, StringComparison.OrdinalIgnoreCase) &&
+                    Math.Round(preset.Thickness, 4) == Math.Round(part.Thickness, 4)))
+                continue;
+
+            AddRecoveredPreset(settings, part.Material, part.Thickness,
+                settings.SheetWidth, settings.SheetHeight, "");
+        }
+    }
+
+    private static void AddRecoveredPreset(
+        NestSettings settings, string material, double thickness, double width, double height, string? name)
+    {
+        bool exists = settings.SheetPresets.Any(preset =>
+            string.Equals(preset.Material, material, StringComparison.OrdinalIgnoreCase) &&
+            Math.Round(preset.Thickness, 4) == Math.Round(thickness, 4) &&
+            Math.Round(preset.Width, 3) == Math.Round(width, 3) &&
+            Math.Round(preset.Height, 3) == Math.Round(height, 3));
+        if (exists) return;
+
+        string profileName = string.IsNullOrWhiteSpace(name)
+            ? $"{material.Trim()} · {thickness:0.###} mm · {width:0.##} × {height:0.##} mm"
+            : name.Trim();
+        settings.SheetPresets.Add(new SheetPreset(profileName, width, height, material.Trim(), thickness));
     }
 
     private static void WriteAtomically(string path, string contents)

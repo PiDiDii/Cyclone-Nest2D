@@ -30,6 +30,7 @@ public sealed class ApplicationWorkflowTests : IDisposable
             TargetUtilizationPercent = 0
         };
         var stock = new SheetPreset("SS400 2mm", 200, 120, "SS400", 2);
+        settings.SheetPresets.Add(stock);
         part.AssignPreset(stock);
 
         NestRun run = await NestingService.RunAsync(
@@ -48,9 +49,11 @@ public sealed class ApplicationWorkflowTests : IDisposable
         ProjectStore.SaveWorkspace(workspacePath, settings, new[] { part }, run.Result, run.Sheet,
             isStale: false, isEdited: true, run.Elapsed, DateTime.UtcNow);
 
-        var reopened = ProjectStore.LoadWorkspace(workspacePath, new NestSettings(), new List<string>());
+        var reopenedSettings = new NestSettings();
+        var reopened = ProjectStore.LoadWorkspace(workspacePath, reopenedSettings, new List<string>());
         Assert.Single(reopened.Parts);
         Assert.Equal("SS400", reopened.Parts[0].Material);
+        Assert.Contains(reopenedSettings.SheetPresets, preset => preset.Material == "SS400" && preset.Thickness == 2);
         Assert.True(reopened.IsEdited);
         Assert.Equal(sheet.Placements[0].X, Assert.Single(Assert.Single(reopened.Result!.Sheets).Placements).X, 6);
 

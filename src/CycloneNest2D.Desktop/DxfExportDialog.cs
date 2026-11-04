@@ -3,12 +3,14 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Globalization;
 using CycloneNest2D.Core;
+using CycloneNest2D.UI;
 
 namespace CycloneNest2D.Desktop;
 
 internal sealed class DxfExportDialog : Window
 {
-    private readonly IReadOnlyList<SheetResult> _sheets;
+    private readonly ComboBox _materialGroup;
+    private IReadOnlyList<NestingPatternItem> _patterns = Array.Empty<NestingPatternItem>();
     private readonly SheetThumbnailView _preview;
     private readonly TextBlock _pageCount;
     private readonly CheckBox _partsSingleLayer;
@@ -18,7 +20,6 @@ internal sealed class DxfExportDialog : Window
     private readonly CheckBox _statistics;
     private readonly CheckBox _outputSheets;
     private readonly TextBox _sheetLayer;
-    private readonly RadioButton _singleFile;
     private readonly ComboBox _geometryStyle;
     private readonly CheckBox _partsAsBlocks;
     private readonly CheckBox _nestsAsBlocks;
@@ -34,10 +35,10 @@ internal sealed class DxfExportDialog : Window
     private int _sheetIndex;
 
     public DxfExportOptions? Options { get; private set; }
+    public NestingSheetGroup? SelectedGroup => _materialGroup.SelectedItem as NestingSheetGroup;
 
-    public DxfExportDialog(IReadOnlyList<SheetResult> sheets)
+    public DxfExportDialog(IReadOnlyList<NestingSheetGroup> groups, NestingSheetGroup? selectedGroup)
     {
-        _sheets = sheets;
         Title = "Xuất Nest — DXF";
         Width = 1400; Height = 900; MinWidth = 1180; MinHeight = 760;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -53,6 +54,22 @@ internal sealed class DxfExportDialog : Window
 
         var optionsScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var optionsPanel = new StackPanel { Margin = new Thickness(0, 0, 3, 0) };
+        _materialGroup = new ComboBox
+        {
+            ItemsSource = groups,
+            DisplayMemberPath = nameof(NestingSheetGroup.Label),
+            SelectedItem = selectedGroup,
+            MinWidth = 250,
+            Margin = new Thickness(4, 3, 4, 5)
+        };
+        _materialGroup.SelectionChanged += (_, _) =>
+        {
+            SetPatterns(SelectedGroup);
+            if (SelectedGroup is { } group)
+                Title = $"Xuất Nest — DXF · {group.Material} · {group.Thickness:0.###} mm";
+        };
+        optionsPanel.Children.Add(Group("Vật liệu · độ dày", _materialGroup));
+
         _partsSingleLayer = new CheckBox { Content = "Gộp Part vào một Layer", Margin = new Thickness(4, 4, 4, 6) };
         _partLayer = TextBox("NESTED_PARTS");
         _partLayer.IsEnabled = false;
@@ -69,9 +86,8 @@ internal sealed class DxfExportDialog : Window
         _outputSheets.Unchecked += (_, _) => _sheetLayer.IsEnabled = false;
         optionsPanel.Children.Add(Group("Xuất thêm khổ tấm?", _outputSheets, FieldRow("Tên Layer tấm", _sheetLayer)));
 
-        _singleFile = new RadioButton { Content = "Gộp vào một file", GroupName = "FileLayout", IsChecked = true, Margin = new Thickness(4, 3, 4, 5) };
-        var multipleFiles = new RadioButton { Content = "Mỗi tấm một file", GroupName = "FileLayout", Margin = new Thickness(4, 3, 4, 3) };
-        optionsPanel.Children.Add(Group("Bố trí nhiều khổ tấm", _singleFile, multipleFiles));
+        optionsPanel.Children.Add(Group("Tệp xuất",
+            new TextBlock { Text = "Mỗi mẫu nest xuất thành một DXF riêng. Tên tệp gồm mã tấm, vật liệu, độ dày và số lượng.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#344862"), Margin = new Thickness(4, 4, 4, 5) }));
 
         _geometryStyle = Combo(new[]
         {
@@ -148,7 +164,7 @@ internal sealed class DxfExportDialog : Window
         previewFooter.Children.Add(_showPreview);
         var navigation = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         var prev = Button("‹", false); prev.Width = 34; prev.ToolTip = "Tấm trước"; prev.Click += (_, _) => SetSheet(_sheetIndex - 1);
-        _pageCount = new TextBlock { Text = "1 / 1", Width = 60, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = Brush("#33445B") };
+        _pageCount = new TextBlock { Text = "1 / 1", Width = 190, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = Brush("#33445B") };
         var next = Button("›", false); next.Width = 34; next.ToolTip = "Tấm tiếp theo"; next.Click += (_, _) => SetSheet(_sheetIndex + 1);
         navigation.Children.Add(prev); navigation.Children.Add(_pageCount); navigation.Children.Add(next);
         Grid.SetColumn(navigation, 2); previewFooter.Children.Add(navigation);
@@ -163,7 +179,7 @@ internal sealed class DxfExportDialog : Window
         Grid.SetRow(footer, 1);
         root.Children.Add(footer);
         Content = root;
-        if (_sheets.Count > 0) SetSheet(0);
+        SetPatterns(SelectedGroup);
     }
 
     private void Export_Click(object sender, RoutedEventArgs e)
@@ -212,7 +228,7 @@ internal sealed class DxfExportDialog : Window
             AddNestStatistics = _statistics.IsChecked == true,
             OutputSheets = _outputSheets.IsChecked == true,
             SheetLayerName = _sheetLayer.Text.Trim(),
-            FileLayout = _singleFile.IsChecked == true ? DxfFileLayout.SingleFile : DxfFileLayout.MultipleFiles,
+            FileLayout = DxfFileLayout.MultipleFiles,
             GeometryStyle = SelectedValue<DxfGeometryStyle>(_geometryStyle),
             ExportPartsAsBlocks = _partsAsBlocks.IsChecked == true,
             ExportNestsAsBlocks = _nestsAsBlocks.IsChecked == true,
@@ -249,10 +265,22 @@ internal sealed class DxfExportDialog : Window
 
     private void SetSheet(int index)
     {
-        if (_sheets.Count == 0) return;
-        _sheetIndex = Math.Clamp(index, 0, _sheets.Count - 1);
-        _preview.Sheet = _sheets[_sheetIndex];
-        _pageCount.Text = $"{_sheetIndex + 1} / {_sheets.Count}";
+        if (_patterns.Count == 0) return;
+        _sheetIndex = Math.Clamp(index, 0, _patterns.Count - 1);
+        _preview.Sheet = _patterns[_sheetIndex].Sheet;
+        _pageCount.Text = $"{_sheetIndex + 1} / {_patterns.Count} mẫu · {_patterns[_sheetIndex].Quantity} tấm";
+    }
+
+    private void SetPatterns(NestingSheetGroup? group)
+    {
+        _patterns = group?.Patterns ?? Array.Empty<NestingPatternItem>();
+        _sheetIndex = 0;
+        if (_patterns.Count > 0) SetSheet(0);
+        else
+        {
+            _preview.Sheet = null;
+            _pageCount.Text = "0 / 0 mẫu";
+        }
     }
 
     private static GroupBox Group(string title, params UIElement[] controls)

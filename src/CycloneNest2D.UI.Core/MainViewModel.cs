@@ -73,6 +73,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly NestingOrchestrator _nestingOrchestrator = new();
     private readonly ManualPlacementService _manualPlacementService = new();
     private readonly Dictionary<SheetResult, Dictionary<int, string>> _manualPlacementErrors = new();
+    private readonly Dictionary<string, int> _projectGroupPatternCounts = new(StringComparer.Ordinal);
     private readonly PartManagementService _partManagementService = new();
     private readonly SceneBuilder _sceneBuilder = new();
     private readonly ExportCoordinator _exportCoordinator = new();
@@ -106,6 +107,8 @@ public sealed class MainViewModel : ObservableObject
     private ProjectGroupItem? _activeProjectGroup;
     private string _newProjectGroupName = "";
     private bool _syncingProjectGroups;
+    private NestingSheetGroup? _selectedSheetGroup;
+    private NestingPatternItem? _selectedNestingPattern;
 
     public MainViewModel(IDialogService dialogs, NestSettings? settings = null)
     {
@@ -157,6 +160,7 @@ public sealed class MainViewModel : ObservableObject
     public NestSettings Settings { get; }
     public ObservableCollection<PartItem> Parts { get; } = new();
     public ObservableCollection<SheetItem> Sheets { get; } = new();
+    public ObservableCollection<NestingSheetGroup> SheetGroups { get; } = new();
     public ObservableCollection<ProjectGroupItem> ProjectGroups { get; } = new();
     public ObservableCollection<string> Messages { get; } = new();
     /// <summary>Thông báo nhanh góc phải dưới cửa sổ.</summary>
@@ -291,6 +295,16 @@ public sealed class MainViewModel : ObservableObject
         {
             if (Set(ref _selectedSheet, value))
             {
+                var group = SheetGroups.FirstOrDefault(candidate => candidate.Sheets.Contains(value));
+                if (!ReferenceEquals(_selectedSheetGroup, group))
+                {
+                    _selectedSheetGroup = group;
+                    OnPropertyChanged(nameof(SelectedSheetGroup));
+                    OnPropertyChanged(nameof(SelectedSheetGroupCount));
+                    OnPropertyChanged(nameof(SelectedSheetGroupPhysicalCount));
+                }
+                SetSelectedPatternForSheet(value, group);
+                OnPropertyChanged(nameof(SelectedSheetGroupPosition));
                 _selectedPlacementIndices.Clear();
                 OnPropertyChanged(nameof(SelectedPlacementIndices));
                 SelectedPlacement = -1;
@@ -299,6 +313,48 @@ public sealed class MainViewModel : ObservableObject
                 RaiseCommands();
             }
         }
+    }
+
+    public NestingSheetGroup? SelectedSheetGroup
+    {
+        get => _selectedSheetGroup;
+        set
+        {
+            if (!Set(ref _selectedSheetGroup, value)) return;
+            OnPropertyChanged(nameof(SelectedSheetGroupCount));
+            OnPropertyChanged(nameof(SelectedSheetGroupPhysicalCount));
+            OnPropertyChanged(nameof(SelectedSheetGroupPosition));
+            if (value != null && !value.Sheets.Contains(SelectedSheet))
+                SelectedNestingPattern = value.Patterns.FirstOrDefault();
+        }
+    }
+
+    public NestingPatternItem? SelectedNestingPattern
+    {
+        get => _selectedNestingPattern;
+        set
+        {
+            if (ReferenceEquals(_selectedNestingPattern, value)) return;
+            _selectedNestingPattern = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedSheetGroupPosition));
+            if (value != null && !ReferenceEquals(SelectedSheet, value.Representative))
+                SelectedSheet = value.Representative;
+        }
+    }
+
+    public int SelectedSheetGroupCount => SelectedSheetGroup?.PatternCount ?? 0;
+    public int SelectedSheetGroupPhysicalCount => SelectedSheetGroup?.Sheets.Count ?? 0;
+    public int SelectedSheetGroupPosition => SelectedSheetGroup == null || SelectedSheet == null
+        ? 0
+        : SelectedSheetGroup.Patterns.ToList().FindIndex(pattern => pattern.Sheets.Contains(SelectedSheet)) + 1;
+
+    private void SetSelectedPatternForSheet(SheetItem? sheet, NestingSheetGroup? group)
+    {
+        var pattern = sheet == null ? null : group?.Patterns.FirstOrDefault(candidate => candidate.Sheets.Contains(sheet));
+        if (ReferenceEquals(_selectedNestingPattern, pattern)) return;
+        _selectedNestingPattern = pattern;
+        OnPropertyChanged(nameof(SelectedNestingPattern));
     }
 
     public PreviewScene Scene { get => _scene; private set => Set(ref _scene, value); }
@@ -875,6 +931,7 @@ public sealed class MainViewModel : ObservableObject
 
         Sheets.Clear();
         foreach (var s in r.Sheets) Sheets.Add(new SheetItem(s));
+        RefreshSheetGroups();
 
         foreach (var n in r.Notes) Messages.Add(n);
         foreach (var u in r.Unplaced) Messages.Add("Chưa đặt được: " + u);
@@ -1135,6 +1192,7 @@ public sealed class MainViewModel : ObservableObject
         Result.Sheets.Add(sheet);
         _resultSheet ??= definition;
         Sheets.Add(new SheetItem(sheet));
+        RefreshSheetGroups();
         SelectedSheet = Sheets[^1];
         IsStale = false;
         IsEdited = true;
@@ -1178,7 +1236,93 @@ public sealed class MainViewModel : ObservableObject
         int selectedIndex = SelectedSheet == null ? -1 : Sheets.IndexOf(SelectedSheet);
         Sheets.Clear();
         foreach (var sheet in Result.Sheets) Sheets.Add(new SheetItem(sheet));
+        RefreshSheetGroups();
         SelectedSheet = selectedIndex >= 0 && selectedIndex < Sheets.Count ? Sheets[selectedIndex] : Sheets.FirstOrDefault();
+    }
+
+    private void RefreshSheetGroups()
+    {
+        var selectedSheet = SelectedSheet?.Sheet;
+        int firstPatternNumber = Sheets.Count == 0 ? 1 : GetPatternNumberOffsetForActiveGroup() + 1;
+        var patterns = NestingPatternGrouping.Group(Sheets, firstPatternNumber);
+        if (_activeProjectGroup != null)
+            _projectGroupPatternCounts[_activeProjectGroup.Id] = patterns.Count;
+        var groups = Sheets
+            .GroupBy(item => (Material: MaterialKey(item.Material), Thickness: Math.Round(item.Thickness, 4)))
+            .OrderBy(group => group.First().Material, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(group => group.Key.Thickness)
+            .Select(group =>
+            {
+                var groupSheets = group.ToList();
+                var groupPatterns = patterns.Where(pattern =>
+                    MaterialKey(pattern.Material) == group.Key.Material &&
+                    Math.Round(pattern.Thickness, 4) == group.Key.Thickness).ToList();
+                return new NestingSheetGroup(
+                    string.IsNullOrWhiteSpace(group.First().Material) ? "Chưa khai báo vật liệu" : group.First().Material,
+                    group.Key.Thickness,
+                    groupSheets)
+                {
+                    Patterns = groupPatterns
+                };
+            })
+            .ToList();
+
+        SheetGroups.Clear();
+        foreach (var group in groups) SheetGroups.Add(group);
+        var nextSheet = Sheets.FirstOrDefault(item => ReferenceEquals(item.Sheet, selectedSheet))
+            ?? SheetGroups.FirstOrDefault()?.Patterns.FirstOrDefault()?.Representative;
+        if (!ReferenceEquals(SelectedSheet, nextSheet))
+        {
+            SelectedSheet = nextSheet;
+            return;
+        }
+
+        var selectedGroup = nextSheet == null ? null : SheetGroups.FirstOrDefault(group => group.Sheets.Contains(nextSheet));
+        _selectedSheetGroup = selectedGroup;
+        _selectedNestingPattern = selectedGroup?.Patterns.FirstOrDefault(pattern => pattern.Sheets.Contains(nextSheet));
+        OnPropertyChanged(nameof(SelectedSheetGroup));
+        OnPropertyChanged(nameof(SelectedNestingPattern));
+        OnPropertyChanged(nameof(SelectedSheetGroupCount));
+        OnPropertyChanged(nameof(SelectedSheetGroupPhysicalCount));
+        OnPropertyChanged(nameof(SelectedSheetGroupPosition));
+    }
+
+    private int GetPatternNumberOffsetForActiveGroup()
+    {
+        if (_activeProjectGroup == null) return 0;
+        int activeIndex = ProjectGroups.IndexOf(_activeProjectGroup);
+        if (activeIndex <= 0) return 0;
+
+        int offset = 0;
+        for (int index = 0; index < activeIndex; index++)
+        {
+            var group = ProjectGroups[index];
+            if (!_projectGroupPatternCounts.TryGetValue(group.Id, out int patternCount))
+            {
+                if (!File.Exists(group.Path))
+                {
+                    patternCount = Math.Max(0, group.SheetCount);
+                }
+                else
+                {
+                    try
+                    {
+                        var snapshot = ProjectStore.LoadWorkspace(group.Path, new NestSettings(), new List<string>());
+                        var sheets = snapshot.Result?.Sheets.Select(sheet => new SheetItem(sheet))
+                            ?? Enumerable.Empty<SheetItem>();
+                        patternCount = NestingPatternGrouping.Group(sheets).Count;
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidDataException(
+                            $"Không thể xác định mã tấm của nhóm '{group.Name}': {ex.Message}", ex);
+                    }
+                }
+                _projectGroupPatternCounts[group.Id] = patternCount;
+            }
+            offset += patternCount;
+        }
+        return offset;
     }
 
     /// <summary>Dời chi tiết nếu hợp lệ. Trả về null nếu thành công, ngược lại là lý do (không đổi gì).</summary>
@@ -1234,6 +1378,7 @@ public sealed class MainViewModel : ObservableObject
             Result = manualResult;
             Sheets.Clear();
             Sheets.Add(new SheetItem(sheet));
+            RefreshSheetGroups();
             SelectedSheet = Sheets[0];
             IsStale = false;
         }
@@ -1245,6 +1390,7 @@ public sealed class MainViewModel : ObservableObject
         if (sheetIndex >= 0)
         {
             Sheets[sheetIndex] = new SheetItem(sheet);
+            RefreshSheetGroups();
             SelectedSheet = Sheets[sheetIndex];
         }
         if (Result != null)
@@ -1365,6 +1511,7 @@ public sealed class MainViewModel : ObservableObject
             var item = Sheets.FirstOrDefault(candidate => ReferenceEquals(candidate.Sheet, sheet));
             item?.RefreshPreview();
         }
+        RefreshSheetGroups();
         int[] keep = _selectedPlacementIndices.ToArray();
         int primary = SelectedPlacement;
         RebuildScene();
@@ -1381,10 +1528,23 @@ public sealed class MainViewModel : ObservableObject
         OutputSheets = true
     });
 
-    public void ExportDxf(DxfExportOptions options)
+    public void ExportDxf(DxfExportOptions options) => ExportDxf(options, SelectedSheetGroup);
+
+    public void ExportDxf(DxfExportOptions options, NestingSheetGroup? group)
     {
         if (Result == null || _resultSheet == null) return;
-        var errors = GetExportValidationErrors();
+        if (group == null || !SheetGroups.Contains(group) || group.Patterns.Count == 0 ||
+            group.Sheets.Any(item => !Result.Sheets.Contains(item.Sheet)))
+        {
+            const string message = "Không thể xuất DXF vì nhóm tấm được chọn không hợp lệ.";
+            Status = message;
+            Toasts.Show(ToastKind.Warning, "Không thể xuất DXF", message);
+            return;
+        }
+
+        var exportResult = new NestResult { Strategy = Result.Strategy };
+        exportResult.Sheets.AddRange(group.Sheets.Select(item => item.Sheet));
+        var errors = ValidateResult(exportResult);
         if (errors.Count > 0)
         {
             string message = $"Không thể xuất DXF vì kết quả có {errors.Count} lỗi vị trí. Ví dụ: {errors[0]}";
@@ -1392,16 +1552,14 @@ public sealed class MainViewModel : ObservableObject
             Toasts.Show(ToastKind.Warning, "Không thể xuất DXF", errors[0]);
             return;
         }
-        string? destination = options.FileLayout == DxfFileLayout.SingleFile
-            ? _dialogs.PickSaveFile("Lưu bản vẽ DXF", "DXF (*.dxf)|*.dxf", "nesting.dxf")
-            : _dialogs.PickFolder("Chọn thư mục để xuất từng tấm DXF");
+        string? destination = _dialogs.PickFolder("Chọn thư mục để xuất DXF theo mẫu tấm");
         if (destination == null) return;
         try
         {
-            var files = _exportCoordinator.ExportSheets(Result, _resultSheet, destination, options);
-            string location = options.FileLayout == DxfFileLayout.SingleFile ? files[0] : destination;
+            var files = _exportCoordinator.ExportPatterns(group.Patterns, _resultSheet, destination, options);
+            string location = destination;
             Status = $"Đã xuất {files.Count} DXF: {location}";
-            Toasts.Show(ToastKind.Success, "Đã xuất DXF", options.FileLayout == DxfFileLayout.SingleFile ? Path.GetFileName(location) : $"{files.Count} file trong {location}");
+            Toasts.Show(ToastKind.Success, "Đã xuất DXF", $"{files.Count} file trong {location}");
         }
         catch (Exception ex) { Fail("Không xuất được: " + ex.Message); }
     }
@@ -1414,6 +1572,7 @@ public sealed class MainViewModel : ObservableObject
         Parts.Clear();
         ClearResult();
         ProjectGroups.Clear();
+        _projectGroupPatternCounts.Clear();
         var group = _projectLifecycleService.CreateEmptyGroup(ProjectPath ?? "", "Nhóm vật liệu 1");
         ProjectGroups.Add(group);
         _activeProjectGroup = group;
@@ -1438,6 +1597,7 @@ public sealed class MainViewModel : ObservableObject
         SelectedPlacement = -1;
         OnPropertyChanged(nameof(SelectedPlacementIndices));
         Sheets.Clear();
+        RefreshSheetGroups();
         SelectedSheet = null;
         Scene = PreviewScene.Empty(Settings.ToSheet());
         IsStale = false;
@@ -1473,6 +1633,7 @@ public sealed class MainViewModel : ObservableObject
             }
 
             ProjectGroups.Clear();
+            _projectGroupPatternCounts.Clear();
             if (isProjectIndex)
             {
                 foreach (var group in _projectLifecycleService.BuildProjectGroupsFromIndex(fullPath, problems))
@@ -1507,6 +1668,7 @@ public sealed class MainViewModel : ObservableObject
             else
             {
                 Settings.FromJson(legacySettings!.ToJson());
+                OnPropertyChanged(nameof(Presets));
                 _preset = Settings.SheetPresets.FirstOrDefault(preset =>
                     Math.Abs(preset.Width - Settings.SheetWidth) < 1e-6 &&
                     Math.Abs(preset.Height - Settings.SheetHeight) < 1e-6);
@@ -1633,7 +1795,10 @@ public sealed class MainViewModel : ObservableObject
             var next = ProjectGroups.First(other => other != group);
             SelectedProjectGroup = next;
         }
-        ProjectGroups.Remove(group!);
+        string removedGroupId = group!.Id;
+        ProjectGroups.Remove(group);
+        _projectGroupPatternCounts.Remove(removedGroupId);
+        RefreshSheetGroups();
         IsProjectDirty = true;
         RaiseCommands();
         return SaveProject(false);
@@ -1690,6 +1855,7 @@ public sealed class MainViewModel : ObservableObject
         var settings = new NestSettings();
         var snapshot = ProjectStore.LoadWorkspace(group.Path, settings, problems);
         Settings.FromJson(settings.ToJson());
+        OnPropertyChanged(nameof(Presets));
         _preset = Settings.SheetPresets.FirstOrDefault(preset =>
             Math.Abs(preset.Width - Settings.SheetWidth) < 1e-6 &&
             Math.Abs(preset.Height - Settings.SheetHeight) < 1e-6);
@@ -1717,6 +1883,7 @@ public sealed class MainViewModel : ObservableObject
             LastNestAt = snapshot.LastNestAt;
             Sheets.Clear();
             foreach (var sheet in snapshot.Result.Sheets) Sheets.Add(new SheetItem(sheet));
+            RefreshSheetGroups();
             Summary = ReportBuilder.Summary(snapshot.Result, snapshot.ResultSheet);
             SelectedSheet = Sheets.FirstOrDefault();
         }

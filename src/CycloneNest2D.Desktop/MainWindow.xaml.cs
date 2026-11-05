@@ -50,7 +50,7 @@ public partial class MainWindow : Window
         _vm.Presets.CollectionChanged += (_, _) => ScheduleSheetPresetRowsSync();
         SyncSheetPresetRows();
         var version = typeof(MainWindow).Assembly.GetName().Version;
-        AboutVersion.Text = $"Phiên bản {version?.Major}.{version?.Minor}.{version?.Build} · Cập nhật 31/10/2026";
+        AboutVersion.Text = $"Phiên bản {version?.Major}.{version?.Minor}.{version?.Build} · Cập nhật 05/11/2026";
         _vm.Parts.CollectionChanged += (_, _) =>
         {
             UpdatePartSelectionSummary();

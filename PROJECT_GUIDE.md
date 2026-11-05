@@ -4,7 +4,7 @@
 
 ## 1. Mục tiêu và phạm vi
 
-Cyclone Nest2D là ứng dụng desktop Windows dùng WPF để đọc hình học chi tiết từ DXF ASCII, chuẩn hóa về mm, tìm cách bố trí các chi tiết trên các khổ tấm, cho phép điều chỉnh thủ công, kiểm tra độc lập kết quả và xuất DXF/PDF/báo cáo. Thuật toán lõi và UI Core nhắm `.NET 8`; Desktop nhắm `net8.0-windows` và phụ thuộc WPF.
+Cyclone Nest2D là ứng dụng desktop Windows dùng WPF để đọc hình học chi tiết từ DXF ASCII, chuẩn hóa về mm, tìm cách bố trí các chi tiết trên các khổ tấm, cho phép điều chỉnh thủ công, kiểm tra độc lập kết quả và xuất DXF/PDF/báo cáo. Thuật toán lõi và UI Core nhắm `.NET 10`; Desktop nhắm `net10.0-windows` và phụ thuộc WPF.
 
 Điểm quan trọng về miền nghiệp vụ: với chi tiết DXF, hệ thống phải dùng contour thật. Nếu contour ngoài không thể xác minh thì phải báo lỗi và từ chối nesting; không được lặng lẽ thay bằng hình chữ nhật hộp bao. Hộp bao được dùng cho kích thước, vùng lọc, giới hạn tìm kiếm và hiển thị, không thay thế phép xác minh hình học.
 
@@ -13,7 +13,7 @@ Cyclone Nest2D là ứng dụng desktop Windows dùng WPF để đọc hình h�
 | Đường dẫn | Trách nhiệm |
 |---|---|
 | `src/CycloneNest2D.Core/` | Miền hình học, đọc DXF, thuật toán nesting, validator và xuất DXF. Không phụ thuộc WPF. |
-| `src/CycloneNest2D.UI.Core/` | ViewModel/MVVM, quy tắc ứng dụng, quản lý Part, chạy nesting nền, preview scene, cấu hình, lưu/mở dự án, điều phối xuất. Nhắm `net8.0`, có thể kiểm thử ngoài Windows. |
+| `src/CycloneNest2D.UI.Core/` | ViewModel/MVVM, quy tắc ứng dụng, quản lý Part, chạy nesting nền, preview scene, cấu hình, lưu/mở dự án, điều phối xuất. Nhắm `net10.0`, có thể kiểm thử ngoài Windows. |
 | `src/CycloneNest2D.Desktop/` | Ứng dụng WPF Windows: XAML, cửa sổ, canvas/vẽ, tương tác chuột/bàn phím, hộp thoại, PDF. Nên giữ lớp này chủ yếu là UI và adapter. |
 | `tests/CycloneNest2D.Tests/` | xUnit tests theo domain cho hình học, DXF, nesting, validator và xuất. |
 | `tests/CycloneNest2D.UI.Tests/` | xUnit tests cho UI Core, persistence, thao tác placement và kiểm tra tĩnh XAML; không phải kiểm thử tương tác WPF thực. |
@@ -163,7 +163,7 @@ Bất biến: đơn vị hình học vào Core là mm; placement phải nằm tr
 
 ## 6. Cách chạy và kiểm tra
 
-Cần .NET 8 SDK. Trên Windows có thể mở `CycloneNest2D.sln`, hoặc chạy ứng dụng desktop:
+Cần .NET 10 SDK để build. Máy chạy ứng dụng framework-dependent cần .NET 10 Desktop Runtime. Trên Windows có thể mở `CycloneNest2D.sln`, hoặc chạy ứng dụng desktop:
 
 ```powershell
 dotnet run --project src/CycloneNest2D.Desktop -c Release
@@ -204,7 +204,7 @@ dotnet run --project tests\CycloneNest2D.Performance -c Release -- --full --dxf 
 
 GitHub Actions cấu hình tại `.github/workflows/ci.yml` có ba luồng:
 
-- **Core và UI Core:** chạy test project riêng trên `ubuntu-latest` và `windows-latest` bằng .NET 8.
+- **Core và UI Core:** chạy test project riêng trên `ubuntu-latest` và `windows-latest` bằng .NET 10.
 - **Desktop:** trên Windows chạy `dotnet format ... --verify-no-changes` và build WPF Release.
 - **Performance:** trên Windows chạy benchmark nhanh ba lượt, giới hạn mỗi lượt 1,5 giây và upload báo cáo JSON/CSV làm artifact trong 14 ngày.
 

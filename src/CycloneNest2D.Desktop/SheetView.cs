@@ -718,25 +718,25 @@ public sealed class SheetView : FrameworkElement
         switch (e.Key)
         {
             case Key.R:
-            {
-                var anchor = ToWorld(_mouse);
-                if (s.HitTest(anchor.X, anchor.Y) == SelectedIndex)
-                    Model.RotateSelectedAt(anchor.X, anchor.Y);
-                else
-                    Model.RotateSelected();
-                e.Handled = true;
-                break;
-            }
+                {
+                    var anchor = ToWorld(_mouse);
+                    if (s.HitTest(anchor.X, anchor.Y) == SelectedIndex)
+                        Model.RotateSelectedAt(anchor.X, anchor.Y);
+                    else
+                        Model.RotateSelected();
+                    e.Handled = true;
+                    break;
+                }
             case Key.M:
-            {
-                var anchor = ToWorld(_mouse);
-                if (s.HitTest(anchor.X, anchor.Y) == SelectedIndex)
-                    Model.MirrorSelectedAt(anchor.X, anchor.Y);
-                else
-                    Model.MirrorSelected();
-                e.Handled = true;
-                break;
-            }
+                {
+                    var anchor = ToWorld(_mouse);
+                    if (s.HitTest(anchor.X, anchor.Y) == SelectedIndex)
+                        Model.MirrorSelectedAt(anchor.X, anchor.Y);
+                    else
+                        Model.MirrorSelected();
+                    e.Handled = true;
+                    break;
+                }
             case Key.Left: Move(-1, 0); e.Handled = true; break;
             case Key.Right: Move(1, 0); e.Handled = true; break;
             case Key.Up: Move(0, 1); e.Handled = true; break;

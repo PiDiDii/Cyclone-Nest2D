@@ -42,46 +42,46 @@ public static class DxfExportWriter
             long offsetBucket = (long)Math.Round(offset / _tolerance);
             var remaining = new List<(double Start, double End)> { (0, length) };
             for (long angleDelta = -1; angleDelta <= 1; angleDelta++)
-            for (long offsetDelta = -1; offsetDelta <= 1; offsetDelta++)
-            {
-                if (!_segments.TryGetValue((angleBucket + angleDelta, offsetBucket + offsetDelta), out var bucket))
-                    continue;
-                foreach (var existing in bucket)
+                for (long offsetDelta = -1; offsetDelta <= 1; offsetDelta++)
                 {
-                    double ex = existing.X2 - existing.X1, ey = existing.Y2 - existing.Y1;
-                    double existingLength = Math.Sqrt(ex * ex + ey * ey);
-                    if (existingLength <= _tolerance) continue;
-
-                    double distance1 = Math.Abs((existing.X1 - x1) * uy - (existing.Y1 - y1) * ux);
-                    double distance2 = Math.Abs((existing.X2 - x1) * uy - (existing.Y2 - y1) * ux);
-                    if (distance1 > _tolerance || distance2 > _tolerance)
+                    if (!_segments.TryGetValue((angleBucket + angleDelta, offsetBucket + offsetDelta), out var bucket))
                         continue;
-
-                    double t1 = (existing.X1 - x1) * ux + (existing.Y1 - y1) * uy;
-                    double t2 = (existing.X2 - x1) * ux + (existing.Y2 - y1) * uy;
-                    double overlapStart = Math.Max(0, Math.Min(t1, t2));
-                    double overlapEnd = Math.Min(length, Math.Max(t1, t2));
-                    if (overlapEnd - overlapStart <= _tolerance) continue;
-
-                    var next = new List<(double Start, double End)>();
-                    foreach (var interval in remaining)
+                    foreach (var existing in bucket)
                     {
-                        if (overlapEnd <= interval.Start + _tolerance ||
-                            overlapStart >= interval.End - _tolerance)
-                        {
-                            next.Add(interval);
+                        double ex = existing.X2 - existing.X1, ey = existing.Y2 - existing.Y1;
+                        double existingLength = Math.Sqrt(ex * ex + ey * ey);
+                        if (existingLength <= _tolerance) continue;
+
+                        double distance1 = Math.Abs((existing.X1 - x1) * uy - (existing.Y1 - y1) * ux);
+                        double distance2 = Math.Abs((existing.X2 - x1) * uy - (existing.Y2 - y1) * ux);
+                        if (distance1 > _tolerance || distance2 > _tolerance)
                             continue;
+
+                        double t1 = (existing.X1 - x1) * ux + (existing.Y1 - y1) * uy;
+                        double t2 = (existing.X2 - x1) * ux + (existing.Y2 - y1) * uy;
+                        double overlapStart = Math.Max(0, Math.Min(t1, t2));
+                        double overlapEnd = Math.Min(length, Math.Max(t1, t2));
+                        if (overlapEnd - overlapStart <= _tolerance) continue;
+
+                        var next = new List<(double Start, double End)>();
+                        foreach (var interval in remaining)
+                        {
+                            if (overlapEnd <= interval.Start + _tolerance ||
+                                overlapStart >= interval.End - _tolerance)
+                            {
+                                next.Add(interval);
+                                continue;
+                            }
+                            if (overlapStart > interval.Start + _tolerance)
+                                next.Add((interval.Start, overlapStart));
+                            if (overlapEnd < interval.End - _tolerance)
+                                next.Add((overlapEnd, interval.End));
                         }
-                        if (overlapStart > interval.Start + _tolerance)
-                            next.Add((interval.Start, overlapStart));
-                        if (overlapEnd < interval.End - _tolerance)
-                            next.Add((overlapEnd, interval.End));
+                        remaining = next;
+                        if (remaining.Count == 0) break;
                     }
-                    remaining = next;
                     if (remaining.Count == 0) break;
                 }
-                if (remaining.Count == 0) break;
-            }
 
             if (!_segments.TryGetValue((angleBucket, offsetBucket), out var currentBucket))
             {

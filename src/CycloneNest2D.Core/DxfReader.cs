@@ -58,6 +58,17 @@ public sealed record DxfRaw(List<Shape> Shapes, double? UnitScale, string UnitTe
 /// </summary>
 public static class DxfReader
 {
+    public const long MaxFileSizeBytes = 32L * 1024 * 1024;
+    public const int MaxLines = 1_200_000;
+    public const int MaxGroupCodePairs = 500_000;
+    public const int MaxExpandedEntities = 250_000;
+    public const int MaxInsertInstances = 50_000;
+    public const int MaxPolylinePoints = 50_000;
+    public const int MaxSplineControlPoints = 4_096;
+    public const int MaxSplineDegree = 16;
+    public const int MaxSplineKnots = MaxSplineControlPoints + MaxSplineDegree + 1;
+    public const int MaxEllipseSegments = 100_000;
+
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
     // ---------- API chính ----------
@@ -332,7 +343,13 @@ public static class DxfReader
 
     private static Doc Load(string path)
     {
+        var fileInfo = new FileInfo(path);
+        if (fileInfo.Length > MaxFileSizeBytes)
+            throw new InvalidDataException($"DXF vượt giới hạn {MaxFileSizeBytes / (1024 * 1024)} MB.");
+
         var bytes = File.ReadAllBytes(path);
+        if (bytes.LongLength > MaxFileSizeBytes)
+            throw new InvalidDataException($"DXF vượt giới hạn {MaxFileSizeBytes / (1024 * 1024)} MB.");
         if (bytes.Length >= 18 && Encoding.ASCII.GetString(bytes, 0, 18) == "AutoCAD Binary DXF")
             throw new NotSupportedException("File DXF dạng nhị phân (binary). Hãy lưu lại dạng ASCII (trong ZWCAD/Inventor chọn DXF thường).");
 
@@ -341,13 +358,22 @@ public static class DxfReader
         catch (DecoderFallbackException) { text = Encoding.Latin1.GetString(bytes); }
         if (text.Length > 0 && text[0] == '﻿') text = text[1..];
 
+        int lineCount = 1;
+        foreach (char character in text)
+            if (character == '\n' && ++lineCount > MaxLines)
+                throw new InvalidDataException($"DXF vượt giới hạn {MaxLines:N0} dòng.");
+
         var lines = text.Split('\n');
 
         // Bước 1: tách thành các bản ghi bắt đầu bằng group code 0
         var recs = new List<RawEntity>();
         RawEntity? cur = null;
+        int groupCodePairs = 0;
         for (int i = 0; i + 1 < lines.Length; i += 2)
         {
+            if (!string.IsNullOrWhiteSpace(lines[i]) && ++groupCodePairs > MaxGroupCodePairs)
+                throw new InvalidDataException($"DXF vượt giới hạn {MaxGroupCodePairs:N0} cặp group code.");
+
             if (!int.TryParse(lines[i].Trim(), NumberStyles.Integer, Inv, out int code))
             {
                 if (string.IsNullOrWhiteSpace(lines[i])) { i--; continue; } // dòng trống thừa
@@ -449,6 +475,8 @@ public static class DxfReader
         public readonly List<DxfTextEntity> Texts = new();
         public readonly HashSet<string> Warnings = new();
         public readonly Dictionary<string, int> Unsupported = new();
+        private int _expandedEntityCount;
+        private int _insertInstanceCount;
 
         /// <summary>Số ellipse/spline phải xấp xỉ bằng nhiều đoạn thẳng.</summary>
         public int Approximated { get; private set; }
@@ -464,6 +492,9 @@ public static class DxfReader
         {
             foreach (var e in ents)
             {
+                if (++_expandedEntityCount > MaxExpandedEntities)
+                    throw new InvalidDataException($"DXF vượt giới hạn {MaxExpandedEntities:N0} entity sau khi mở rộng block.");
+
                 string layer = e.Str(8) ?? "0";
                 if (layer == "0" && inheritLayer != null) layer = inheritLayer;
 
@@ -500,7 +531,11 @@ public static class DxfReader
                             {
                                 switch (code)
                                 {
-                                    case 10: pts.Add((P(val), 0, 0)); break;
+                                    case 10:
+                                        if (pts.Count >= MaxPolylinePoints)
+                                            throw new InvalidDataException($"DXF vượt giới hạn {MaxPolylinePoints:N0} điểm trên một polyline.");
+                                        pts.Add((P(val), 0, 0));
+                                        break;
                                     case 20: if (pts.Count > 0) pts[^1] = (pts[^1].X, P(val), pts[^1].B); break;
                                     case 42: if (pts.Count > 0) pts[^1] = (pts[^1].X, pts[^1].Y, P(val)); break;
                                 }
@@ -524,6 +559,8 @@ public static class DxfReader
                                 int vf = v.Int(70);
                                 if ((vf & 128) != 0) continue;
                                 if ((pf & 4) != 0 && (vf & 16) != 0) continue; // điểm điều khiển của spline-fit polyline
+                                if (pts.Count >= MaxPolylinePoints)
+                                    throw new InvalidDataException($"DXF vượt giới hạn {MaxPolylinePoints:N0} điểm trên một polyline.");
                                 pts.Add((v.Dbl(10), v.Dbl(20), v.Dbl(42)));
                             }
                             EmitPolyline(pts, (pf & 1) != 0, layer, mm);
@@ -612,10 +649,14 @@ public static class DxfReader
             double sx = e.Dbl(41, 1), sy = e.Dbl(42, 1), rot = e.Dbl(50);
             int cols = Math.Max(1, e.Int(70, 1)), rows = Math.Max(1, e.Int(71, 1));
             double cs = e.Dbl(44), rs = e.Dbl(45);
+            long instances = (long)cols * rows;
+            if (instances > MaxInsertInstances - _insertInstanceCount)
+                throw new InvalidDataException($"DXF vượt giới hạn tổng cộng {MaxInsertInstances:N0} instance INSERT.");
 
             for (int r = 0; r < rows; r++)
                 for (int c = 0; c < cols; c++)
                 {
+                    _insertInstanceCount++;
                     var local = Mat.Translate(ix, iy) * Mat.Rotate(rot) * Mat.Translate(c * cs, r * rs)
                                 * Mat.Scale(sx, sy) * Mat.Translate(-blk.Bx, -blk.By);
                     Walk(blk.Entities, mm * local, layer, depth + 1);
@@ -672,11 +713,18 @@ public static class DxfReader
             double ratio = e.Dbl(40, 1);
             double t0 = e.Dbl(41, 0), t1 = e.Dbl(42, 2 * Math.PI);
             double sweep = t1 - t0;
+            if (!double.IsFinite(sweep))
+                throw new InvalidDataException("DXF có cung ELLIPSE với góc không hợp lệ.");
             if (sweep <= 1e-12) sweep += 2 * Math.PI;
+            if (!double.IsFinite(sweep) || sweep <= 1e-12)
+                throw new InvalidDataException("DXF có cung ELLIPSE với góc không hợp lệ.");
             bool full = sweep >= 2 * Math.PI - 1e-9;
 
             double vx = -ratio * my, vy = ratio * mx; // trục phụ
-            int n = Math.Max(32, (int)Math.Ceiling(sweep * 180 / Math.PI / 0.5));
+            double requestedSegments = Math.Ceiling(sweep * 180 / Math.PI / 0.5);
+            if (!double.IsFinite(requestedSegments) || requestedSegments > MaxEllipseSegments)
+                throw new InvalidDataException($"DXF vượt giới hạn {MaxEllipseSegments:N0} đoạn xấp xỉ cho một ELLIPSE.");
+            int n = Math.Max(32, (int)requestedSegments);
             int count = full ? n : n + 1;
             var pts = new (double X, double Y)[count];
             for (int i = 0; i < count; i++)
@@ -692,6 +740,8 @@ public static class DxfReader
         private void EmitSpline(RawEntity e, string layer, Mat m)
         {
             int deg = e.Int(71, 3);
+            if (deg > MaxSplineDegree)
+                throw new InvalidDataException($"DXF vượt giới hạn bậc {MaxSplineDegree} cho SPLINE.");
             var knots = new List<double>();
             var ws = new List<double>();
             var ctrl = new List<(double X, double Y)>();
@@ -700,11 +750,27 @@ public static class DxfReader
             {
                 switch (code)
                 {
-                    case 40: knots.Add(P(val)); break;
-                    case 41: ws.Add(P(val)); break;
-                    case 10: ctrl.Add((P(val), 0)); break;
+                    case 40:
+                        if (knots.Count >= MaxSplineKnots)
+                            throw new InvalidDataException($"DXF vượt giới hạn {MaxSplineKnots:N0} knot cho một SPLINE.");
+                        knots.Add(P(val));
+                        break;
+                    case 41:
+                        if (ws.Count >= MaxSplineControlPoints)
+                            throw new InvalidDataException($"DXF vượt giới hạn {MaxSplineControlPoints:N0} trọng số cho một SPLINE.");
+                        ws.Add(P(val));
+                        break;
+                    case 10:
+                        if (ctrl.Count >= MaxSplineControlPoints)
+                            throw new InvalidDataException($"DXF vượt giới hạn {MaxSplineControlPoints:N0} điểm điều khiển cho một SPLINE.");
+                        ctrl.Add((P(val), 0));
+                        break;
                     case 20: if (ctrl.Count > 0) ctrl[^1] = (ctrl[^1].X, P(val)); break;
-                    case 11: fit.Add((P(val), 0)); break;
+                    case 11:
+                        if (fit.Count >= MaxSplineControlPoints)
+                            throw new InvalidDataException($"DXF vượt giới hạn {MaxSplineControlPoints:N0} điểm fit cho một SPLINE.");
+                        fit.Add((P(val), 0));
+                        break;
                     case 21: if (fit.Count > 0) fit[^1] = (fit[^1].X, P(val)); break;
                 }
             }

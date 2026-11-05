@@ -9,9 +9,9 @@ Cyclone Nest2D là ứng dụng desktop Windows dùng WPF để đọc file DXF 
 ## Cấu trúc
 
 ```text
-src/CycloneNest2D.Core       Hình học, DXF, nesting, validator, xuất DXF (net8.0)
-src/CycloneNest2D.UI.Core    ViewModel, nghiệp vụ UI, lưu dự án và điều phối (net8.0)
-src/CycloneNest2D.Desktop    Giao diện WPF và báo cáo PDF (net8.0-windows)
+src/CycloneNest2D.Core       Hình học, DXF, nesting, validator, xuất DXF (net10.0)
+src/CycloneNest2D.UI.Core    ViewModel, nghiệp vụ UI, lưu dự án và điều phối (net10.0)
+src/CycloneNest2D.Desktop    Giao diện WPF và báo cáo PDF (net10.0-windows)
 tests/CycloneNest2D.Tests    XUnit tests cho Core
 tests/CycloneNest2D.UI.Tests XUnit tests cho UI Core và kiểm tra tĩnh XAML
 tests/CycloneNest2D.Performance Console benchmark nesting (JSON/CSV)
@@ -19,19 +19,21 @@ tests/CycloneNest2D.Performance Console benchmark nesting (JSON/CSV)
 
 ## Chạy ứng dụng (Windows)
 
-Cần .NET 8 SDK hoặc Visual Studio 2022. Mở `CycloneNest2D.sln`, đặt `CycloneNest2D.Desktop` làm Startup Project và chạy; hoặc:
+Cần .NET 10 SDK để build. Máy chạy ứng dụng framework-dependent cần .NET 10 Desktop Runtime. Mở `CycloneNest2D.sln`, đặt `CycloneNest2D.Desktop` làm Startup Project và chạy; hoặc:
 
 ```powershell
 dotnet run --project src/CycloneNest2D.Desktop -c Release
 ```
 
-Publish framework-dependent cho Windows x64:
+Publish framework-dependent cho Windows x64 (cần cài .NET 10 Desktop Runtime trên máy đích):
 
 ```powershell
 dotnet publish src/CycloneNest2D.Desktop -c Release -r win-x64 --self-contained false
 ```
 
-Kéo file/thư mục DXF vào cửa sổ (hoặc chọn **Thêm DXF** trong trang Part), chỉnh số lượng và gán vật liệu/khổ tấm. Bấm **Nesting (F5)** để xếp tự động, hoặc kéo một chi tiết từ **Bộ lọc chi tiết** vào vùng tấm để đặt thủ công; hình xem trước đi theo con trỏ, vị trí chồng lấn hoặc ngoài tấm hiển thị đỏ và vẫn được giữ khi thả để người dùng chỉnh tiếp. Thumbnail trong danh sách **Kết quả Nesting** cập nhật sau mỗi chỉnh sửa vị trí. Nhấp chuột phải trong danh sách **Kết quả Nesting** để thêm tấm hoặc xóa nesting của tấm đang chọn; nút **Xóa chọn** trên thanh công cụ canvas và phím `Delete` xóa placement đang chọn. Trên hình tấm: lăn chuột để zoom; kéo nền/chuột phải để pan; kéo part đã đặt để di chuyển; Ctrl-click hoặc quét vùng để chọn nhiều part. Nhấp đúp hoặc `R` xoay 90°; `M` lật; các thao tác giữ điểm dưới con trỏ và vẫn thực hiện khi có chồng lấn hoặc vượt lề. Placement không hợp lệ hiển thị đỏ; DXF của nhóm đang xuất bị chặn nếu nhóm đó có placement không hợp lệ, còn PDF bị chặn nếu bất kỳ tấm nào trong kết quả có placement không hợp lệ. Phím mũi tên đẩy nhóm được chọn tới vật cản/mép tấm, còn `Shift` + mũi tên dịch đúng 1 mm mỗi lần. **Thiết lập** ở thanh điều hướng bên trái chứa tùy chọn tự động xoay, hướng lấp, bước xoay, thời gian, mục tiêu hiệu suất, lề và khoảng cách. Khi xuất DXF, micro-joints thông minh mặc định bật (0,4 mm, mục tiêu tổng cộng 6 cầu/part; số thực tế có thể ít hơn nếu contour/segment không đủ điều kiện), áp dụng cho contour ngoài và các đường bao lỗ đủ kích thước; contour nhỏ được tự bỏ qua. **Xóa cạnh chung** được bật mặc định và không thể dùng đồng thời với **Xuất Part dạng Block**. Các khe cầu ngắt đường cắt và cần được kiểm tra trong phần mềm CAM trước khi sản xuất. Dự án lưu thành `.nest2d` (chỉ mục nhóm vật liệu) cùng các workspace con trong thư mục `.data`; mỗi workspace lưu thiết lập, danh sách chi tiết, tham chiếu DXF và kết quả nesting.
+CI tải lên thư mục publish và manifest SHA-256 làm artifact; đây là gói ứng dụng, chưa phải installer đã ký số.
+
+Kéo file/thư mục DXF vào cửa sổ (hoặc chọn **Thêm DXF** trong trang Part), chỉnh số lượng và gán vật liệu/khổ tấm. DXF ASCII đầu vào bị giới hạn 32 MiB, 1,2 triệu dòng, 500.000 cặp group code, 250.000 entity sau mở rộng block và 50.000 instance INSERT; polyline tối đa 50.000 điểm, spline tối đa 4.096 điểm điều khiển/fit và bậc 16, ellipse tối đa 100.000 đoạn xấp xỉ. File vượt giới hạn bị từ chối để bảo vệ bộ nhớ và độ phản hồi; kiểm chứng giới hạn với dữ liệu CAD thực tế trước triển khai rộng. Bấm **Nesting (F5)** để xếp tự động, hoặc kéo một chi tiết từ **Bộ lọc chi tiết** vào vùng tấm để đặt thủ công; hình xem trước đi theo con trỏ, vị trí chồng lấn hoặc ngoài tấm hiển thị đỏ và vẫn được giữ khi thả để người dùng chỉnh tiếp. Thumbnail trong danh sách **Kết quả Nesting** cập nhật sau mỗi chỉnh sửa vị trí. Nhấp chuột phải trong danh sách **Kết quả Nesting** để thêm tấm hoặc xóa nesting của tấm đang chọn; nút **Xóa chọn** trên thanh công cụ canvas và phím `Delete` xóa placement đang chọn. Trên hình tấm: lăn chuột để zoom; kéo nền/chuột phải để pan; kéo part đã đặt để di chuyển; Ctrl-click hoặc quét vùng để chọn nhiều part. Nhấp đúp hoặc `R` xoay 90°; `M` lật; các thao tác giữ điểm dưới con trỏ và vẫn thực hiện khi có chồng lấn hoặc vượt lề. Placement không hợp lệ hiển thị đỏ; DXF của nhóm đang xuất bị chặn nếu nhóm đó có placement không hợp lệ, còn PDF bị chặn nếu bất kỳ tấm nào trong kết quả có placement không hợp lệ. Phím mũi tên đẩy nhóm được chọn tới vật cản/mép tấm, còn `Shift` + mũi tên dịch đúng 1 mm mỗi lần. **Thiết lập** ở thanh điều hướng bên trái chứa tùy chọn tự động xoay, hướng lấp, bước xoay, thời gian, mục tiêu hiệu suất, lề và khoảng cách. Khi xuất DXF, micro-joints thông minh mặc định bật (0,4 mm, mục tiêu tổng cộng 6 cầu/part; số thực tế có thể ít hơn nếu contour/segment không đủ điều kiện), áp dụng cho contour ngoài và các đường bao lỗ đủ kích thước; contour nhỏ được tự bỏ qua. **Xóa cạnh chung** được bật mặc định và không thể dùng đồng thời với **Xuất Part dạng Block**. Các khe cầu ngắt đường cắt và cần được kiểm tra trong phần mềm CAM trước khi sản xuất. Dự án lưu thành `.nest2d` (chỉ mục nhóm vật liệu) cùng các workspace con trong thư mục `.data`; mỗi workspace lưu thiết lập, danh sách chi tiết, tham chiếu DXF và kết quả nesting.
 
 ## Build và kiểm tra
 

@@ -1284,8 +1284,8 @@ public sealed class UiCoreRegressionTests
                   partAlignmentCode.Contains("Normalize(alignment)", StringComparison.Ordinal) &&
                   mainWindowCode.Contains("PartColumnAlignment_Click", StringComparison.Ordinal),
                 "không tự đo cột; menu căn tiêu đề/nội dung chỉ có trái/giữa và lưu thiết lập");
-            Check(desktopProject.Contains("<Version>1.0.11</Version>", StringComparison.Ordinal) &&
-                  desktopProject.Contains("Cập nhật 31/10/2026", StringComparison.Ordinal),
+            Check(desktopProject.Contains("<Version>1.0.12</Version>", StringComparison.Ordinal) &&
+                  desktopProject.Contains("Cập nhật 05/11/2026", StringComparison.Ordinal),
                 "tăng phiên bản và cập nhật ngày phát hành");
             Check((string?)presetsGrid.Attribute("SelectionMode") == "Extended" &&
                   (string?)presetsGrid.Attribute("CanUserResizeColumns") == "False" &&

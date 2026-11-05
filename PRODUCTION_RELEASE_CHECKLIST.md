@@ -4,27 +4,27 @@ Tài liệu này chuyển các rủi ro đã rà soát thành thứ tự xử l�
 
 ## Đánh giá hiện tại
 
-**Trạng thái: NO-GO cho phát hành sản xuất rộng rãi.** Lần rà soát gần nhất ghi nhận:
+**Trạng thái: NO-GO cho phát hành sản xuất rộng rãi.** Các chặn kỹ thuật trong mã nguồn đã được xử lý trong working tree; kết quả dưới đây là kiểm tra cục bộ, chưa phải CI trên commit phát hành hay nghiệm thu sản xuất:
 
-- Build Desktop Release thành công; 132/132 unit/UI-core tests đạt.
-- `dotnet format --verify-no-changes` báo 55 lỗi whitespace. Phần lớn nằm ngoài thay đổi đang làm; cần xác nhận lại với đúng SDK của CI trước khi sửa để tránh format lan rộng không cần thiết.
-- Desktop có dependency bắc cầu `System.Security.Cryptography.Pkcs 8.0.1`, được NuGet đánh dấu có advisory High và Moderate. Advisory công bố bản vá 8.0.2 cho nhánh 8.0. Chưa xác nhận mã ứng dụng gọi API bị ảnh hưởng; vẫn phải xử lý dependency trước phát hành.
-- Ứng dụng nhắm .NET 8. Theo lịch hỗ trợ tại thời điểm rà soát 05/11/2026, .NET 8 hết hỗ trợ ngày 10/11/2026.
-- Bộ đọc DXF nạp toàn bộ file vào bộ nhớ và mở rộng mảng INSERT theo số hàng/cột của file. Độ sâu block có giới hạn nhưng chưa thấy ngân sách tổng thể cho số entity sau mở rộng.
-- CI hiện kiểm thử Core/UI Core và build Desktop; chưa tạo gói cài đặt phát hành và chưa thay thế xác minh thao tác WPF/CAM trên máy người dùng.
+- Đã nâng các project lên .NET 10; build Release thành công, 0 cảnh báo/0 lỗi.
+- Đã chạy 141/141 test (71 Core, 70 UI Core) và `dotnet format --verify-no-changes` đạt.
+- Desktop dependency audit hiện không báo package có lỗ hổng. `System.Security.Cryptography.Pkcs` được cung cấp bởi .NET 10 framework nên không ép reference bản 8.x.
+- DXF có giới hạn dung lượng/dòng/cặp group code, entity sau mở rộng, INSERT, điểm polyline/spline và đoạn xấp xỉ ellipse; có regression test cho các ngưỡng này.
+- Publish Windows x64 framework-dependent và tạo manifest SHA-256 đã chạy thành công cục bộ. Artifact trên GitHub Actions chưa được kiểm chứng; đây không phải installer đã ký số.
+- Chưa xác minh thao tác WPF trên máy người dùng, DXF/CAM với phần mềm đích, giấy phép/quyền phân phối, chữ ký số hoặc phê duyệt của chủ sản phẩm.
 
 ## Kế hoạch xử lý theo giai đoạn
 
 | Giai đoạn | Mức | Công việc | Điều kiện hoàn tất |
 |---|---|---|---|
 | 0. Chốt phạm vi | Bắt buộc | Tạo nhánh phát hành từ commit rõ ràng; ghi nhận riêng các thay đổi DXF và file thử nghiệm chưa commit. Chỉ đưa vào bản phát hành những thay đổi đã review, test và được chấp thuận. | Có commit/tag ứng viên phát hành; working tree và danh sách file đưa vào gói được kiểm tra; không phát hành nhầm file thử nghiệm hoặc thay đổi chưa duyệt. |
-| 1. Gỡ chặn dependency | Bắt buộc trước mọi phát hành | Xác định nguồn `System.Security.Cryptography.Pkcs` trong dependency graph của PDFsharp. Ưu tiên bản vá thấp nhất không còn advisory và tương thích TFM; nếu không thể nâng trực tiếp, nâng dependency gốc hoặc thư viện cha. Không che cảnh báo bằng suppression. | Restore sạch; `dotnet list package --vulnerable --include-transitive` không còn advisory chưa được chấp thuận trong dependency runtime; build, test và publish đều dùng graph đã kiểm tra. |
-| 2. Giới hạn đầu vào DXF | Bắt buộc trước khi nhận file không tin cậy | Định nghĩa ngưỡng theo dữ liệu khách hàng thực tế cho dung lượng file, số record/entity, số điểm và tổng số entity/instance sau INSERT. Kiểm tra số hàng/cột, tích số lượng trước vòng lặp; dừng với thông báo lỗi rõ ràng khi vượt ngưỡng. Kiểm tra giá trị không hữu hạn, số học tràn và nesting block lồng nhau. | Có test cho ngay dưới ngưỡng, đúng ngưỡng, vượt ngưỡng và DXF hỏng/cực lớn; đầu vào vượt ngưỡng bị từ chối có kiểm soát, không treo, không tăng bộ nhớ không giới hạn và không tạo kết quả sai. Ngưỡng được ghi trong tài liệu người dùng. |
-| 3. Nâng nền tảng .NET | Bắt buộc cho phát hành dài hạn | Chuyển các project liên quan sang .NET 10 LTS sau khi kiểm kê tương thích PDFsharp/WPF, test và môi trường triển khai; cập nhật README, CI, SDK dùng trong phát triển và runtime trong gói cài đặt. Tránh trộn TFM hoặc SDK không chủ ý giữa các project. | Build/test/format/publish trên Windows bằng SDK đã chốt; xác minh ứng dụng trên máy sạch có runtime được hỗ trợ; không còn dependency/framework ngoài hỗ trợ. |
-| 4. Làm xanh CI và hoàn thiện gói phát hành | Bắt buộc | Chạy format bằng đúng SDK mà CI sử dụng. Sửa các lỗi format cần thiết theo diff nhỏ; không format hàng loạt file ngoài phạm vi. Thêm bước publish artifact có thể tái lập, kiểm tra đầu ra; chuẩn hóa version, release notes, hash và quy trình ký số. Chọn rõ framework-dependent hay self-contained và cung cấp hướng dẫn cài đặt/gỡ cài đặt. | Tất cả workflow bắt buộc xanh trên commit/tag phát hành; artifact cài được trên máy Windows sạch; phiên bản/hash khớp release; xác minh chữ ký nếu phân phối có ký số. |
+| 1. Gỡ chặn dependency | Đã xử lý cục bộ | Chuyển sang .NET 10 framework package graph và quét dependency runtime; không thêm direct package reference không cần thiết. | `dotnet list package --vulnerable --include-transitive` không báo package dễ tổn thương; lặp lại trên CI và commit phát hành. |
+| 2. Giới hạn đầu vào DXF | Đã xử lý cục bộ; cần kiểm chứng dữ liệu thật | Áp giới hạn file 32 MiB/1,2 triệu dòng/500.000 cặp group code, 250.000 entity mở rộng, 50.000 instance INSERT, 50.000 điểm polyline, 4.096 điểm spline và 100.000 đoạn ellipse. | Regression test các ngưỡng dung lượng, dòng, group code, entity mở rộng, INSERT, polyline, spline/bậc và ellipse đạt; xác nhận ngưỡng phù hợp file khách hàng thực tế; tiếp tục kiểm thử malformed DXF trước phát hành. |
+| 3. Nâng nền tảng .NET | Đã xử lý cục bộ | Chuyển project source/test/benchmark, CI, tài liệu và runtime hướng dẫn sang .NET 10; xác minh PDFsharp/WPF tương thích. | Build/test/format/publish Windows x64 đạt cục bộ; chạy CI trên commit và cài/chạy trên máy Windows sạch trước GO. |
+| 4. Làm xanh CI và hoàn thiện gói phát hành | Một phần | Format CI, publish framework-dependent win-x64 và tạo manifest SHA-256 đã cấu hình; cần kiểm tra artifact GitHub, chốt release notes và chọn/ký installer nếu quy trình phát hành yêu cầu. | Workflow xanh trên tag/commit phát hành; artifact cài được trên máy sạch; phiên bản/hash khớp; xác minh chữ ký nếu phân phối có ký số. |
 | 5. Nghiệm thu nghiệp vụ và thí điểm | Bắt buộc | Chạy ma trận DXF thật từ các nguồn được hỗ trợ: đơn vị khác nhau, layer, cung/lỗ, spline, block, chữ/MTEXT, xoay/lật, file lỗi. Đối chiếu nesting, lưu/mở dự án, DXF/PDF xuất và import vào phần mềm CAM thực tế. Kiểm tra thao tác WPF trên Windows. | Người phụ trách nghiệp vụ/CAM ký xác nhận kết quả và dung sai; không còn lỗi nghiêm trọng/cao chưa xử lý; đạt ngưỡng hiệu năng đã thống nhất; hoàn tất thí điểm và có cách quay lui/hỗ trợ người dùng. |
 
-**Thứ tự khuyến nghị:** giai đoạn 0 → 1 và 2 song song → 3 → 4 → 5. Giai đoạn 1/2 là chặn phát hành; giai đoạn 3 cần hoàn tất trước phát hành dài hạn vì thời điểm hết hỗ trợ .NET 8 đã cận kề. Nếu cần bản thử nghiệm có thời hạn ngắn trước khi nâng nền tảng, phải có phê duyệt rủi ro bằng văn bản, cập nhật .NET 8 mới nhất, giới hạn đối tượng nhận và kế hoạch nâng cấp; không xem đó là ngoại lệ mặc định cho sản xuất.
+**Thứ tự khuyến nghị:** giai đoạn 0 → 1 và 2 song song → 3 → 4 → 5. Những công việc kỹ thuật 1–3 đã có trong working tree; chúng chỉ được xem là đã hoàn tất sau khi CI chạy trên commit và ngưỡng DXF được nghiệp vụ xác nhận. Chưa phát hành production đến khi hoàn thành các bước kiểm tra máy sạch, ký/phân phối phù hợp và nghiệm thu giai đoạn 5.
 
 ## Checksheet cho từng bản phát hành
 

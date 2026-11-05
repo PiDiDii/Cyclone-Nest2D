@@ -1,16 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Chỉ build được trên Windows (cần .NET 8 SDK + workload Windows Desktop, có sẵn trong bộ cài .NET SDK cho Windows). -->
+  <!-- Chỉ build được trên Windows (cần .NET 10 SDK + Windows Desktop Runtime). -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>CycloneNest2D</AssemblyName>
     <Product>Cyclone Nest2D</Product>
-    <Version>1.0.11</Version>
-    <AssemblyInformationalVersion>1.0.11 - Cập nhật 31/10/2026</AssemblyInformationalVersion>
+    <Version>1.0.12</Version>
+    <AssemblyInformationalVersion>1.0.12 - Cập nhật 05/11/2026</AssemblyInformationalVersion>
     <Authors>Phạm Đức Duy</Authors>
     <RootNamespace>CycloneNest2D.Desktop</RootNamespace>
     <ApplicationIcon>Assets\CycloneNest.ico</ApplicationIcon>

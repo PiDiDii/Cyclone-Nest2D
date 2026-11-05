@@ -541,8 +541,27 @@ public static class DxfExportWriter
         {
             string plainText = StripMTextFormatting(text.Content);
             string[] lines = plainText.Split('\n');
+            int attachment = Math.Clamp(text.Attachment, 1, 9);
+            int horizontalAlignment = (attachment - 1) % 3;
+            int verticalAlignment = 3 - (attachment - 1) / 3;
+            double lineStep = text.Height * 1.5;
+            double firstLineOffset = lineStep * (lines.Length - 1) *
+                                     (attachment <= 3 ? 0 : attachment <= 6 ? 0.5 : 1);
+            double radians = text.Rotation * Math.PI / 180;
+            double upX = -Math.Sin(radians), upY = Math.Cos(radians);
             for (int i = 0; i < lines.Length; i++)
-                WriteSourceText(sb, text, lines[i], text.X, text.Y - i * text.Height * 1.5, unit, offset);
+            {
+                double anchorX = text.X + upX * (firstLineOffset - i * lineStep);
+                double anchorY = text.Y + upY * (firstLineOffset - i * lineStep);
+                var line = text with
+                {
+                    AlignmentX = anchorX,
+                    AlignmentY = anchorY,
+                    HorizontalAlignment = horizontalAlignment,
+                    VerticalAlignment = verticalAlignment
+                };
+                WriteSourceText(sb, line, lines[i], anchorX, anchorY, unit, offset);
+            }
             return;
         }
 

@@ -5,6 +5,166 @@ namespace CycloneNest2D.Tests;
 
 public sealed class DxfTextPlacementTests
 {
+    [Fact]
+    public void TextFollowsAutomaticallyRotatedPartFromDxfImportThroughExport()
+    {
+        string sourcePath = Path.Combine(Path.GetTempPath(), $"text-source-{Guid.NewGuid():N}.dxf");
+        string outputPath = Path.Combine(Path.GetTempPath(), $"text-output-{Guid.NewGuid():N}.dxf");
+        const string source = """
+            0
+            SECTION
+            2
+            HEADER
+            9
+            $ACADVER
+            1
+            AC1027
+            0
+            ENDSEC
+            0
+            SECTION
+            2
+            ENTITIES
+            0
+            LINE
+            8
+            0
+            10
+            10
+            20
+            20
+            11
+            110
+            21
+            20
+            0
+            LINE
+            8
+            0
+            10
+            110
+            20
+            20
+            11
+            110
+            21
+            60
+            0
+            LINE
+            8
+            0
+            10
+            110
+            20
+            60
+            11
+            10
+            21
+            60
+            0
+            LINE
+            8
+            0
+            10
+            10
+            20
+            60
+            11
+            10
+            21
+            20
+            0
+            TEXT
+            8
+            0
+            10
+            30
+            20
+            25
+            40
+            4
+            1
+            Part label
+            0
+            ENDSEC
+            0
+            EOF
+            """;
+
+        try
+        {
+            File.WriteAllText(sourcePath, source.Replace("\n", "\r\n"));
+            var part = DxfReader.Read(sourcePath);
+            var sheet = new SheetDefinition(50, 110, 0, 0);
+            var result = NestEngine.Run(new[] { part.ToDefinition() }, sheet, new NestOptions
+            {
+                AllowRotation = true,
+                RotationStep = 90,
+                MaxSeconds = 5,
+                TargetUtilizationPercent = 0
+            });
+
+            Assert.Empty(result.Unplaced);
+            var placement = Assert.Single(Assert.Single(result.Sheets).Placements);
+            Assert.Equal(90, placement.AngleDeg);
+
+            DxfWriter.Write(result.Sheets[0], sheet, outputPath, new DxfExportOptions
+            {
+                OutputSheets = false,
+                TargetVersion = DxfTargetVersion.AutoCAD2000
+            });
+
+            var exportedText = Assert.Single(DxfReader.ReadRaw(outputPath).Texts);
+            Assert.Equal(placement.X + 35, exportedText.X, 6);
+            Assert.Equal(placement.Y + 20, exportedText.Y, 6);
+            Assert.Equal(90, exportedText.Rotation, 6);
+        }
+        finally
+        {
+            if (File.Exists(sourcePath)) File.Delete(sourcePath);
+            if (File.Exists(outputPath)) File.Delete(outputPath);
+        }
+    }
+
+    [Fact]
+    public void R12MTextConversionPreservesTopLeftAttachmentAfterPlacementRotation()
+    {
+        var mtext = new DxfTextEntity("MTEXT", "NOTES", 10, 20, "Line 1\\PLine 2",
+            4, 0, 20, 1, "STANDARD");
+        var outline = ShapeOps.RectShape("Part", 100, 50);
+        var shape = new DxfShape(outline.Name, outline.Segments, outline.UnitScale, outline.Layers,
+            outline.Warnings, outline.ApproximatedEntities, texts: new[] { mtext });
+        var sheet = new SheetResult { Index = 1, Width = 200, Height = 200 };
+        sheet.Placements.Add(new Placement("Part", 1, 40, 60, 50, 100, true, shape));
+        string outputPath = Path.Combine(Path.GetTempPath(), $"text-attachment-{Guid.NewGuid():N}.dxf");
+
+        try
+        {
+            DxfWriter.Write(sheet, new SheetDefinition(200, 200, 0, 0), outputPath, new DxfExportOptions
+            {
+                OutputSheets = false,
+                TargetVersion = DxfTargetVersion.R12
+            });
+
+            var texts = DxfReader.ReadRaw(outputPath).Texts;
+            Assert.Equal(2, texts.Count);
+            Assert.All(texts, text =>
+            {
+                Assert.Equal("TEXT", text.Type);
+                Assert.Equal(0, text.HorizontalAlignment);
+                Assert.Equal(3, text.VerticalAlignment);
+                Assert.Equal(90, text.Rotation, 8);
+                Assert.Equal(70, text.AnchorY, 8);
+            });
+            Assert.Equal(70, texts[0].AnchorX, 8);
+            Assert.Equal(76, texts[1].AnchorX, 8);
+        }
+        finally
+        {
+            if (File.Exists(outputPath)) File.Delete(outputPath);
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

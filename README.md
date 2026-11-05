@@ -4,6 +4,7 @@ Cyclone Nest2D là ứng dụng desktop Windows dùng WPF để đọc file DXF 
 
 - [Quy tắc phát triển dành cho AI và nhà phát triển](DEVELOPMENT_RULES.md)
 - [Hướng dẫn kiến trúc và luồng hoạt động](PROJECT_GUIDE.md)
+- [Kế hoạch và checksheet phát hành sản xuất](PRODUCTION_RELEASE_CHECKLIST.md)
 
 ## Cấu trúc
 

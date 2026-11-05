@@ -192,19 +192,30 @@ public sealed class NestingPortfolioRunner
         StrategyRunResult? best = null;
         var reasons = new List<string>();
 
-        if (candidates.Count > 0)
+        if (candidates.Count == 1)
         {
-            var pilot = candidates[0].Strategy.Run(parts, sheet, new NestBudget(totalBudgetSeconds, pilotSeconds, Math.Max(0.05, remainingSeconds), portfolioOptions.MaxCandidates), cancellationToken);
-            reasons.Add(candidates[0].Reason);
-            best = pilot;
+            // Do not spend only a pilot-sized budget when there is no alternative to compare.
+            var only = candidates[0];
+            best = only.Strategy.Run(parts, sheet,
+                new NestBudget(totalBudgetSeconds, 0, totalBudgetSeconds, portfolioOptions.MaxCandidates), cancellationToken);
+            reasons.Add(only.Reason);
         }
-
-        for (var i = 1; i < candidates.Count; i++)
+        else if (candidates.Count > 1)
         {
-            var candidate = candidates[i];
-            var result = candidate.Strategy.Run(parts, sheet, new NestBudget(totalBudgetSeconds, pilotSeconds, Math.Max(0.05, remainingSeconds), portfolioOptions.MaxCandidates), cancellationToken);
-            reasons.Add(candidate.Reason);
-            best = Better(result, best) ? result : best;
+            var pilotCandidate = candidates[0];
+            best = pilotCandidate.Strategy.Run(parts, sheet,
+                new NestBudget(totalBudgetSeconds, pilotSeconds, pilotSeconds, portfolioOptions.MaxCandidates), cancellationToken);
+            reasons.Add(pilotCandidate.Reason);
+
+            double perCandidateSeconds = Math.Max(0.05, remainingSeconds / (candidates.Count - 1));
+            for (var i = 1; i < candidates.Count; i++)
+            {
+                var candidate = candidates[i];
+                var run = candidate.Strategy.Run(parts, sheet,
+                    new NestBudget(totalBudgetSeconds, pilotSeconds, perCandidateSeconds, portfolioOptions.MaxCandidates), cancellationToken);
+                reasons.Add(candidate.Reason);
+                best = Better(run, best) ? run : best;
+            }
         }
 
         var finalResult = best ?? new StrategyRunResult(NestingStrategyId.RasterBaseline, "RasterBaseline", new NestResult(), "No portfolio strategy produced a result.", 0, false);
@@ -217,14 +228,16 @@ public sealed class NestingPortfolioRunner
     private static bool Better(StrategyRunResult candidate, StrategyRunResult? current)
     {
         if (current == null) return true;
-        if (candidate.Result.Sheets.Count != current.Result.Sheets.Count)
-        {
-            return candidate.Result.Sheets.Count < current.Result.Sheets.Count;
-        }
-
+        // Manufacturing completeness dominates sheet count: never prefer a smaller
+        // layout that silently leaves more requested parts unplaced.
         if (candidate.Result.Unplaced.Count != current.Result.Unplaced.Count)
         {
             return candidate.Result.Unplaced.Count < current.Result.Unplaced.Count;
+        }
+
+        if (candidate.Result.Sheets.Count != current.Result.Sheets.Count)
+        {
+            return candidate.Result.Sheets.Count < current.Result.Sheets.Count;
         }
 
         return candidate.Result.Utilization > current.Result.Utilization;

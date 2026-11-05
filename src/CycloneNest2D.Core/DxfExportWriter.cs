@@ -179,7 +179,8 @@ public static class DxfExportWriter
                     }
                     foreach (var sourceText in sourceTexts)
                     {
-                        var local = TransformPartText(sourceText, placement, options.NestOrientation);
+                        var placed = PlaceText(sourceText, placement);
+                        var local = TransformPartText(placed, placement, options.NestOrientation);
                         if (options.PartsOnSingleLayer) local = local with { Layer = partLayer };
                         WriteTextEntity(partBlockBody, local, unit, 0, options.TargetVersion);
                     }
@@ -198,13 +199,7 @@ public static class DxfExportWriter
                     }
                     foreach (var sourceText in sourceTexts)
                     {
-                        var positioned = sourceText with
-                        {
-                            X = sourceText.X + placement.X,
-                            Y = sourceText.Y + placement.Y,
-                            AlignmentX = sourceText.AlignmentX is { } alignX ? alignX + placement.X : null,
-                            AlignmentY = sourceText.AlignmentY is { } alignY ? alignY + placement.Y : null
-                        };
+                        var positioned = PlaceText(sourceText, placement);
                         var output = TransformSheetText(positioned, sheet.Width, sheet.Height, options.NestOrientation);
                         if (options.PartsOnSingleLayer) output = output with { Layer = partLayer };
                         WriteTextEntity(body, output, unit, modelOffset, options.TargetVersion);
@@ -365,17 +360,55 @@ public static class DxfExportWriter
         };
     }
 
-    private static DxfTextEntity TransformPartText(DxfTextEntity text, Placement p, int angle)
+    private static DxfTextEntity PlaceText(DxfTextEntity text, Placement p)
     {
-        (double X, double Y) Transform(double x, double y) => angle switch
+        if (p.Shape is not { } shape)
+            return text with
+            {
+                X = text.X + p.X,
+                Y = text.Y + p.Y,
+                AlignmentX = text.AlignmentX is { } alignX ? alignX + p.X : null,
+                AlignmentY = text.AlignmentY is { } alignY ? alignY + p.Y : null
+            };
+
+        (double X, double Y) Transform(double x, double y)
         {
-            90 => (y, p.Width - x),
-            180 => (p.Width - x, p.Height - y),
-            270 => (p.Height - y, x),
-            _ => (x, y)
+            double localX = x - shape.MinX, localY = y - shape.MinY;
+            return p.Rotated
+                ? (p.X + shape.Height - localY, p.Y + localX)
+                : (p.X + localX, p.Y + localY);
+        }
+
+        var point = Transform(text.X, text.Y);
+        double? alignmentX = null, alignmentY = null;
+        if (text.AlignmentX is { } sourceX && text.AlignmentY is { } sourceY)
+        {
+            var alignment = Transform(sourceX, sourceY);
+            alignmentX = alignment.X;
+            alignmentY = alignment.Y;
+        }
+        return text with
+        {
+            X = point.X,
+            Y = point.Y,
+            Rotation = text.Rotation + (p.Rotated ? 90 : 0),
+            AlignmentX = alignmentX,
+            AlignmentY = alignmentY
         };
-        return TransformText(text, Transform, angle);
     }
+
+    private static DxfTextEntity TransformPartText(DxfTextEntity text, Placement p, int angle)
+        => TransformText(text, (x, y) =>
+        {
+            double dx = x - p.X, dy = y - p.Y;
+            return angle switch
+            {
+                90 => (dy, p.Width - dx),
+                180 => (p.Width - dx, p.Height - dy),
+                270 => (p.Height - dy, dx),
+                _ => (dx, dy)
+            };
+        }, angle);
 
     private static DxfTextEntity TransformSheetText(DxfTextEntity text, double sheetWidth, double sheetHeight, int angle)
     {

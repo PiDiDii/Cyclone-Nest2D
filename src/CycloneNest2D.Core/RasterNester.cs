@@ -50,7 +50,7 @@ internal static class RasterNester
         public readonly List<Variant> Variants = new();
         public readonly List<double> PrimaryAngles = new();
         public readonly List<double> FineAngles = new();
-        public readonly HashSet<string> MaskKeys = new();
+        public readonly Dictionary<int, List<Variant>> MaskBuckets = new();
         public double Area, W, H;
     }
 
@@ -343,8 +343,15 @@ internal static class RasterNester
                 if (variant.Wc > cols || variant.Hc > rows ||
                     variant.W > sheet.UsableWidth + 1e-6 || variant.H > sheet.UsableHeight + 1e-6)
                     continue;
-                if (type.MaskKeys.Add(MaskKey(variant)))
+                int maskHash = MaskHash(variant);
+                if (!type.MaskBuckets.TryGetValue(maskHash, out var bucket))
                 {
+                    bucket = new List<Variant>();
+                    type.MaskBuckets.Add(maskHash, bucket);
+                }
+                if (!bucket.Any(existing => SameMask(existing, variant)))
+                {
+                    bucket.Add(variant);
                     type.Variants.Add(variant);
                     opt.Diagnostics?.RecordVariantBuilt(primaryAngles);
                 }
@@ -461,7 +468,7 @@ internal static class RasterNester
 
     // ---------- Mặt nạ ----------
 
-    private static string MaskKey(Variant v)
+    private static int MaskHash(Variant v)
     {
         var h = new HashCode();
         h.Add(v.Wc); h.Add(v.Hc);
@@ -470,7 +477,21 @@ internal static class RasterNester
             h.Add(row.Length);
             foreach (var (st, len) in row) { h.Add(st); h.Add(len); }
         }
-        return h.ToHashCode().ToString();
+        return h.ToHashCode();
+    }
+
+    private static bool SameMask(Variant a, Variant b)
+    {
+        if (a.Wc != b.Wc || a.Hc != b.Hc || a.Cover.Length != b.Cover.Length) return false;
+        for (int row = 0; row < a.Cover.Length; row++)
+        {
+            var ar = a.Cover[row];
+            var br = b.Cover[row];
+            if (ar.Length != br.Length) return false;
+            for (int run = 0; run < ar.Length; run++)
+                if (ar[run] != br[run]) return false;
+        }
+        return true;
     }
 
     private static Variant? BuildVariant(PartType t, double angle, double c, int s, NestOptions opt, Stopwatch sw,

@@ -36,33 +36,37 @@ public static class Validator
             double gap = Math.Max(0, sheet.Spacing - RasterNester.GapTol);
             var loops = new Dictionary<Placement, LoopSet>();
 
-            for (int i = 0; i < ps.Count; i++)
+            // Sweep by left edge. For typical sparse layouts this avoids the previous
+            // all-pairs O(n^2) scan while preserving exact checks for nearby boxes.
+            var ordered = ps.OrderBy(p => p.X).ToArray();
+            var active = new List<Placement>();
+            foreach (var current in ordered)
             {
-                for (int j = i + 1; j < ps.Count; j++)
+                active.RemoveAll(other => other.X + other.Width + sheet.Spacing <= current.X);
+                foreach (var other in active)
                 {
-                    var a = ps[i];
-                    var b = ps[j];
-                    bool near = !(a.X >= b.X + b.Width + sheet.Spacing || b.X >= a.X + a.Width + sheet.Spacing ||
-                                  a.Y >= b.Y + b.Height + sheet.Spacing || b.Y >= a.Y + a.Height + sheet.Spacing);
-                    if (!near) continue;
+                    if (current.Y >= other.Y + other.Height + sheet.Spacing ||
+                        other.Y >= current.Y + current.Height + sheet.Spacing)
+                        continue;
 
                     bool bad;
-                    if (a.Shape == null && b.Shape == null)
-                        bad = Inflate(a, half).Intersects(Inflate(b, half));
+                    if (current.Shape == null && other.Shape == null)
+                        bad = Inflate(current, half).Intersects(Inflate(other, half));
                     else
                     {
-                        var la = LoopsOf(a, loops);
-                        var lb = LoopsOf(b, loops);
+                        var la = LoopsOf(current, loops);
+                        var lb = LoopsOf(other, loops);
                         if (!la.Reliable || !lb.Reliable) continue;
                         bad = ShapeOps.Conflict(la, 0, 0, lb, 0, 0, gap);
                     }
 
                     if (bad)
                     {
-                        errors.Add($"Tấm {s.Index}: {a.PartName} #{a.Instance} và " +
-                                   $"{b.PartName} #{b.Instance} quá gần/chồng nhau.");
+                        errors.Add($"Tấm {s.Index}: {current.PartName} #{current.Instance} và " +
+                                   $"{other.PartName} #{other.Instance} quá gần/chồng nhau.");
                     }
                 }
+                active.Add(current);
             }
         }
 
